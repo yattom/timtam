@@ -34,10 +34,10 @@
  - [x] CDK 初期化とブートストラップ
  - [x] HTTP API 作成
  - [x] Lambda meetingHandler 作成
- - [ ] ルート追加 POST /meetings
- - [ ] ルート追加 POST /attendees
- - [ ] ルート追加 POST /meetings/{meetingId}/transcription/start
- - [ ] ルート追加 POST /meetings/{meetingId}/transcription/stop
+ - [x] ルート追加 POST /meetings
+ - [x] ルート追加 POST /attendees
+ - [x] ルート追加 POST /meetings/{meetingId}/transcription/start
+ - [x] ルート追加 POST /meetings/{meetingId}/transcription/stop
  - [ ] Lambda orchestratorHandler 作成
  - [ ] IAM 権限設定（Chime/Transcribe/Bedrock/Polly）
  - [ ] CORS 設定（フロントオリジン）

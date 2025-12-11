@@ -1,9 +1,10 @@
 import { Stack, StackProps } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
-import { CfnApi } from 'aws-cdk-lib/aws-apigatewayv2';
+import { CfnApi, CfnIntegration, CfnRoute, CfnStage } from 'aws-cdk-lib/aws-apigatewayv2';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import { Duration } from 'aws-cdk-lib';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
 
 export class TimtamInfraStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
@@ -62,6 +63,86 @@ export class TimtamInfraStack extends Stack {
     transcriptionStartFn.addToRolePolicy(meetingPolicies);
     transcriptionStopFn.addToRolePolicy(meetingPolicies);
 
-    // ルートや統合は後続のTODOで追加します。
+    // === API Gateway HTTP API: Integrations & Routes ===
+    // Default Stage (auto deploy)
+    const stage = new CfnStage(this, 'HttpApiStage', {
+      apiId: httpApi.ref,
+      stageName: '$default',
+      autoDeploy: true,
+    });
+
+    // Helper to build Lambda proxy integration URI
+    const lambdaIntegrationUri = (fn: lambda.IFunction) =>
+      `arn:aws:apigateway:${this.region}:lambda:path/2015-03-31/functions/${fn.functionArn}/invocations`;
+
+    // CreateMeeting integration + route
+    const createMeetingInt = new CfnIntegration(this, 'CreateMeetingIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(createMeetingFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const createMeetingRoute = new CfnRoute(this, 'CreateMeetingRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'POST /meetings',
+      target: `integrations/${createMeetingInt.ref}`,
+    });
+    createMeetingRoute.addDependency(createMeetingInt);
+
+    // AddAttendee integration + route
+    const addAttendeeInt = new CfnIntegration(this, 'AddAttendeeIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(addAttendeeFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const addAttendeeRoute = new CfnRoute(this, 'AddAttendeeRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'POST /attendees',
+      target: `integrations/${addAttendeeInt.ref}`,
+    });
+    addAttendeeRoute.addDependency(addAttendeeInt);
+
+    // Transcription start integration + route
+    const transcriptionStartInt = new CfnIntegration(this, 'TranscriptionStartIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(transcriptionStartFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const transcriptionStartRoute = new CfnRoute(this, 'TranscriptionStartRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'POST /meetings/{meetingId}/transcription/start',
+      target: `integrations/${transcriptionStartInt.ref}`,
+    });
+    transcriptionStartRoute.addDependency(transcriptionStartInt);
+
+    // Transcription stop integration + route
+    const transcriptionStopInt = new CfnIntegration(this, 'TranscriptionStopIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(transcriptionStopFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const transcriptionStopRoute = new CfnRoute(this, 'TranscriptionStopRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'POST /meetings/{meetingId}/transcription/stop',
+      target: `integrations/${transcriptionStopInt.ref}`,
+    });
+    transcriptionStopRoute.addDependency(transcriptionStopInt);
+
+    // Allow API Gateway to invoke these Lambdas
+    const sourceArn = `arn:aws:execute-api:${this.region}:${this.account}:${httpApi.ref}/*/*/*`;
+    [createMeetingFn, addAttendeeFn, transcriptionStartFn, transcriptionStopFn].forEach((fn, i) => {
+      fn.addPermission(`InvokeByHttpApi${i}`, {
+        principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+        sourceArn,
+        action: 'lambda:InvokeFunction',
+      });
+    });
   }
 }
