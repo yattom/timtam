@@ -1,0 +1,9 @@
+{
+  "name": "tts",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@aws-sdk/client-polly": "3.600.0"
+  }
+}

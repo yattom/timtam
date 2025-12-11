@@ -38,8 +38,9 @@
  - [x] ルート追加 POST /attendees
  - [x] ルート追加 POST /meetings/{meetingId}/transcription/start
  - [x] ルート追加 POST /meetings/{meetingId}/transcription/stop
- - [ ] Lambda orchestratorHandler 作成
- - [ ] IAM 権限設定（Chime/Transcribe/Bedrock/Polly）
+ - [x] Lambda orchestratorHandler 作成
+ - [x] IAM 権限設定（Bedrock/Polly）
+ - [ ] IAM 権限設定（Chime/Transcribe）
  - [ ] CORS 設定（フロントオリジン）
  - [ ] cdk deploy
  - [ ] Web クライアント雛形作成（Vite + React）

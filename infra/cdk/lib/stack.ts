@@ -63,6 +63,28 @@ export class TimtamInfraStack extends Stack {
     transcriptionStartFn.addToRolePolicy(meetingPolicies);
     transcriptionStopFn.addToRolePolicy(meetingPolicies);
 
+    // === Orchestrator & TTS Lambdas ===
+    const orchestratorFn = new NodejsFunction(this, 'OrchestratorFn', {
+      entry: '../../services/orchestrator/handler.ts',
+      timeout: Duration.seconds(20),
+    });
+    orchestratorFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: [
+        'bedrock:InvokeModel',
+        'bedrock:InvokeModelWithResponseStream',
+      ],
+      resources: ['*'], // TODO: 後でモデルARNに絞る
+    }));
+
+    const ttsFn = new NodejsFunction(this, 'TtsFn', {
+      entry: '../../services/tts/handler.ts',
+      timeout: Duration.seconds(20),
+    });
+    ttsFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['polly:SynthesizeSpeech'],
+      resources: ['*'],
+    }));
+
     // === API Gateway HTTP API: Integrations & Routes ===
     // Default Stage (auto deploy)
     const stage = new CfnStage(this, 'HttpApiStage', {
@@ -143,6 +165,46 @@ export class TimtamInfraStack extends Stack {
         sourceArn,
         action: 'lambda:InvokeFunction',
       });
+    });
+
+    // Orchestrator integration + route
+    const orchestratorInt = new CfnIntegration(this, 'OrchestratorIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(orchestratorFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const orchestratorRoute = new CfnRoute(this, 'OrchestratorRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'POST /events/transcript',
+      target: `integrations/${orchestratorInt.ref}`,
+    });
+    orchestratorRoute.addDependency(orchestratorInt);
+    orchestratorFn.addPermission('InvokeByHttpApiOrchestrator', {
+      principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+      sourceArn,
+      action: 'lambda:InvokeFunction',
+    });
+
+    // TTS integration + route
+    const ttsInt = new CfnIntegration(this, 'TtsIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(ttsFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const ttsRoute = new CfnRoute(this, 'TtsRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'POST /tts',
+      target: `integrations/${ttsInt.ref}`,
+    });
+    ttsRoute.addDependency(ttsInt);
+    ttsFn.addPermission('InvokeByHttpApiTts', {
+      principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+      sourceArn,
+      action: 'lambda:InvokeFunction',
     });
   }
 }
