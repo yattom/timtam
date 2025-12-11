@@ -33,7 +33,7 @@
  - [x] Node.js/npm/aws-cdk のセットアップ確認
  - [x] CDK 初期化とブートストラップ
  - [x] HTTP API 作成
- - [ ] Lambda meetingHandler 作成
+ - [x] Lambda meetingHandler 作成
  - [ ] ルート追加 POST /meetings
  - [ ] ルート追加 POST /attendees
  - [ ] ルート追加 POST /meetings/{meetingId}/transcription/start

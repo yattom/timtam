@@ -198,6 +198,11 @@ fabric.properties
 docker-data/
 docker-compose.override.yml
 
+# AWS CDK
+.cdk.staging/
+cdk.out/
+infra/cdk/cdk.out/
+
 # Archives
 *.7z
 *.gz
