@@ -1,10 +1,32 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
+import { ChimeSDKMeetingsClient, CreateAttendeeCommand } from '@aws-sdk/client-chime-sdk-meetings';
 
-// TODO: 実装：既存MeetingにAttendeeを追加（Chime CreateAttendee）
-export const add: APIGatewayProxyHandlerV2 = async () => {
-  return {
-    statusCode: 200,
-    body: JSON.stringify({ ok: true, action: 'addAttendee', note: 'stub' }),
-    headers: { 'Content-Type': 'application/json' },
-  };
+const REGION = process.env.AWS_REGION || 'ap-northeast-1';
+const chime = new ChimeSDKMeetingsClient({ region: REGION });
+
+// 既存会議に参加者を追加
+// body: { meetingId: string, userId?: string }
+export const add: APIGatewayProxyHandlerV2 = async (event) => {
+  try {
+    const body = event.body ? JSON.parse(event.body) : {};
+    const meetingId: string | undefined = body.meetingId;
+    if (!meetingId) throw new Error('meetingId is required');
+    const userId: string = body.userId || `user-${Date.now()}`;
+
+    const attendee = await chime.send(
+      new CreateAttendeeCommand({ MeetingId: meetingId, ExternalUserId: userId })
+    );
+
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ attendee: attendee.Attendee }),
+    };
+  } catch (err: any) {
+    return {
+      statusCode: 500,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ok: false, error: err?.message || String(err) }),
+    };
+  }
 };

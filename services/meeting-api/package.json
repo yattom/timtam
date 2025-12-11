@@ -1,0 +1,9 @@
+{
+  "name": "meeting-api",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@aws-sdk/client-chime-sdk-meetings": "3.600.0"
+  }
+}
