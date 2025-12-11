@@ -31,8 +31,8 @@
 
 - [x] pnpmを使って危険なライブラリのインストールを防止
  - [x] Node.js/npm/aws-cdk のセットアップ確認
- - [ ] CDK 初期化とブートストラップ
- - [ ] HTTP API 作成
+ - [x] CDK 初期化とブートストラップ
+ - [x] HTTP API 作成
  - [ ] Lambda meetingHandler 作成
  - [ ] ルート追加 POST /meetings
  - [ ] ルート追加 POST /attendees
