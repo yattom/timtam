@@ -8,6 +8,9 @@ importers:
 
   infra/cdk:
     devDependencies:
+      '@types/node':
+        specifier: 20.11.25
+        version: 20.11.25
       aws-cdk:
         specifier: 2.165.0
         version: 2.165.0
@@ -22,7 +25,7 @@ importers:
         version: 0.23.0
       ts-node:
         specifier: 10.9.2
-        version: 10.9.2(@types/node@25.0.0)(typescript@5.6.3)
+        version: 10.9.2(@types/node@20.11.25)(typescript@5.6.3)
       typescript:
         specifier: 5.6.3
         version: 5.6.3
@@ -545,8 +548,8 @@ packages:
   '@tsconfig/node16@1.0.4':
     resolution: {integrity: sha512-vxhUy4J8lyeyinH7Azl1pdd43GJhZH/tP2weN8TntQblOY+A0XbT8DJk1/oCPuOOyg/Ja757rG0CgHcWC8OfMA==}
 
-  '@types/node@25.0.0':
-    resolution: {integrity: sha512-rl78HwuZlaDIUSeUKkmogkhebA+8K1Hy7tddZuJ3D0xV8pZSfsYGTsliGUol1JPzu9EKnTxPC4L1fiWouStRew==}
+  '@types/node@20.11.25':
+    resolution: {integrity: sha512-TBHyJxk2b7HceLVGFcpAUjsa5zIdsPWlR6XHfyGzd0SFu+/NFgQgMAl96MSDZgQDvJAvV6BKsFOrt6zIL09JDw==}
 
   acorn-walk@8.3.4:
     resolution: {integrity: sha512-ueEepnujpqee2o5aIYnvHU6C0A42MNdsIDeqy5BydrkuC5R1ZuUFnm27EeFJGoEHJQgn3uleRvmTXaJgfXbt4g==}
@@ -639,8 +642,8 @@ packages:
     engines: {node: '>=14.17'}
     hasBin: true
 
-  undici-types@7.16.0:
-    resolution: {integrity: sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw==}
+  undici-types@5.26.5:
+    resolution: {integrity: sha512-JlCMO+ehdEIKqlFxk6IfVoAUVmgz7cU7zD/h9XZ0qzeosSHmUJVOzSQvvYSYWXkFXC+IfLKSIffhv0sVZup6pA==}
 
   uuid@9.0.1:
     resolution: {integrity: sha512-b+1eJOlsR9K8HJpow9Ok3fiWOWSIcIzXodvv0rQjVoOVNpWMpxf1wZNpt4y9h10odCNrqnYp1OBzRktckBe3sA==}
@@ -1541,9 +1544,9 @@ snapshots:
 
   '@tsconfig/node16@1.0.4': {}
 
-  '@types/node@25.0.0':
+  '@types/node@20.11.25':
     dependencies:
-      undici-types: 7.16.0
+      undici-types: 5.26.5
 
   acorn-walk@8.3.4:
     dependencies:
@@ -1611,14 +1614,14 @@ snapshots:
 
   strnum@1.1.2: {}
 
-  ts-node@10.9.2(@types/node@25.0.0)(typescript@5.6.3):
+  ts-node@10.9.2(@types/node@20.11.25)(typescript@5.6.3):
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       '@tsconfig/node10': 1.0.12
       '@tsconfig/node12': 1.0.11
       '@tsconfig/node14': 1.0.3
       '@tsconfig/node16': 1.0.4
-      '@types/node': 25.0.0
+      '@types/node': 20.11.25
       acorn: 8.15.0
       acorn-walk: 8.3.4
       arg: 4.1.3
@@ -1633,7 +1636,7 @@ snapshots:
 
   typescript@5.6.3: {}
 
-  undici-types@7.16.0: {}
+  undici-types@5.26.5: {}
 
   uuid@9.0.1: {}
 
