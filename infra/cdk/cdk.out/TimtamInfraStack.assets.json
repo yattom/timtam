@@ -1,0 +1,19 @@
+{
+  "version": "38.0.1",
+  "files": {
+    "79aa5a8cd04aa300e36e4e0d9d66e5a2fbf2684a8c4dbaa8bc2775c36df5c94e": {
+      "source": {
+        "path": "TimtamInfraStack.template.json",
+        "packaging": "file"
+      },
+      "destinations": {
+        "current_account-current_region": {
+          "bucketName": "cdk-timtam-assets-${AWS::AccountId}-${AWS::Region}",
+          "objectKey": "79aa5a8cd04aa300e36e4e0d9d66e5a2fbf2684a8c4dbaa8bc2775c36df5c94e.json",
+          "assumeRoleArn": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cdk-timtam-file-publishing-role-${AWS::AccountId}-${AWS::Region}"
+        }
+      }
+    }
+  },
+  "dockerImages": {}
+}

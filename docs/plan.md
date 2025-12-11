@@ -27,7 +27,10 @@
    - コスト最適化（要約頻度/トークン上限、モデル比較スイッチ）
    - 事後処理（自動議事録、Slack/Teams通知、Jira/Asana連携）
 
- - [ ] Node.js/npm/aws-cdk のセットアップ確認
+## TODOリスト
+
+- [x] pnpmを使って危険なライブラリのインストールを防止
+ - [x] Node.js/npm/aws-cdk のセットアップ確認
  - [ ] CDK 初期化とブートストラップ
  - [ ] HTTP API 作成
  - [ ] Lambda meetingHandler 作成
@@ -49,6 +52,8 @@
  - [ ] /tts エンドポイント実装（Polly）
  - [ ] フロントで音声ON/OFF切替と再生
  - [ ] レイテンシ簡易計測（ASR/LLM/TTS）
+
+### Done
 
  - [x] AWSアカウント作成
  - [x] IAM Idencity CenterでSSO設定、ユーザーとグループ作成
