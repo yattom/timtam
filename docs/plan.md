@@ -27,10 +27,42 @@
    - コスト最適化（要約頻度/トークン上限、モデル比較スイッチ）
    - 事後処理（自動議事録、Slack/Teams通知、Jira/Asana連携）
 
+ - [ ] Node.js/npm/aws-cdk のセットアップ確認
+ - [ ] CDK 初期化とブートストラップ
+ - [ ] HTTP API 作成
+ - [ ] Lambda meetingHandler 作成
+ - [ ] ルート追加 POST /meetings
+ - [ ] ルート追加 POST /attendees
+ - [ ] ルート追加 POST /meetings/{meetingId}/transcription/start
+ - [ ] ルート追加 POST /meetings/{meetingId}/transcription/stop
+ - [ ] Lambda orchestratorHandler 作成
+ - [ ] IAM 権限設定（Chime/Transcribe/Bedrock/Polly）
+ - [ ] CORS 設定（フロントオリジン）
+ - [ ] cdk deploy
+ - [ ] Web クライアント雛形作成（Vite + React）
+ - [ ] API連携で入室（/meetings）と音声確認
+ - [ ] トランスクリプト購読（Partial/Final）表示
+ - [ ] 文字起こし開始/停止ボタン実装（Start/Stop API 接続）
+ - [ ] /events/transcript エンドポイント実装
+ - [ ] 簡易ルール→Bedrock判定（Haiku 4.5）実装
+ - [ ] 介入メッセージをチャット欄に表示
+ - [ ] /tts エンドポイント実装（Polly）
+ - [ ] フロントで音声ON/OFF切替と再生
+ - [ ] レイテンシ簡易計測（ASR/LLM/TTS）
+
+ - [x] AWSアカウント作成
+ - [x] IAM Idencity CenterでSSO設定、ユーザーとグループ作成
+ - [x] AWS CLI設定
+ - [x] CloudTrail 有効化
+ - [x] Budget作成
+ - [x] Cost Anomaly 設定
+ - [x] BedrockでAnthropicのモデル利用申請
+
+
 ## 設計・技術スタック（初期方針）
 - 会議: Amazon Chime SDK（ブラウザクライアント）
 - ASR: Amazon Transcribe Streaming（ja-JP, speaker labels）
-- LLM: Amazon Bedrock（Claude 3.7 Haiku中心）
+- LLM: Amazon Bedrock（Claude Haiku 4.5 を既定、必要に応じて Sonnet 4.5 併用）
 - 出力: 会議チャット（優先）、Polly TTS（任意）
 - イベント: Kinesis Data Streams または EventBridge（必要に応じて）
 - 実行: ECS Fargate常駐/またはStep Functions Express（将来拡張）
