@@ -42,7 +42,9 @@
  - [x] IAM 権限設定（Bedrock/Polly）
  - [ ] IAM 権限設定（Chime/Transcribe）
  - [ ] CORS 設定（フロントオリジン）
- - [ ] cdk deploy
+ - [x] cdk deploy
+- [ ] Orchestrator 環境変数固定（BEDROCK_REGION / BEDROCK_INFERENCE_PROFILE_ID または ARN）
+- [ ] Lambda ランタイムを Node.js 20 に更新（全関数）
  - [ ] Web クライアント雛形作成（Vite + React）
  - [ ] API連携で入室（/meetings）と音声確認
  - [ ] トランスクリプト購読（Partial/Final）表示
@@ -53,6 +55,7 @@
  - [ ] /tts エンドポイント実装（Polly）
  - [ ] フロントで音声ON/OFF切替と再生
  - [ ] レイテンシ簡易計測（ASR/LLM/TTS）
+
 
 ### Done
 
