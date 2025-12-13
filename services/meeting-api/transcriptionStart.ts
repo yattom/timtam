@@ -19,24 +19,29 @@ export const start: APIGatewayProxyHandlerV2 = async (event) => {
 
     const languageCode = body.languageCode || 'ja-JP';
 
-    await chime.send(
+    console.log('[TranscriptionStart] starting', { region: REGION, meetingId, languageCode });
+    const resp = await chime.send(
       new StartMeetingTranscriptionCommand({
         MeetingId: meetingId,
         TranscriptionConfiguration: {
           EngineTranscribeSettings: {
             LanguageCode: languageCode,
+            Region: REGION,
+            EnablePartialResultsStabilization: true,
             PartialResultsStability: 'medium',
           },
         },
       })
     );
+    console.log('[TranscriptionStart] started OK', { meetingId, requestId: (resp as any)?.$metadata?.requestId });
 
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ok: true }),
+      body: JSON.stringify({ ok: true, meetingId, languageCode }),
     };
   } catch (err: any) {
+    console.error('[TranscriptionStart] failed', err);
     return {
       statusCode: 500,
       headers: { 'Content-Type': 'application/json' },
