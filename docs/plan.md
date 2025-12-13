@@ -40,21 +40,30 @@
  - [x] ルート追加 POST /meetings/{meetingId}/transcription/stop
  - [x] Lambda orchestratorHandler 作成
  - [x] IAM 権限設定（Bedrock/Polly）
- - [ ] IAM 権限設定（Chime/Transcribe）
- - [ ] CORS 設定（フロントオリジン）
  - [x] cdk deploy
-- [ ] Orchestrator 環境変数固定（BEDROCK_REGION / BEDROCK_INFERENCE_PROFILE_ID または ARN）
-- [ ] Lambda ランタイムを Node.js 20 に更新（全関数）
+ - [ ] コンフィグレーションをCDK側に埋め込む
+ - [x] IAM 権限設定（Chime/Transcribe）
+ - [ ] CORS 設定（フロントオリジン）
+ - [ ] Orchestrator 環境変数固定（BEDROCK_REGION / BEDROCK_INFERENCE_PROFILE_ID または ARN）
+ - [ ] Lambda ランタイムを Node.js 20 に更新（全関数）
  - [ ] Web クライアント雛形作成（Vite + React）
  - [ ] API連携で入室（/meetings）と音声確認
  - [ ] トランスクリプト購読（Partial/Final）表示
  - [ ] 文字起こし開始/停止ボタン実装（Start/Stop API 接続）
- - [ ] /events/transcript エンドポイント実装
- - [ ] 簡易ルール→Bedrock判定（Haiku 4.5）実装
+ - [x] /events/transcript エンドポイント実装
+ - [x] 簡易ルール→Bedrock判定（Haiku 4.5）実装
  - [ ] 介入メッセージをチャット欄に表示
- - [ ] /tts エンドポイント実装（Polly）
+ - [x] /tts エンドポイント実装（Polly）
  - [ ] フロントで音声ON/OFF切替と再生
  - [ ] レイテンシ簡易計測（ASR/LLM/TTS）
+
+ ### 追加TODO（ADR0005に基づく）
+
+ - [ ] GET /config エンドポイント実装（公開設定の提供）
+ - [ ] CDK: Orchestrator/TTS の環境変数設定（BEDROCK_REGION / BEDROCK_MODEL_ID / TTS_DEFAULT_VOICE）
+ - [ ] CDK: CloudFormation Outputs 追加（ApiEndpoint/DefaultRegion/DefaultModelId/TtsDefaultVoice）
+ - [ ] IAM リソース絞り込み（Bedrock 推論プロファイル ARN / Polly Voice）
+ - [ ] ヘルスチェックエンドポイント GET /health 追加
 
 
 ### Done
