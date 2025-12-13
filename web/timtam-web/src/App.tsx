@@ -130,18 +130,31 @@ export function App() {
     const av = meetingSession.audioVideo;
     audioVideoRef.current = av;
 
+    // Bind speaker output first so remote audio can play even without mic
+    if (audioElRef.current) {
+      await av.bindAudioElement(audioElRef.current);
+      // Try to direct output to selected speaker if supported
+      try {
+        if (selectedSpeaker && 'setSinkId' in (audioElRef.current as any)) {
+          await (audioElRef.current as any).setSinkId(selectedSpeaker);
+        } else if ('setSinkId' in (audioElRef.current as any)) {
+          await (audioElRef.current as any).setSinkId('default');
+        }
+      } catch {
+        // Ignore setSinkId failures (e.g., HTTP or unsupported)
+      }
+    }
+
     // Start mic if available; otherwise join receive-only
     try {
       if (selectedMic) {
         await av.startAudioInput(selectedMic as any);
       } else if (audioInputs.length > 0) {
-        await av.startAudioInput();
+        // In some SDK versions, startAudioInput requires a device parameter; attempt with the first device
+        await av.startAudioInput(audioInputs[0].deviceId as any);
       }
     } catch {
       // ignore; proceed receive-only
-    }
-    if (audioElRef.current) {
-      await av.bindAudioElement(audioElRef.current);
     }
     await av.start();
     setJoined(true);
@@ -240,7 +253,9 @@ export function App() {
     setSelectedSpeaker(id);
     // amazon-chime-sdk-js uses setSinkId on the bound audio element
     if (audioElRef.current && 'setSinkId' in (audioElRef.current as any)) {
-      try { await (audioElRef.current as any).setSinkId(id); } catch {}
+      try { await (audioElRef.current as any).setSinkId(id); } catch (e) {
+        // Some browsers require HTTPS for setSinkId; ignore failure
+      }
     }
   };
 
@@ -279,6 +294,9 @@ export function App() {
               <option key={d.deviceId} value={d.deviceId}>{d.label || d.deviceId}</option>
             ))}
           </select>
+          {audioOutputs.length === 0 && (
+            <span style={{ marginLeft: 8, color: '#666' }}>出力デバイスが見つからない場合も再生は既定デバイスで行われます。</span>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {!joined ? (
