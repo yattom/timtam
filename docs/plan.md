@@ -54,6 +54,11 @@
  - [x] Orchestrator 環境変数固定（BEDROCK_REGION / BEDROCK_MODEL_ID または 推論プロファイルARN）
  - [ ] Lambda ランタイムを Node.js 20 に更新（全関数）
  - [ ] Web クライアント雛形作成（Vite + React）
+ - [ ] Web: チャットMVP（会議連動なし）先行実装
+ - [ ] Web: テキスト入力→POST /events/transcript→応答表示
+ - [ ] Web: 「音声で聞く」ボタン→POST /tts→音声再生
+ - [ ] Web: 起動時にGET /healthで疎通表示
+ - [ ] CORS: 開発用オリジン（http://localhost:5173 / http://127.0.0.1:5173）を許可し早期デプロイ
  - [ ] API連携で入室（/meetings）と音声確認
  - [ ] トランスクリプト購読（Partial/Final）表示
  - [ ] 文字起こし開始/停止ボタン実装（Start/Stop API 接続）
