@@ -41,7 +41,7 @@
  - [x] Lambda orchestratorHandler 作成
  - [x] IAM 権限設定（Bedrock/Polly）
  - [x] cdk deploy
- - [ ] コンフィグレーションをCDK側に埋め込む
+ - [x] コンフィグレーションをCDK側に埋め込む
  - [x] IAM 権限設定（Chime/Transcribe）
  - [ ] CORS 設定（フロントオリジン）
  - [ ] Orchestrator 環境変数固定（BEDROCK_REGION / BEDROCK_INFERENCE_PROFILE_ID または ARN）

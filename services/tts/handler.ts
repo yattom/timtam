@@ -2,13 +2,14 @@ import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { PollyClient, SynthesizeSpeechCommand } from '@aws-sdk/client-polly';
 
 const REGION = process.env.AWS_REGION || 'ap-northeast-1';
+const TTS_DEFAULT_VOICE = process.env.TTS_DEFAULT_VOICE || 'Mizuki';
 const polly = new PollyClient({ region: REGION });
 
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   try {
     const body = event.body ? JSON.parse(event.body) : {};
     const text: string | undefined = body.text;
-    const voiceId: string = body.voiceId || 'Mizuki';
+    const voiceId: string = body.voiceId || TTS_DEFAULT_VOICE;
     const format: 'mp3' | 'ogg_vorbis' | 'pcm' = body.format || 'mp3';
 
     if (!text || typeof text !== 'string' || !text.trim()) {

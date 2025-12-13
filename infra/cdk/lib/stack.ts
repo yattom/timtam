@@ -1,4 +1,4 @@
-import { Stack, StackProps } from 'aws-cdk-lib';
+import { Stack, StackProps, CfnOutput } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { CfnApi, CfnIntegration, CfnRoute, CfnStage } from 'aws-cdk-lib/aws-apigatewayv2';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
@@ -67,6 +67,12 @@ export class TimtamInfraStack extends Stack {
     const orchestratorFn = new NodejsFunction(this, 'OrchestratorFn', {
       entry: '../../services/orchestrator/handler.ts',
       timeout: Duration.seconds(20),
+      environment: {
+        // ADR0005: 既定のBedrockリージョンとモデルID（推論プロファイルARNを許容）
+        BEDROCK_REGION: 'ap-northeast-1',
+        BEDROCK_MODEL_ID:
+          'arn:aws:bedrock:ap-northeast-1:030046728177:inference-profile/global.anthropic.claude-haiku-4-5-20251001-v1:0',
+      },
     });
     orchestratorFn.addToRolePolicy(new iam.PolicyStatement({
       actions: [
@@ -79,6 +85,10 @@ export class TimtamInfraStack extends Stack {
     const ttsFn = new NodejsFunction(this, 'TtsFn', {
       entry: '../../services/tts/handler.ts',
       timeout: Duration.seconds(20),
+      environment: {
+        // ADR0005: 既定のPolly音声
+        TTS_DEFAULT_VOICE: 'Mizuki',
+      },
     });
     ttsFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['polly:SynthesizeSpeech'],
@@ -206,5 +216,74 @@ export class TimtamInfraStack extends Stack {
       sourceArn,
       action: 'lambda:InvokeFunction',
     });
+
+    // === Config & Health Lambdas (GET) ===
+    const apiBaseUrl = `https://${httpApi.ref}.execute-api.${this.region}.amazonaws.com`;
+
+    const configFn = new NodejsFunction(this, 'ConfigFn', {
+      entry: '../../services/config/handler.ts',
+      timeout: Duration.seconds(10),
+      environment: {
+        API_BASE_URL: apiBaseUrl,
+        DEFAULT_BEDROCK_REGION: 'ap-northeast-1',
+        DEFAULT_MODEL_ID:
+          'arn:aws:bedrock:ap-northeast-1:030046728177:inference-profile/global.anthropic.claude-haiku-4-5-20251001-v1:0',
+        TTS_DEFAULT_VOICE: 'Mizuki',
+      },
+    });
+
+    const healthFn = new NodejsFunction(this, 'HealthFn', {
+      entry: '../../services/health/handler.ts',
+      timeout: Duration.seconds(5),
+    });
+
+    // Config integration + route (GET /config)
+    const configInt = new CfnIntegration(this, 'ConfigIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(configFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const configRoute = new CfnRoute(this, 'ConfigRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'GET /config',
+      target: `integrations/${configInt.ref}`,
+    });
+    configRoute.addDependency(configInt);
+    configFn.addPermission('InvokeByHttpApiConfig', {
+      principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+      sourceArn,
+      action: 'lambda:InvokeFunction',
+    });
+
+    // Health integration + route (GET /health)
+    const healthInt = new CfnIntegration(this, 'HealthIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(healthFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const healthRoute = new CfnRoute(this, 'HealthRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'GET /health',
+      target: `integrations/${healthInt.ref}`,
+    });
+    healthRoute.addDependency(healthInt);
+    healthFn.addPermission('InvokeByHttpApiHealth', {
+      principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+      sourceArn,
+      action: 'lambda:InvokeFunction',
+    });
+
+    // === CloudFormation Outputs ===
+    new CfnOutput(this, 'ApiEndpoint', { value: apiBaseUrl });
+    new CfnOutput(this, 'DefaultBedrockRegion', { value: 'ap-northeast-1' });
+    new CfnOutput(this, 'DefaultModelId', {
+      value:
+        'arn:aws:bedrock:ap-northeast-1:030046728177:inference-profile/global.anthropic.claude-haiku-4-5-20251001-v1:0',
+    });
+    new CfnOutput(this, 'TtsDefaultVoice', { value: 'Mizuki' });
   }
 }
