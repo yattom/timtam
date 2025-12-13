@@ -56,6 +56,8 @@ export class TimtamInfraStack extends Stack {
         'chime:DeleteMeeting',
         'chime:StartMeetingTranscription',
         'chime:StopMeetingTranscription',
+        // 既存会議への参加時に会議情報を取得するため
+        'chime:GetMeeting',
       ],
       resources: ['*'],
     });
