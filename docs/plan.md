@@ -50,21 +50,18 @@
 - [x] ヘルスチェックエンドポイント GET /health 追加
 - [ ] Web: `/config` を取得して `defaultRegion`/`defaultModelId`/`ttsDefaultVoice` を利用する実装
 - [ ] ドキュメント更新（README/AGENTS/クライアント側）: `/config` と `/health` の利用方法を追記
- - [ ] CORS 設定（フロントオリジン）
+ - [x] CORS 設定（フロントオリジン）
  - [x] Orchestrator 環境変数固定（BEDROCK_REGION / BEDROCK_MODEL_ID または 推論プロファイルARN）
  - [ ] Lambda ランタイムを Node.js 20 に更新（全関数）
- - [ ] Web クライアント雛形作成（Vite + React）
- - [ ] Web: チャットMVP（会議連動なし）先行実装
- - [ ] Web: テキスト入力→POST /events/transcript→応答表示
- - [ ] Web: 「音声で聞く」ボタン→POST /tts→音声再生
- - [ ] Web: 起動時にGET /healthで疎通表示
- - [ ] CORS: 開発用オリジン（http://localhost:5173 / http://127.0.0.1:5173）を許可し早期デプロイ
- - [ ] API連携で入室（/meetings）と音声確認
- - [ ] トランスクリプト購読（Partial/Final）表示
- - [ ] 文字起こし開始/停止ボタン実装（Start/Stop API 接続）
+ - [x] Web クライアント雛形作成（Vite + React）
+ - [ ] Web: Chime SDK クライアントで入室UI（マイクON/OFF・デバイス選択）
+ - [ ] Web/API: POST /meetings で会議作成 → POST /attendees で参加
+ - [ ] Web/API: 文字起こし開始/停止ボタン（/meetings/{id}/transcription/start|stop）
+ - [ ] Web: TranscribeのPartial/Finalを時系列に表示（Finalを窓集約）
+ - [x] CORS: 開発用オリジン（http://localhost:5173 / http://127.0.0.1:5173）を許可し早期デプロイ
  - [x] /events/transcript エンドポイント実装
  - [x] 簡易ルール→Bedrock判定（Haiku 4.5）実装
- - [ ] 介入メッセージをチャット欄に表示
+ - [ ] 介入メッセージを会議チャット欄に表示（自動送出OFF既定）
  - [x] /tts エンドポイント実装（Polly）
  - [ ] フロントで音声ON/OFF切替と再生
  - [ ] レイテンシ簡易計測（ASR/LLM/TTS）
