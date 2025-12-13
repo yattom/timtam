@@ -48,7 +48,7 @@
 - [x] CDK: CloudFormation Outputs 追加（ApiEndpoint/DefaultRegion/DefaultModelId/TtsDefaultVoice）
 - [ ] IAM リソース絞り込み（Bedrock 推論プロファイル ARN / Polly Voice）
 - [x] ヘルスチェックエンドポイント GET /health 追加
-- [ ] Web: `/config` を取得して `defaultRegion`/`defaultModelId`/`ttsDefaultVoice` を利用する実装
+- [x] Web: `/config` を取得して `defaultRegion`/`defaultModelId`/`ttsDefaultVoice` を利用する実装
 - [ ] ドキュメント更新（README/AGENTS/クライアント側）: `/config` と `/health` の利用方法を追記
  - [x] CORS 設定（フロントオリジン）
  - [x] Orchestrator 環境変数固定（BEDROCK_REGION / BEDROCK_MODEL_ID または 推論プロファイルARN）
@@ -57,7 +57,11 @@
   - [x] Web: Chime SDK クライアントで入室UI（マイクON/OFF・デバイス選択）
   - [x] Web/API: POST /meetings で会議作成 → POST /attendees で参加
   - [x] Web/API: 文字起こし開始/停止ボタン（/meetings/{id}/transcription/start|stop）
- - [ ] Web: TranscribeのPartial/Finalを時系列に表示（Finalを窓集約）
+  - [x] Web: 既存会議に入室（meetingId 指定）
+  - [x] Web: マイク無し端末での受信専用入室（スピーカー優先バインド）
+  - [x] API: /attendees 応答に meeting を含める拡張（既存会議参加用）
+  - [x] IAM: chime:GetMeeting 許可を追加（既存会議参加時の会議情報取得）
+  - [ ] Web: TranscribeのPartial/Finalを時系列に表示（Finalを窓集約）
  - [x] CORS: 開発用オリジン（http://localhost:5173 / http://127.0.0.1:5173）を許可し早期デプロイ
  - [x] /events/transcript エンドポイント実装
  - [x] 簡易ルール→Bedrock判定（Haiku 4.5）実装
