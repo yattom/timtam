@@ -32,19 +32,19 @@
 NOTICE: TODOリストはフラットな箇条書きで、着手順に上から並べること。新しい項目もフラットに、実施順になるよう途中に挿入する。セクションを分けたり階層化するのは禁止。
 
 - [x] pnpmを使って危険なライブラリのインストールを防止
- - [x] Node.js/npm/aws-cdk のセットアップ確認
- - [x] CDK 初期化とブートストラップ
- - [x] HTTP API 作成
- - [x] Lambda meetingHandler 作成
- - [x] ルート追加 POST /meetings
- - [x] ルート追加 POST /attendees
- - [x] ルート追加 POST /meetings/{meetingId}/transcription/start
- - [x] ルート追加 POST /meetings/{meetingId}/transcription/stop
- - [x] Lambda orchestratorHandler 作成
- - [x] IAM 権限設定（Bedrock/Polly）
- - [x] cdk deploy
- - [x] コンフィグレーションをCDK側に埋め込む
- - [x] IAM 権限設定（Chime/Transcribe）
+- [x] Node.js/npm/aws-cdk のセットアップ確認
+- [x] CDK 初期化とブートストラップ
+- [x] HTTP API 作成
+- [x] Lambda meetingHandler 作成
+- [x] ルート追加 POST /meetings
+- [x] ルート追加 POST /attendees
+- [x] ルート追加 POST /meetings/{meetingId}/transcription/start
+- [x] ルート追加 POST /meetings/{meetingId}/transcription/stop
+- [x] Lambda orchestratorHandler 作成
+- [x] IAM 権限設定（Bedrock/Polly）
+- [x] cdk deploy
+- [x] コンフィグレーションをCDK側に埋め込む
+- [x] IAM 権限設定（Chime/Transcribe）
 - [x] GET /config エンドポイント実装（公開設定の提供）
 - [x] CDK: Orchestrator/TTS の環境変数設定（BEDROCK_REGION / BEDROCK_MODEL_ID / TTS_DEFAULT_VOICE）
 - [x] CDK: CloudFormation Outputs 追加（ApiEndpoint/DefaultRegion/DefaultModelId/TtsDefaultVoice）
@@ -52,32 +52,31 @@ NOTICE: TODOリストはフラットな箇条書きで、着手順に上から�
 - [x] ヘルスチェックエンドポイント GET /health 追加
 - [x] Web: `/config` を取得して `defaultRegion`/`defaultModelId`/`ttsDefaultVoice` を利用する実装
 - [ ] ドキュメント更新（README/AGENTS/クライアント側）: `/config` と `/health` の利用方法を追記
- - [x] CORS 設定（フロントオリジン）
- - [x] Orchestrator 環境変数固定（BEDROCK_REGION / BEDROCK_MODEL_ID または 推論プロファイルARN）
- - [ ] Lambda ランタイムを Node.js 20 に更新（全関数）
-  - [x] Web クライアント雛形作成（Vite + React）
-  - [x] Web: Chime SDK クライアントで入室UI（マイクON/OFF・デバイス選択）
-  - [x] Web/API: POST /meetings で会議作成 → POST /attendees で参加
-  - [x] Web/API: 文字起こし開始/停止ボタン（/meetings/{id}/transcription/start|stop）
-  - [x] Web: 既存会議に入室（meetingId 指定）
-  - [x] Web: マイク無し端末での受信専用入室（スピーカー優先バインド）
-  - [x] API: /attendees 応答に meeting を含める拡張（既存会議参加用）
-  - [x] IAM: chime:GetMeeting 許可を追加（既存会議参加時の会議情報取得）
-  - [ ] Web: TranscribeのPartial/Finalを時系列に表示（Finalを窓集約）
- - [x] CORS: 開発用オリジン（http://localhost:5173 / http://127.0.0.1:5173）を許可し早期デプロイ
- - [x] /events/transcript エンドポイント実装
- - [x] 簡易ルール→Bedrock判定（Haiku 4.5）実装
- - [ ] 介入メッセージを会議チャット欄に表示（自動送出OFF既定）
- - [x] /tts エンドポイント実装（Polly）
- - [ ] フロントで音声ON/OFF切替と再生
- - [ ] レイテンシ簡易計測（ASR/LLM/TTS）
-
- - [x] Web(S3+CF/CDK): Web 配信用 S3 バケット作成（非公開・OAI/OAC で配信）
- - [x] Web(S3+CF/CDK): CloudFront Distribution 作成（HTTPS/SPA フォールバック 403/404→index.html）
- - [x] Web(S3+CF/CDK): s3-deployment で `web/timtam-web/dist` を自動デプロイ（無効化付き）
- - [x] Web(S3+CF/CDK): CloudFormation Outputs に WebUrl（`https://<distributionDomain>`）を追加
- - [x] CORS: API Gateway の allowOrigins に CloudFront オリジンを追加
- - [x] Web: `VITE_API_BASE_URL` を ApiEndpoint に設定してフロントをビルド/配信
+- [x] CORS 設定（フロントオリジン）
+- [x] Orchestrator 環境変数固定（BEDROCK_REGION / BEDROCK_MODEL_ID または 推論プロファイルARN）
+- [ ] Lambda ランタイムを Node.js 20 に更新（全関数）
+- [x] Web クライアント雛形作成（Vite + React）
+- [x] Web: Chime SDK クライアントで入室UI（マイクON/OFF・デバイス選択）
+- [x] Web/API: POST /meetings で会議作成 → POST /attendees で参加
+- [x] Web/API: 文字起こし開始/停止ボタン（/meetings/{id}/transcription/start|stop）
+- [x] Web: 既存会議に入室（meetingId 指定）
+- [x] Web: マイク無し端末での受信専用入室（スピーカー優先バインド）
+- [x] API: /attendees 応答に meeting を含める拡張（既存会議参加用）
+- [x] IAM: chime:GetMeeting 許可を追加（既存会議参加時の会議情報取得）
+- [ ] Web: TranscribeのPartial/Finalを時系列に表示（Finalを窓集約）
+- [x] CORS: 開発用オリジン（http://localhost:5173 / http://127.0.0.1:5173）を許可し早期デプロイ
+- [x] /events/transcript エンドポイント実装
+- [x] 簡易ルール→Bedrock判定（Haiku 4.5）実装
+- [ ] 介入メッセージを会議チャット欄に表示（自動送出OFF既定）
+- [x] /tts エンドポイント実装（Polly）
+- [ ] フロントで音声ON/OFF切替と再生
+- [ ] レイテンシ簡易計測（ASR/LLM/TTS）
+- [x] Web(S3+CF/CDK): Web 配信用 S3 バケット作成（非公開・OAI/OAC で配信）
+- [x] Web(S3+CF/CDK): CloudFront Distribution 作成（HTTPS/SPA フォールバック 403/404→index.html）
+- [x] Web(S3+CF/CDK): s3-deployment で `web/timtam-web/dist` を自動デプロイ（無効化付き）
+- [x] Web(S3+CF/CDK): CloudFormation Outputs に WebUrl（`https://<distributionDomain>`）を追加
+- [x] CORS: API Gateway の allowOrigins に CloudFront オリジンを追加
+- [x] Web: `VITE_API_BASE_URL` を ApiEndpoint に設定してフロントをビルド/配信
 
 
 
