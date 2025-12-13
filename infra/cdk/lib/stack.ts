@@ -3,6 +3,10 @@ import { Construct } from 'constructs';
 import { CfnApi, CfnIntegration, CfnRoute, CfnStage } from 'aws-cdk-lib/aws-apigatewayv2';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import { Duration } from 'aws-cdk-lib';
+import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
+import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
+import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 
@@ -10,19 +14,7 @@ export class TimtamInfraStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
 
-    // HTTP API（L1: CfnApi）を作成（CORSは後で必要に応じて詳細化）
-    const httpApi = new CfnApi(this, 'HttpApi', {
-      name: 'timtam-http-api',
-      protocolType: 'HTTP',
-      corsConfiguration: {
-        // 開発用オリジンのみ許可（本番は別途更新）
-        allowOrigins: ['http://localhost:5173', 'http://127.0.0.1:5173'],
-        allowMethods: ['GET', 'POST', 'OPTIONS'],
-        allowHeaders: ['*'],
-        exposeHeaders: [],
-        maxAge: 3600,
-      },
-    });
+    // HTTP API は Web Distribution 作成後に定義して、CORS に CF ドメインを含める
 
     // === Meeting API Lambdas（作成のみ。ルートは後続のTODOで追加） ===
     const createMeetingFn = new NodejsFunction(this, 'CreateMeetingFn', {
@@ -98,12 +90,60 @@ export class TimtamInfraStack extends Stack {
       resources: ['*'],
     }));
 
-    // === API Gateway HTTP API: Integrations & Routes ===
-    // Default Stage (auto deploy)
+    // === Web hosting: S3 bucket (private; to be served via CloudFront) ===
+    const siteBucket = new s3.Bucket(this, 'WebSiteBucket', {
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+    });
+
+    // CloudFront distribution (SPA fallback) with Origin Access Identity
+    const webOai = new cloudfront.OriginAccessIdentity(this, 'WebOAI');
+    siteBucket.grantRead(webOai);
+
+    const webDistribution = new cloudfront.Distribution(this, 'WebDistribution', {
+      defaultRootObject: 'index.html',
+      defaultBehavior: {
+        origin: new origins.S3Origin(siteBucket, { originAccessIdentity: webOai }),
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+      },
+      errorResponses: [
+        { httpStatus: 403, responsePagePath: '/index.html', responseHttpStatus: 200 },
+        { httpStatus: 404, responsePagePath: '/index.html', responseHttpStatus: 200 },
+      ],
+    });
+
+    // === API Gateway HTTP API: create after web distribution so we can include CF domain in CORS ===
+    const httpApi = new CfnApi(this, 'HttpApi', {
+      name: 'timtam-http-api',
+      protocolType: 'HTTP',
+      corsConfiguration: {
+        allowOrigins: [
+          'http://localhost:5173',
+          'http://127.0.0.1:5173',
+          `https://${webDistribution.distributionDomainName}`,
+        ],
+        allowMethods: ['GET', 'POST', 'OPTIONS'],
+        allowHeaders: ['*'],
+        exposeHeaders: [],
+        maxAge: 3600,
+      },
+    });
     const stage = new CfnStage(this, 'HttpApiStage', {
       apiId: httpApi.ref,
       stageName: '$default',
       autoDeploy: true,
+    });
+
+    // (CORS は上で CF ドメインを含めて定義済み)
+
+    // Web assets deployment with invalidation
+    new s3deploy.BucketDeployment(this, 'DeployWeb', {
+      sources: [s3deploy.Source.asset('../../web/timtam-web/dist')],
+      destinationBucket: siteBucket,
+      distribution: webDistribution,
+      distributionPaths: ['/*'],
     });
 
     // Helper to build Lambda proxy integration URI
@@ -288,5 +328,6 @@ export class TimtamInfraStack extends Stack {
         'arn:aws:bedrock:ap-northeast-1:030046728177:inference-profile/global.anthropic.claude-haiku-4-5-20251001-v1:0',
     });
     new CfnOutput(this, 'TtsDefaultVoice', { value: 'Mizuki' });
+    new CfnOutput(this, 'WebUrl', { value: `https://${webDistribution.distributionDomainName}` });
   }
 }

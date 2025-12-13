@@ -29,6 +29,8 @@
 
 ## TODOリスト
 
+NOTICE: TODOリストはフラットな箇条書きで、着手順に上から並べること。新しい項目もフラットに、実施順になるよう途中に挿入する。セクションを分けたり階層化するのは禁止。
+
 - [x] pnpmを使って危険なライブラリのインストールを防止
  - [x] Node.js/npm/aws-cdk のセットアップ確認
  - [x] CDK 初期化とブートストラップ
@@ -69,6 +71,13 @@
  - [x] /tts エンドポイント実装（Polly）
  - [ ] フロントで音声ON/OFF切替と再生
  - [ ] レイテンシ簡易計測（ASR/LLM/TTS）
+
+ - [x] Web(S3+CF/CDK): Web 配信用 S3 バケット作成（非公開・OAI/OAC で配信）
+ - [x] Web(S3+CF/CDK): CloudFront Distribution 作成（HTTPS/SPA フォールバック 403/404→index.html）
+ - [x] Web(S3+CF/CDK): s3-deployment で `web/timtam-web/dist` を自動デプロイ（無効化付き）
+ - [x] Web(S3+CF/CDK): CloudFormation Outputs に WebUrl（`https://<distributionDomain>`）を追加
+ - [x] CORS: API Gateway の allowOrigins に CloudFront オリジンを追加
+ - [x] Web: `VITE_API_BASE_URL` を ApiEndpoint に設定してフロントをビルド/配信
 
 
 
