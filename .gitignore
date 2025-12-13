@@ -202,6 +202,7 @@ docker-compose.override.yml
 .cdk.staging/
 cdk.out/
 infra/cdk/cdk.out/
+!infra/cdk/bin/
 
 # Archives
 *.7z
