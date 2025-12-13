@@ -1,0 +1,17 @@
+{
+  "name": "timtam-workspace",
+  "private": true,
+  "version": "0.0.0",
+  "license": "UNLICENSED",
+  "packageManager": "pnpm@10.25.0",
+  "scripts": {
+    "cdk": "pnpm --filter timtam-infra cdk",
+    "cdk:synth": "pnpm --filter timtam-infra cdk -- synth",
+    "cdk:deploy": "pnpm --filter timtam-infra cdk -- deploy",
+    "cdk:destroy": "pnpm --filter timtam-infra cdk -- destroy",
+    "cdk:diff": "pnpm --filter timtam-infra cdk -- diff",
+    "cdk:bootstrap": "pnpm --filter timtam-infra cdk -- bootstrap",
+    "infra:synth-deploy": "pnpm --filter timtam-infra run synth-deploy",
+    "sso:admin": "pnpm --filter timtam-infra run sso:admin"
+  }
+}
