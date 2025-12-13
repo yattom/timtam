@@ -220,3 +220,5 @@ infra/cdk/cdk.out/
 
 # Keep intentionally empty directories
 !.gitkeep
+/tts.b64
+/tts.mp3

@@ -15,7 +15,8 @@ export class TimtamInfraStack extends Stack {
       name: 'timtam-http-api',
       protocolType: 'HTTP',
       corsConfiguration: {
-        allowOrigins: ['*'],
+        // 開発用オリジンのみ許可（本番は別途更新）
+        allowOrigins: ['http://localhost:5173', 'http://127.0.0.1:5173'],
         allowMethods: ['GET', 'POST', 'OPTIONS'],
         allowHeaders: ['*'],
         exposeHeaders: [],
