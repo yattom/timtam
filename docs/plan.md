@@ -43,8 +43,15 @@
  - [x] cdk deploy
  - [x] コンフィグレーションをCDK側に埋め込む
  - [x] IAM 権限設定（Chime/Transcribe）
+- [x] GET /config エンドポイント実装（公開設定の提供）
+- [x] CDK: Orchestrator/TTS の環境変数設定（BEDROCK_REGION / BEDROCK_MODEL_ID / TTS_DEFAULT_VOICE）
+- [x] CDK: CloudFormation Outputs 追加（ApiEndpoint/DefaultRegion/DefaultModelId/TtsDefaultVoice）
+- [ ] IAM リソース絞り込み（Bedrock 推論プロファイル ARN / Polly Voice）
+- [x] ヘルスチェックエンドポイント GET /health 追加
+- [ ] Web: `/config` を取得して `defaultRegion`/`defaultModelId`/`ttsDefaultVoice` を利用する実装
+- [ ] ドキュメント更新（README/AGENTS/クライアント側）: `/config` と `/health` の利用方法を追記
  - [ ] CORS 設定（フロントオリジン）
- - [ ] Orchestrator 環境変数固定（BEDROCK_REGION / BEDROCK_INFERENCE_PROFILE_ID または ARN）
+ - [x] Orchestrator 環境変数固定（BEDROCK_REGION / BEDROCK_MODEL_ID または 推論プロファイルARN）
  - [ ] Lambda ランタイムを Node.js 20 に更新（全関数）
  - [ ] Web クライアント雛形作成（Vite + React）
  - [ ] API連携で入室（/meetings）と音声確認
@@ -57,13 +64,6 @@
  - [ ] フロントで音声ON/OFF切替と再生
  - [ ] レイテンシ簡易計測（ASR/LLM/TTS）
 
- ### 追加TODO（ADR0005に基づく）
-
- - [ ] GET /config エンドポイント実装（公開設定の提供）
- - [ ] CDK: Orchestrator/TTS の環境変数設定（BEDROCK_REGION / BEDROCK_MODEL_ID / TTS_DEFAULT_VOICE）
- - [ ] CDK: CloudFormation Outputs 追加（ApiEndpoint/DefaultRegion/DefaultModelId/TtsDefaultVoice）
- - [ ] IAM リソース絞り込み（Bedrock 推論プロファイル ARN / Polly Voice）
- - [ ] ヘルスチェックエンドポイント GET /health 追加
 
 
 ### Done
