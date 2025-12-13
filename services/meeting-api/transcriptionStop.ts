@@ -17,7 +17,6 @@ export const stop: APIGatewayProxyHandlerV2 = async (event) => {
     const meetingId: string | undefined = pathId || body.meetingId;
     if (!meetingId) throw new Error('meetingId is required');
 
-    console.log('[TranscriptionStop] stopping', { region: REGION, meetingId });
     const resp = await chime.send(
       new StopMeetingTranscriptionCommand({
         MeetingId: meetingId,
@@ -31,7 +30,7 @@ export const stop: APIGatewayProxyHandlerV2 = async (event) => {
       body: JSON.stringify({ ok: true, meetingId }),
     };
   } catch (err: any) {
-    console.error('[TranscriptionStop] failed', err);
+    console.error('[TranscriptionStop] failed', err?.message || err);
     return {
       statusCode: 500,
       headers: { 'Content-Type': 'application/json' },

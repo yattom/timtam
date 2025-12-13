@@ -30,10 +30,7 @@ export function App() {
   // Transcript states
   const [partialText, setPartialText] = useState<string>('');
   const [finalSegments, setFinalSegments] = useState<{ text: string; at: number }[]>([]);
-  // Debug states
-  const [tcAvailable, setTcAvailable] = useState<boolean>(false);
-  const [tcSubscribed, setTcSubscribed] = useState<boolean>(false);
-  const [lastTranscriptEventAt, setLastTranscriptEventAt] = useState<number | null>(null);
+  // (debug states removed)
 
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const meetingRef = useRef<DefaultMeetingSession | null>(null);
@@ -131,7 +128,7 @@ export function App() {
   };
 
   const configureAndStart = async (meeting: any, attendee: any) => {
-    const logger = new ConsoleLogger('Chime', LogLevel.INFO);
+    const logger = new ConsoleLogger('Chime', LogLevel.WARN);
     const configuration = new MeetingSessionConfiguration(meeting, attendee);
     const meetingSession = new DefaultMeetingSession(configuration, logger, deviceController);
     meetingRef.current = meetingSession as DefaultMeetingSession;
@@ -169,21 +166,15 @@ export function App() {
     try {
       const tc: any = (av as any).transcriptionController;
       const available = !!(tc && typeof tc.subscribeToTranscriptEvent === 'function');
-      setTcAvailable(available);
       if (available) {
-        console.info('[timtam] subscribing to transcript events');
         const handler = (event: any) => {
           try {
             // Some SDKs provide different casing/shape; normalize
             const rawResults = event?.Transcript?.Results ?? event?.transcript?.results ?? event?.results ?? [];
             const results: any[] = Array.isArray(rawResults) ? rawResults : [];
             if (!Array.isArray(results) || results.length === 0) {
-              // Even if no results, mark last event for visibility
-              setLastTranscriptEventAt(Date.now());
-              console.debug('[timtam] transcript event (no results)', event);
               return;
             }
-            setLastTranscriptEventAt(Date.now());
             for (const r of results) {
               const isPartial = !!(r?.IsPartial ?? r?.isPartial);
               const alt = r?.Alternatives?.[0] ?? r?.alternatives?.[0];
@@ -194,11 +185,9 @@ export function App() {
               }
               if (!text) continue;
               if (isPartial) {
-                console.debug('[timtam] transcript partial:', text);
                 setPartialText(text);
               } else {
                 // Finalized: append and clear partial if it matches
-                console.debug('[timtam] transcript final:', text);
                 setFinalSegments(prev => [...prev, { text, at: Date.now() }]);
                 setPartialText('');
               }
@@ -209,15 +198,12 @@ export function App() {
         };
         transcriptHandlerRef.current = handler;
         tc.subscribeToTranscriptEvent(handler);
-        setTcSubscribed(true);
       }
       // Fallback subscription API for older SDKs if available
       const fallback = (av as any).realtimeSubscribeToReceiveTranscriptionEvent;
       if (typeof fallback === 'function') {
-        console.info('[timtam] also subscribing via realtimeSubscribeToReceiveTranscriptionEvent');
         const fbHandler = (evt: any) => {
           try {
-            setLastTranscriptEventAt(Date.now());
             const results: any[] = evt?.results ?? evt?.Transcript?.Results ?? [];
             if (!Array.isArray(results)) return;
             for (const r of results) {
@@ -229,10 +215,8 @@ export function App() {
               }
               if (!text) continue;
               if (isPartial) {
-                console.debug('[timtam][fb] partial:', text);
                 setPartialText(text);
               } else {
-                console.debug('[timtam][fb] final:', text);
                 setFinalSegments(prev => [...prev, { text, at: Date.now() }]);
                 setPartialText('');
               }
@@ -297,9 +281,6 @@ export function App() {
     setTranscribing(false);
     setPartialText('');
     setFinalSegments([]);
-    setTcAvailable(false);
-    setTcSubscribed(false);
-    setLastTranscriptEventAt(null);
   };
 
   const onToggleMute = async () => {
@@ -447,11 +428,6 @@ export function App() {
         <h3>ログ</h3>
         <p style={{ color: '#666' }}>meetingId: {meetingId || '-'} <button onClick={() => navigator.clipboard?.writeText(meetingId)} disabled={!meetingId}>コピー</button></p>
         <p style={{ color: '#666' }}>attendeeId: {attendeeId || '-'}</p>
-        <div style={{ color: '#666', fontSize: 12, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          <span>transcriptionController: {tcAvailable ? 'available' : 'not available'}</span>
-          <span>subscribed: {tcSubscribed ? 'yes' : 'no'}</span>
-          <span>last event: {lastTranscriptEventAt ? new Date(lastTranscriptEventAt).toLocaleTimeString() : '-'}</span>
-        </div>
       </section>
     </div>
   );

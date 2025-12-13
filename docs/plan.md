@@ -77,6 +77,8 @@ NOTICE: TODOリストはフラットな箇条書きで、着手順に上から�
 - [x] Web(S3+CF/CDK): CloudFormation Outputs に WebUrl（`https://<distributionDomain>`）を追加
 - [x] CORS: API Gateway の allowOrigins に CloudFront オリジンを追加
 - [x] Web: `VITE_API_BASE_URL` を ApiEndpoint に設定してフロントをビルド/配信
+ - [x] ログ最小化（フロント）: デバッグUI/console出力を削除し必要最小に整理
+ - [x] ログ最小化（サーバ）: Start/Stop の冗長ログ削除、成功/失敗のみ記録
 
 
 
