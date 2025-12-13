@@ -16,6 +16,7 @@ export function App() {
   const [error, setError] = useState<string>('');
 
   const [meetingId, setMeetingId] = useState<string>('');
+  const [joinMeetingId, setJoinMeetingId] = useState<string>('');
   const [attendeeId, setAttendeeId] = useState<string>('');
 
   const [audioInputs, setAudioInputs] = useState<MediaDeviceInfo[]>([]);
@@ -25,6 +26,7 @@ export function App() {
   const [joined, setJoined] = useState(false);
   const [muted, setMuted] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
+  const [micPermission, setMicPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown');
 
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const meetingRef = useRef<DefaultMeetingSession | null>(null);
@@ -45,6 +47,19 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    // Observe microphone permission if supported
+    let permStatus: PermissionStatus | null = null;
+    if ((navigator as any).permissions?.query) {
+      (navigator as any).permissions
+        .query({ name: 'microphone' as PermissionName })
+        .then((status: PermissionStatus) => {
+          permStatus = status;
+          setMicPermission(status.state as any);
+          status.onchange = () => setMicPermission(status.state as any);
+        })
+        .catch(() => {});
+    }
+
     const observer: DeviceChangeObserver = {
       audioInputsChanged: (devices) => setAudioInputs(devices ?? []),
       audioOutputsChanged: (devices) => setAudioOutputs(devices ?? []),
@@ -58,33 +73,110 @@ export function App() {
       if (inputs[0]) setSelectedMic(inputs[0].deviceId ?? '');
       if (outputs[0]) setSelectedSpeaker(outputs[0].deviceId ?? '');
     })();
-    return () => deviceController.removeDeviceChangeObserver(observer);
+    return () => {
+      if (permStatus) permStatus.onchange = null as any;
+      deviceController.removeDeviceChangeObserver(observer);
+    };
   }, [deviceController]);
 
-  const onJoin = async () => {
+  const requestMicPermission = async () => {
     setError('');
     try {
-      const meeting = await createMeeting();
-      const attendee = await addAttendee(meeting.Meeting.MeetingId);
+      if (!navigator?.mediaDevices?.getUserMedia) throw new Error('getUserMedia not supported');
+      // First, check if any audioinput devices exist
+      const pre = await navigator.mediaDevices.enumerateDevices();
+      const hasMic = pre.some(d => d.kind === 'audioinput');
+      if (!hasMic) {
+        throw new Error('Requested device not found: この端末で利用可能なマイクが見つからない');
+      }
+      // Request minimal audio access (no deviceId specified to avoid NotFoundError for stale ids)
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true } as any,
+      });
+      stream.getTracks().forEach(t => t.stop());
+      // refresh devices after permission
+      const inputs = await deviceController.listAudioInputDevices();
+      const outputs = await deviceController.listAudioOutputDevices();
+      setAudioInputs(inputs);
+      setAudioOutputs(outputs);
+      if (inputs[0]) setSelectedMic(inputs[0].deviceId ?? '');
+      if (outputs[0]) setSelectedSpeaker(outputs[0].deviceId ?? '');
+      setMicPermission('granted');
+    } catch (e: any) {
+      setMicPermission('denied');
+      const name = e?.name ? `${e.name}: ` : '';
+      setError(name + (e?.message || String(e)));
+    }
+  };
 
-      setMeetingId(meeting.Meeting.MeetingId);
-      setAttendeeId(attendee.Attendee.AttendeeId);
+  const refreshDevices = async () => {
+    try {
+      const inputs = await deviceController.listAudioInputDevices();
+      const outputs = await deviceController.listAudioOutputDevices();
+      setAudioInputs(inputs);
+      setAudioOutputs(outputs);
+      if (!selectedMic && inputs[0]) setSelectedMic(inputs[0].deviceId ?? '');
+      if (!selectedSpeaker && outputs[0]) setSelectedSpeaker(outputs[0].deviceId ?? '');
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    }
+  };
 
-      const logger = new ConsoleLogger('Chime', LogLevel.INFO);
-      const configuration = new MeetingSessionConfiguration(meeting, attendee);
-      const meetingSession = new DefaultMeetingSession(configuration, logger, deviceController);
-      meetingRef.current = meetingSession as DefaultMeetingSession;
-      const av = meetingSession.audioVideo;
-      audioVideoRef.current = av;
+  const configureAndStart = async (meeting: any, attendee: any) => {
+    const logger = new ConsoleLogger('Chime', LogLevel.INFO);
+    const configuration = new MeetingSessionConfiguration(meeting, attendee);
+    const meetingSession = new DefaultMeetingSession(configuration, logger, deviceController);
+    meetingRef.current = meetingSession as DefaultMeetingSession;
+    const av = meetingSession.audioVideo;
+    audioVideoRef.current = av;
 
+    // Start mic if available; otherwise join receive-only
+    try {
       if (selectedMic) {
-        await av.startAudioInput(selectedMic);
+        await av.startAudioInput(selectedMic as any);
+      } else if (audioInputs.length > 0) {
+        await av.startAudioInput();
       }
-      if (audioElRef.current) {
-        await av.bindAudioElement(audioElRef.current);
-      }
-      await av.start();
-      setJoined(true);
+    } catch {
+      // ignore; proceed receive-only
+    }
+    if (audioElRef.current) {
+      await av.bindAudioElement(audioElRef.current);
+    }
+    await av.start();
+    setJoined(true);
+  };
+
+  const onCreateAndJoin = async () => {
+    setError('');
+    try {
+      const meetingResp = await createMeeting();
+      const createdMeetingId: string | undefined = meetingResp?.meeting?.MeetingId;
+      if (!createdMeetingId) throw new Error('CreateMeeting response missing meeting.MeetingId');
+      const attendeeResp = await addAttendee(createdMeetingId);
+      const createdAttendeeId: string | undefined = attendeeResp?.attendee?.AttendeeId;
+
+      setMeetingId(createdMeetingId);
+      setAttendeeId(createdAttendeeId || '');
+      await configureAndStart(meetingResp.meeting, attendeeResp.attendee);
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    }
+  };
+
+  const onJoinExisting = async () => {
+    setError('');
+    try {
+      const id = (joinMeetingId || '').trim();
+      if (!id) throw new Error('meetingId を入力してね');
+      const attendeeResp = await addAttendee(id);
+      const meetingObj = attendeeResp?.meeting;
+      const attendeeObj = attendeeResp?.attendee;
+      const createdAttendeeId: string | undefined = attendeeObj?.AttendeeId;
+      if (!meetingObj?.MeetingId) throw new Error('指定の meetingId が見つからないか、取得に失敗した');
+      setMeetingId(meetingObj.MeetingId);
+      setAttendeeId(createdAttendeeId || '');
+      await configureAndStart(meetingObj, attendeeObj);
     } catch (e: any) {
       setError(e?.message || String(e));
     }
@@ -165,6 +257,12 @@ export function App() {
       )}
 
       <section style={{ display: 'grid', gap: 12, marginBottom: 16 }}>
+        {micPermission !== 'granted' && (
+          <div style={{ background: '#fffbe6', border: '1px solid #f1c40f', padding: 8, borderRadius: 4 }}>
+            <div style={{ marginBottom: 8 }}>マイクの許可が必要です。ボタンを押して許可ダイアログを出してください。</div>
+            <button onClick={requestMicPermission}>マイク許可をリクエスト</button>
+          </div>
+        )}
         <div>
           <label>マイク: </label>
           <select value={selectedMic} onChange={(e) => onChangeMic(e.target.value)} disabled={joined && muted}>
@@ -172,6 +270,7 @@ export function App() {
               <option key={d.deviceId} value={d.deviceId}>{d.label || d.deviceId}</option>
             ))}
           </select>
+          <button style={{ marginLeft: 8 }} onClick={refreshDevices}>デバイス更新</button>
         </div>
         <div>
           <label>スピーカー: </label>
@@ -183,7 +282,20 @@ export function App() {
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {!joined ? (
-            <button onClick={onJoin} disabled={!apiBaseUrl}>入室</button>
+            <>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <button onClick={onCreateAndJoin} disabled={!apiBaseUrl}>新規作成して入室</button>
+                <span style={{ color: '#666' }}>または 既存会議に入室:</span>
+                <input
+                  type="text"
+                  placeholder="meetingId"
+                  value={joinMeetingId}
+                  onChange={(e) => setJoinMeetingId(e.target.value)}
+                  style={{ minWidth: 260 }}
+                />
+                <button onClick={onJoinExisting} disabled={!apiBaseUrl}>このIDで入室</button>
+              </div>
+            </>
           ) : (
             <>
               <button onClick={onLeave}>退室</button>
@@ -201,7 +313,8 @@ export function App() {
 
       <section>
         <h3>ログ</h3>
-        <p style={{ color: '#666' }}>meetingId: {meetingId || '-'}, attendeeId: {attendeeId || '-'}</p>
+        <p style={{ color: '#666' }}>meetingId: {meetingId || '-'} <button onClick={() => navigator.clipboard?.writeText(meetingId)} disabled={!meetingId}>コピー</button></p>
+        <p style={{ color: '#666' }}>attendeeId: {attendeeId || '-'}</p>
       </section>
     </div>
   );

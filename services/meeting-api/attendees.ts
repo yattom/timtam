@@ -1,5 +1,5 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
-import { ChimeSDKMeetingsClient, CreateAttendeeCommand } from '@aws-sdk/client-chime-sdk-meetings';
+import { ChimeSDKMeetingsClient, CreateAttendeeCommand, GetMeetingCommand } from '@aws-sdk/client-chime-sdk-meetings';
 
 const REGION = process.env.AWS_REGION || 'ap-northeast-1';
 const chime = new ChimeSDKMeetingsClient({ region: REGION });
@@ -17,10 +17,13 @@ export const add: APIGatewayProxyHandlerV2 = async (event) => {
       new CreateAttendeeCommand({ MeetingId: meetingId, ExternalUserId: userId })
     );
 
+    // 既存会議に参加するクライアントのために Meeting 情報も返す
+    const meeting = await chime.send(new GetMeetingCommand({ MeetingId: meetingId }));
+
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ attendee: attendee.Attendee }),
+      body: JSON.stringify({ meeting: meeting.Meeting, attendee: attendee.Attendee }),
     };
   } catch (err: any) {
     return {
