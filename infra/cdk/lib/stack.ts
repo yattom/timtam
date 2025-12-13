@@ -58,6 +58,13 @@ export class TimtamInfraStack extends Stack {
     transcriptionStartFn.addToRolePolicy(meetingPolicies);
     transcriptionStopFn.addToRolePolicy(meetingPolicies);
 
+    // Ensure the Chime transcription service-linked role exists in this account
+    // Required for Amazon Chime SDK live transcription with Amazon Transcribe
+    new iam.CfnServiceLinkedRole(this, 'ChimeTranscriptionSlr', {
+      awsServiceName: 'transcription.chime.amazonaws.com',
+      description: 'Service-linked role for Amazon Chime transcription',
+    });
+
     // === Orchestrator & TTS Lambdas ===
     const orchestratorFn = new NodejsFunction(this, 'OrchestratorFn', {
       entry: '../../services/orchestrator/handler.ts',
