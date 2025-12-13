@@ -63,7 +63,7 @@ NOTICE: TODOリストはフラットな箇条書きで、着手順に上から�
 - [x] Web: マイク無し端末での受信専用入室（スピーカー優先バインド）
 - [x] API: /attendees 応答に meeting を含める拡張（既存会議参加用）
 - [x] IAM: chime:GetMeeting 許可を追加（既存会議参加時の会議情報取得）
-- [ ] Web: TranscribeのPartial/Finalを時系列に表示（Finalを窓集約）
+- [x] Web: TranscribeのPartial/Finalを時系列に表示（Finalを窓集約）
 - [x] CORS: 開発用オリジン（http://localhost:5173 / http://127.0.0.1:5173）を許可し早期デプロイ
 - [x] /events/transcript エンドポイント実装
 - [x] 簡易ルール→Bedrock判定（Haiku 4.5）実装

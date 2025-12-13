@@ -27,10 +27,14 @@ export function App() {
   const [muted, setMuted] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [micPermission, setMicPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown');
+  // Transcript states
+  const [partialText, setPartialText] = useState<string>('');
+  const [finalSegments, setFinalSegments] = useState<{ text: string; at: number }[]>([]);
 
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const meetingRef = useRef<DefaultMeetingSession | null>(null);
   const audioVideoRef = useRef<AudioVideoFacade | null>(null);
+  const transcriptHandlerRef = useRef<((event: any) => void) | null>(null);
   const deviceController = useMemo(() => new DefaultDeviceController(new ConsoleLogger('dc', LogLevel.WARN)), []);
 
   useEffect(() => {
@@ -157,6 +161,37 @@ export function App() {
       // ignore; proceed receive-only
     }
     await av.start();
+    // Subscribe to transcription events (if supported by SDK)
+    try {
+      const tc: any = (av as any).transcriptionController;
+      if (tc && typeof tc.subscribeToTranscriptEvent === 'function') {
+        const handler = (event: any) => {
+          try {
+            const results: any[] = event?.Transcript?.Results ?? [];
+            if (!Array.isArray(results) || results.length === 0) return;
+            for (const r of results) {
+              const isPartial = !!(r?.IsPartial);
+              const alt = r?.Alternatives?.[0];
+              const text: string = alt?.Transcript || '';
+              if (!text) continue;
+              if (isPartial) {
+                setPartialText(text);
+              } else {
+                // Finalized: append and clear partial if it matches
+                setFinalSegments(prev => [...prev, { text, at: Date.now() }]);
+                setPartialText('');
+              }
+            }
+          } catch {
+            // ignore parsing errors
+          }
+        };
+        transcriptHandlerRef.current = handler;
+        tc.subscribeToTranscriptEvent(handler);
+      }
+    } catch {
+      // ignore if not supported
+    }
     setJoined(true);
   };
 
@@ -197,11 +232,19 @@ export function App() {
 
   const onLeave = async () => {
     try {
+      // Unsubscribe transcript events
+      const av: any = audioVideoRef.current as any;
+      const tc: any = av?.transcriptionController;
+      if (tc && transcriptHandlerRef.current && typeof tc.unsubscribeFromTranscriptEvent === 'function') {
+        tc.unsubscribeFromTranscriptEvent(transcriptHandlerRef.current);
+      }
       audioVideoRef.current?.stop();
       meetingRef.current?.destroy();
     } catch {}
     setJoined(false);
     setTranscribing(false);
+    setPartialText('');
+    setFinalSegments([]);
   };
 
   const onToggleMute = async () => {
@@ -235,6 +278,7 @@ export function App() {
     try {
       await stopTranscription(meetingId);
       setTranscribing(false);
+      setPartialText('');
     } catch (e: any) {
       setError(e?.message || String(e));
     }
@@ -329,7 +373,22 @@ export function App() {
         <audio ref={audioElRef} autoPlay />
       </section>
 
-      <section>
+      <section style={{ display: 'grid', gap: 8 }}>
+        <h3>文字起こし（擬似リアルタイム）</h3>
+        <div style={{ border: '1px solid #ddd', borderRadius: 6, padding: 12, minHeight: 120, background: '#fafafa' }}>
+          <div style={{ display: 'grid', gap: 6 }}>
+            {finalSegments.map((seg, i) => (
+              <div key={seg.at + '-' + i} style={{ lineHeight: 1.5 }}>{seg.text}</div>
+            ))}
+            {partialText && (
+              <div style={{ color: '#555' }}>{partialText}<span style={{ opacity: 0.5 }}> ▋</span></div>
+            )}
+            {!partialText && finalSegments.length === 0 && (
+              <div style={{ color: '#888' }}>ここに文字起こしが表示される（「文字起こし開始」を押して話してみてね）</div>
+            )}
+          </div>
+        </div>
+
         <h3>ログ</h3>
         <p style={{ color: '#666' }}>meetingId: {meetingId || '-'} <button onClick={() => navigator.clipboard?.writeText(meetingId)} disabled={!meetingId}>コピー</button></p>
         <p style={{ color: '#666' }}>attendeeId: {attendeeId || '-'}</p>
