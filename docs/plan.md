@@ -53,10 +53,10 @@
  - [x] CORS 設定（フロントオリジン）
  - [x] Orchestrator 環境変数固定（BEDROCK_REGION / BEDROCK_MODEL_ID または 推論プロファイルARN）
  - [ ] Lambda ランタイムを Node.js 20 に更新（全関数）
- - [x] Web クライアント雛形作成（Vite + React）
- - [ ] Web: Chime SDK クライアントで入室UI（マイクON/OFF・デバイス選択）
- - [ ] Web/API: POST /meetings で会議作成 → POST /attendees で参加
- - [ ] Web/API: 文字起こし開始/停止ボタン（/meetings/{id}/transcription/start|stop）
+  - [x] Web クライアント雛形作成（Vite + React）
+  - [x] Web: Chime SDK クライアントで入室UI（マイクON/OFF・デバイス選択）
+  - [x] Web/API: POST /meetings で会議作成 → POST /attendees で参加
+  - [x] Web/API: 文字起こし開始/停止ボタン（/meetings/{id}/transcription/start|stop）
  - [ ] Web: TranscribeのPartial/Finalを時系列に表示（Finalを窓集約）
  - [x] CORS: 開発用オリジン（http://localhost:5173 / http://127.0.0.1:5173）を許可し早期デプロイ
  - [x] /events/transcript エンドポイント実装
