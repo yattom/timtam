@@ -6,11 +6,11 @@
   "packageManager": "pnpm@10.25.0",
   "scripts": {
     "cdk": "pnpm --filter timtam-infra cdk",
-    "cdk:synth": "pnpm --filter timtam-infra cdk -- synth",
-    "cdk:deploy": "pnpm --filter timtam-infra cdk -- deploy",
-    "cdk:destroy": "pnpm --filter timtam-infra cdk -- destroy",
-    "cdk:diff": "pnpm --filter timtam-infra cdk -- diff",
-    "cdk:bootstrap": "pnpm --filter timtam-infra cdk -- bootstrap",
+    "cdk:synth": "pnpm --filter timtam-infra cdk synth --profile admin",
+    "cdk:deploy": "pnpm --filter timtam-infra cdk deploy --profile admin",
+    "cdk:destroy": "pnpm --filter timtam-infra cdk destroy --profile admin",
+    "cdk:diff": "pnpm --filter timtam-infra cdk diff --profile admin",
+    "cdk:bootstrap": "pnpm --filter timtam-infra cdk bootstrap --profile admin",
     "infra:synth-deploy": "pnpm --filter timtam-infra run synth-deploy",
     "sso:admin": "pnpm --filter timtam-infra run sso:admin"
   }
