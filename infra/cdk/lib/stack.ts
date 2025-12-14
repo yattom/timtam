@@ -9,6 +9,13 @@ import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as sqs from 'aws-cdk-lib/aws-sqs';
+import * as ecs from 'aws-cdk-lib/aws-ecs';
+import * as ec2 from 'aws-cdk-lib/aws-ec2';
+import * as ecr from 'aws-cdk-lib/aws-ecr';
+import * as logs from 'aws-cdk-lib/aws-logs';
+import * as kinesis from 'aws-cdk-lib/aws-kinesis';
+import * as fs from 'fs';
 
 export class TimtamInfraStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
@@ -97,6 +104,27 @@ export class TimtamInfraStack extends Stack {
       resources: ['*'],
     }));
 
+    // === Orchestrator Control (SQS + Lambda trigger from UI) ===
+    const controlQueue = new sqs.Queue(this, 'OrchestratorControlQueue', {
+      visibilityTimeout: Duration.seconds(10),
+      retentionPeriod: Duration.days(1),
+    });
+
+    const startMeetingFn = new NodejsFunction(this, 'StartMeetingOrchestratorFn', {
+      entry: '../../services/orchestrator/startMeeting.ts',
+      timeout: Duration.seconds(10),
+      environment: {
+        CONTROL_SQS_URL: controlQueue.queueUrl,
+      },
+      bundling: {
+        nodeModules: ['@aws-sdk/client-sqs'],
+        externalModules: ['aws-sdk'],
+        target: 'node18',
+        platform: 'node',
+      },
+    });
+    controlQueue.grantSendMessages(startMeetingFn);
+
     // === Web hosting: S3 bucket (private; to be served via CloudFront) ===
     const siteBucket = new s3.Bucket(this, 'WebSiteBucket', {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
@@ -145,13 +173,16 @@ export class TimtamInfraStack extends Stack {
 
     // (CORS は上で CF ドメインを含めて定義済み)
 
-    // Web assets deployment with invalidation
-    new s3deploy.BucketDeployment(this, 'DeployWeb', {
-      sources: [s3deploy.Source.asset('../../web/timtam-web/dist')],
-      destinationBucket: siteBucket,
-      distribution: webDistribution,
-      distributionPaths: ['/*'],
-    });
+    // Web assets deployment with invalidation (skip if dist not present)
+    const webDistPath = '../../web/timtam-web/dist';
+    if (fs.existsSync(webDistPath)) {
+      new s3deploy.BucketDeployment(this, 'DeployWeb', {
+        sources: [s3deploy.Source.asset(webDistPath)],
+        destinationBucket: siteBucket,
+        distribution: webDistribution,
+        distributionPaths: ['/*'],
+      });
+    }
 
     // Helper to build Lambda proxy integration URI
     const lambdaIntegrationUri = (fn: lambda.IFunction) =>
@@ -247,6 +278,26 @@ export class TimtamInfraStack extends Stack {
       action: 'lambda:InvokeFunction',
     });
 
+    // Start Orchestrator for a meeting (UI -> Lambda -> SQS)
+    const startMeetingInt = new CfnIntegration(this, 'StartMeetingOrchestratorIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(startMeetingFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const startMeetingRoute = new CfnRoute(this, 'StartMeetingOrchestratorRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'POST /meetings/{meetingId}/orchestrator/start',
+      target: `integrations/${startMeetingInt.ref}`,
+    });
+    startMeetingRoute.addDependency(startMeetingInt);
+    startMeetingFn.addPermission('InvokeByHttpApiStartMeeting', {
+      principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+      sourceArn,
+      action: 'lambda:InvokeFunction',
+    });
+
     // TTS integration + route
     const ttsInt = new CfnIntegration(this, 'TtsIntegration', {
       apiId: httpApi.ref,
@@ -327,6 +378,74 @@ export class TimtamInfraStack extends Stack {
       action: 'lambda:InvokeFunction',
     });
 
+    // === ECS Fargate Orchestrator (always-on service) ===
+    // Kinesis stream for final transcripts (created by CDK as requested)
+    const transcriptStream = new kinesis.Stream(this, 'TranscriptAsrStream', {
+      streamName: 'transcript-asr',
+      streamMode: kinesis.StreamMode.ON_DEMAND,
+      retentionPeriod: Duration.hours(24),
+    });
+
+    // Use default VPC lookup (original design); relies on CDK env/account/region being set
+    const vpc = ec2.Vpc.fromLookup(this, 'DefaultVpc', { isDefault: true });
+    const cluster = new ecs.Cluster(this, 'OrchestratorCluster', { vpc });
+
+    const repo = new ecr.Repository(this, 'OrchestratorEcrRepo', {
+      repositoryName: 'timtam-orchestrator',
+      imageScanOnPush: true,
+    });
+
+    const taskRole = new iam.Role(this, 'OrchestratorTaskRole', {
+      assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
+    });
+    // Permissions: Kinesis read, Bedrock invoke, CloudWatch metrics, SQS consume
+    taskRole.addToPolicy(new iam.PolicyStatement({
+      actions: [
+        'kinesis:DescribeStream',
+        'kinesis:GetShardIterator',
+        'kinesis:GetRecords'
+      ],
+      resources: ['*'],
+    }));
+    taskRole.addToPolicy(new iam.PolicyStatement({
+      actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
+      resources: ['*'],
+    }));
+    taskRole.addToPolicy(new iam.PolicyStatement({
+      actions: ['cloudwatch:PutMetricData'],
+      resources: ['*'],
+    }));
+    controlQueue.grantConsumeMessages(taskRole);
+
+    const taskDef = new ecs.FargateTaskDefinition(this, 'OrchestratorTaskDef', {
+      cpu: 512,
+      memoryLimitMiB: 1024,
+      taskRole,
+    });
+    const logGroup = new logs.LogGroup(this, 'OrchestratorLogGroup', {
+      retention: logs.RetentionDays.ONE_WEEK,
+    });
+    const container = taskDef.addContainer('OrchestratorContainer', {
+      image: ecs.ContainerImage.fromEcrRepository(repo, 'latest'),
+      logging: ecs.LogDriver.awsLogs({ logGroup, streamPrefix: 'orchestrator' }),
+      environment: {
+        // Stream name: can be changed later; default here is a functional name
+        KINESIS_STREAM_NAME: transcriptStream.streamName,
+        BEDROCK_REGION: 'ap-northeast-1',
+        BEDROCK_MODEL_ID: 'anthropic.claude-haiku-4.5',
+        WINDOW_LINES: '5',
+        CONTROL_SQS_URL: controlQueue.queueUrl,
+      },
+    });
+    container.addPortMappings({ containerPort: 3000 });
+
+    const service = new ecs.FargateService(this, 'OrchestratorService', {
+      cluster,
+      taskDefinition: taskDef,
+      desiredCount: 1,
+      assignPublicIp: true, // PoC: simplify networking
+    });
+
     // === CloudFormation Outputs ===
     new CfnOutput(this, 'ApiEndpoint', { value: apiBaseUrl });
     new CfnOutput(this, 'DefaultBedrockRegion', { value: 'ap-northeast-1' });
@@ -336,5 +455,9 @@ export class TimtamInfraStack extends Stack {
     });
     new CfnOutput(this, 'TtsDefaultVoice', { value: 'Mizuki' });
     new CfnOutput(this, 'WebUrl', { value: `https://${webDistribution.distributionDomainName}` });
+    new CfnOutput(this, 'OrchestratorEcrRepositoryUri', { value: repo.repositoryUri });
+    new CfnOutput(this, 'OrchestratorControlQueueUrl', { value: controlQueue.queueUrl });
+    new CfnOutput(this, 'OrchestratorServiceName', { value: service.serviceName });
+    new CfnOutput(this, 'TranscriptStreamName', { value: transcriptStream.streamName });
   }
 }

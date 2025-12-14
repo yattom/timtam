@@ -5,5 +5,42 @@
     32775,
     34892,
     34892
-  ]
+  ],
+  "availability-zones:account=030046728177:region=ap-northeast-1": [
+    "ap-northeast-1a",
+    "ap-northeast-1c",
+    "ap-northeast-1d"
+  ],
+  "vpc-provider:account=030046728177:filter.isDefault=true:region=ap-northeast-1:returnAsymmetricSubnets=true": {
+    "vpcId": "vpc-0970e4fd90ee22a3c",
+    "vpcCidrBlock": "172.31.0.0/16",
+    "ownerAccountId": "030046728177",
+    "availabilityZones": [],
+    "subnetGroups": [
+      {
+        "name": "Public",
+        "type": "Public",
+        "subnets": [
+          {
+            "subnetId": "subnet-0b4ddc6f6765c8e60",
+            "cidr": "172.31.32.0/20",
+            "availabilityZone": "ap-northeast-1a",
+            "routeTableId": "rtb-04acb1ab400d9d08f"
+          },
+          {
+            "subnetId": "subnet-03dc403f91c4b5f81",
+            "cidr": "172.31.0.0/20",
+            "availabilityZone": "ap-northeast-1c",
+            "routeTableId": "rtb-04acb1ab400d9d08f"
+          },
+          {
+            "subnetId": "subnet-027d69ea41544d1fa",
+            "cidr": "172.31.16.0/20",
+            "availabilityZone": "ap-northeast-1d",
+            "routeTableId": "rtb-04acb1ab400d9d08f"
+          }
+        ]
+      }
+    ]
+  }
 }
