@@ -31,6 +31,8 @@
 
 NOTICE: TODOリストはフラットな箇条書きで、着手順に上から並べること。新しい項目もフラットに、実施順になるよう途中に挿入する。セクションを分けたり階層化するのは禁止。
 
+- [ ] Chime Media Pipelines 実装（サーバー側で音声キャプチャ → Transcribe → Kinesis）
+- [ ] Orchestrator の Kinesis 購読動作確認（Media Pipelines からのデータ受信）
 - [ ] IAM リソース絞り込み（Bedrock 推論プロファイル ARN / Polly Voice）
 - [ ] ドキュメント更新（README/AGENTS/クライアント側）: `/config` と `/health` の利用方法を追記
 - [ ] Lambda ランタイムを Node.js 20 に更新（全関数）
@@ -78,7 +80,7 @@ NOTICE: TODOリストはフラットな箇条書きで、着手順に上から�
 - [x] Web: マイク無し端末での受信専用入室（スピーカー優先バインド）
 - [x] API: /attendees 応答に meeting を含める拡張（既存会議参加用）
 - [x] IAM: chime:GetMeeting 許可を追加（既存会議参加時の会議情報取得）
-- [x] Web: TranscribeのPartial/Finalを時系列に表示（Finalを窓集約）
+- [x] Web: TranscribeのPartial/Finalを時系列に表示（Finalを窓集約）※クライアント側のみ、サーバー側は Media Pipelines で別途実装必要（ADR 0008参照）
 - [x] CORS: 開発用オリジン（http://localhost:5173 / http://127.0.0.1:5173）を許可し早期デプロイ
 - [x] /events/transcript エンドポイント実装
 - [x] 簡易ルール→Bedrock判定（Haiku 4.5）実装

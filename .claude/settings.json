@@ -4,8 +4,15 @@
       "Bash(docker build:*)",
       "Bash(pnpm run build)",
       "Bash(pnpm cdk deploy:*)",
+      "Bash(pnpm -w run cdk:deploy:*)",
+      "Bash(pnpm build:*)",
       "Bash(AWS_PROFILE=admin pnpm cdk deploy:*)",
-      "Bash(pnpm build:*)"
+
+      "Bash(aws ecs describe-tasks:*)",
+      "Bash(aws ecs list-tasks:*)",
+      "Bash(aws kinesis describe-stream:*)",
+      "Bash(aws logs get-log-events:*)",
+      "Bash(aws logs tail:*)"
     ]
   }
 }

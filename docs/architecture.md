@@ -70,7 +70,7 @@ Auth -[hidden]- Orchestrator
 
 ## AWS中心の設計ポイント（PoC→拡張）
 - 会議連携: 最小PoCは Chime SDK。後続で Zoom/Teams/Meet ボット連携（音声ルーティング/認可）を追加
-- 音声→文字起こし: Amazon Transcribe Streaming（日本語、話者分離、カスタム語彙）
+- 音声→文字起こし: Amazon Transcribe Streaming（日本語、話者分離、カスタム語彙）。PoC: Chime Media Pipelines、本番: Zoom/Meet ボット経由
 - イベント伝搬: Kinesis Data Streams（低遅延）または EventBridge（ルール/ファンアウト）
 - オーケストレーション: 軽量常駐（ECS Fargate）または Step Functions Express
 - LLM: Amazon Bedrock（Claude 3.7 Sonnet/Haiku、Cohere Command R、Llama/Mistral系）
