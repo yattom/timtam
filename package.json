@@ -7,7 +7,7 @@
   "scripts": {
     "cdk": "pnpm --filter timtam-infra cdk",
     "cdk:synth": "pnpm --filter timtam-infra cdk synth --profile admin",
-    "cdk:deploy": "pnpm --filter timtam-infra cdk deploy --profile admin",
+    "cdk:deploy": "pnpm --filter timtam-infra cdk deploy --profile admin --require-approval never",
     "cdk:destroy": "pnpm --filter timtam-infra cdk destroy --profile admin",
     "cdk:diff": "pnpm --filter timtam-infra cdk diff --profile admin",
     "cdk:bootstrap": "pnpm --filter timtam-infra cdk bootstrap --profile admin",

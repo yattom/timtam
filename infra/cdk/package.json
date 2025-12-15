@@ -8,7 +8,7 @@
     "watch": "tsc -w -p tsconfig.json",
     "cdk": "cdk",
     "synth": "cdk synth --profile admin",
-    "deploy": "cdk deploy --profile admin",
+    "deploy": "cdk deploy --profile admin --require-approval never",
     "destroy": "cdk destroy --profile admin",
     "synth-deploy": "pnpm run synth && pnpm run deploy",
     "sso:admin": "aws sso login --profile admin"
