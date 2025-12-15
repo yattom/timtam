@@ -1,4 +1,4 @@
-import { Stack, StackProps, CfnOutput } from 'aws-cdk-lib';
+import { Stack, StackProps, CfnOutput, RemovalPolicy } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { CfnApi, CfnIntegration, CfnRoute, CfnStage } from 'aws-cdk-lib/aws-apigatewayv2';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
@@ -29,7 +29,7 @@ export class TimtamInfraStack extends Stack {
       tableName: 'timtam-media-pipelines',
       partitionKey: { name: 'meetingId', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: this.node.tryGetContext('keepTables') ? undefined : import('aws-cdk-lib').RemovalPolicy.DESTROY,
+      removalPolicy: this.node.tryGetContext('keepTables') ? undefined : RemovalPolicy.DESTROY,
     });
 
     // === Kinesis stream (created early so we can reference it in Lambda env) ===
@@ -41,7 +41,7 @@ export class TimtamInfraStack extends Stack {
 
     // === S3 bucket for Media Capture Pipeline audio ===
     const mediaCaptureBucket = new s3.Bucket(this, 'MediaCaptureBucket', {
-      bucketName: `timtam-media-capture-${this.account}-${REGION}`,
+      bucketName: `timtam-media-capture-${this.account}-${this.region}`,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       encryption: s3.BucketEncryption.S3_MANAGED,
       enforceSSL: true,
