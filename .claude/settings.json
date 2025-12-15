@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker build:*)",
+      "Bash(pnpm run build)",
+      "Bash(pnpm cdk deploy:*)",
+      "Bash(AWS_PROFILE=admin pnpm cdk deploy:*)",
+      "Bash(pnpm build:*)"
+    ]
+  }
+}
