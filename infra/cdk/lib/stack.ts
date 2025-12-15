@@ -56,18 +56,21 @@ export class TimtamInfraStack extends Stack {
     const createMeetingFn = new NodejsFunction(this, 'CreateMeetingFn', {
       entry: '../../services/meeting-api/createMeeting.ts',
       timeout: Duration.seconds(15),
+      runtime: lambda.Runtime.NODEJS_20_X,
     });
 
     const addAttendeeFn = new NodejsFunction(this, 'AddAttendeeFn', {
       entry: '../../services/meeting-api/attendees.ts',
       handler: 'add',
       timeout: Duration.seconds(15),
+      runtime: lambda.Runtime.NODEJS_20_X,
     });
 
     const transcriptionStartFn = new NodejsFunction(this, 'TranscriptionStartFn', {
       entry: '../../services/meeting-api/transcriptionStart.ts',
       handler: 'start',
       timeout: Duration.seconds(15),
+      runtime: lambda.Runtime.NODEJS_20_X,
       environment: {
         PIPELINE_TABLE_NAME: mediaPipelineTable.tableName,
         TRANSCRIPT_STREAM_ARN: transcriptStream.streamArn,
@@ -80,6 +83,7 @@ export class TimtamInfraStack extends Stack {
       entry: '../../services/meeting-api/transcriptionStop.ts',
       handler: 'stop',
       timeout: Duration.seconds(15),
+      runtime: lambda.Runtime.NODEJS_20_X,
       environment: {
         PIPELINE_TABLE_NAME: mediaPipelineTable.tableName,
       },
@@ -141,6 +145,7 @@ export class TimtamInfraStack extends Stack {
       entry: '../../services/audio-consumer/handler.ts',
       timeout: Duration.minutes(5), // Audio processing can take time
       memorySize: 512,
+      runtime: lambda.Runtime.NODEJS_20_X,
       environment: {
         KINESIS_STREAM_NAME: transcriptStream.streamName,
       },
@@ -167,6 +172,7 @@ export class TimtamInfraStack extends Stack {
     const orchestratorFn = new NodejsFunction(this, 'OrchestratorFn', {
       entry: '../../services/orchestrator/handler.ts',
       timeout: Duration.seconds(20),
+      runtime: lambda.Runtime.NODEJS_20_X,
       environment: {
         // ADR0005: 既定のBedrockリージョンとモデルID（推論プロファイルARNを許容）
         BEDROCK_REGION: 'ap-northeast-1',
@@ -185,6 +191,7 @@ export class TimtamInfraStack extends Stack {
     const ttsFn = new NodejsFunction(this, 'TtsFn', {
       entry: '../../services/tts/handler.ts',
       timeout: Duration.seconds(20),
+      runtime: lambda.Runtime.NODEJS_20_X,
       environment: {
         // ADR0005: 既定のPolly音声
         TTS_DEFAULT_VOICE: 'Mizuki',
@@ -204,13 +211,14 @@ export class TimtamInfraStack extends Stack {
     const startMeetingFn = new NodejsFunction(this, 'StartMeetingOrchestratorFn', {
       entry: '../../services/orchestrator/startMeeting.ts',
       timeout: Duration.seconds(10),
+      runtime: lambda.Runtime.NODEJS_20_X,
       environment: {
         CONTROL_SQS_URL: controlQueue.queueUrl,
       },
       bundling: {
         nodeModules: ['@aws-sdk/client-sqs'],
         externalModules: ['aws-sdk'],
-        target: 'node18',
+        target: 'node20',
         platform: 'node',
       },
     });
@@ -404,6 +412,7 @@ export class TimtamInfraStack extends Stack {
     const configFn = new NodejsFunction(this, 'ConfigFn', {
       entry: '../../services/config/handler.ts',
       timeout: Duration.seconds(10),
+      runtime: lambda.Runtime.NODEJS_20_X,
       environment: {
         API_BASE_URL: apiBaseUrl,
         DEFAULT_BEDROCK_REGION: 'ap-northeast-1',
@@ -416,6 +425,7 @@ export class TimtamInfraStack extends Stack {
     const healthFn = new NodejsFunction(this, 'HealthFn', {
       entry: '../../services/health/handler.ts',
       timeout: Duration.seconds(5),
+      runtime: lambda.Runtime.NODEJS_20_X,
     });
 
     // Config integration + route (GET /config)
