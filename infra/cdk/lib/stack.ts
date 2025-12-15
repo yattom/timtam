@@ -4,6 +4,7 @@ import { CfnApi, CfnIntegration, CfnRoute, CfnStage } from 'aws-cdk-lib/aws-apig
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import { Duration } from 'aws-cdk-lib';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as s3n from 'aws-cdk-lib/aws-s3-notifications';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
@@ -14,6 +15,7 @@ import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as kinesis from 'aws-cdk-lib/aws-kinesis';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as fs from 'fs';
 
 export class TimtamInfraStack extends Stack {
@@ -21,6 +23,34 @@ export class TimtamInfraStack extends Stack {
     super(scope, id, props);
 
     // HTTP API は Web Distribution 作成後に定義して、CORS に CF ドメインを含める
+
+    // === DynamoDB table for Media Pipeline ARNs ===
+    const mediaPipelineTable = new dynamodb.Table(this, 'MediaPipelineTable', {
+      tableName: 'timtam-media-pipelines',
+      partitionKey: { name: 'meetingId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: this.node.tryGetContext('keepTables') ? undefined : import('aws-cdk-lib').RemovalPolicy.DESTROY,
+    });
+
+    // === Kinesis stream (created early so we can reference it in Lambda env) ===
+    const transcriptStream = new kinesis.Stream(this, 'TranscriptAsrStream', {
+      streamName: 'transcript-asr',
+      streamMode: kinesis.StreamMode.ON_DEMAND,
+      retentionPeriod: Duration.hours(24),
+    });
+
+    // === S3 bucket for Media Capture Pipeline audio ===
+    const mediaCaptureBucket = new s3.Bucket(this, 'MediaCaptureBucket', {
+      bucketName: `timtam-media-capture-${this.account}-${REGION}`,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      lifecycleRules: [
+        {
+          expiration: Duration.days(1), // Auto-delete after 1 day (PoC)
+        },
+      ],
+    });
 
     // === Meeting API Lambdas（作成のみ。ルートは後続のTODOで追加） ===
     const createMeetingFn = new NodejsFunction(this, 'CreateMeetingFn', {
@@ -38,12 +68,21 @@ export class TimtamInfraStack extends Stack {
       entry: '../../services/meeting-api/transcriptionStart.ts',
       handler: 'start',
       timeout: Duration.seconds(15),
+      environment: {
+        PIPELINE_TABLE_NAME: mediaPipelineTable.tableName,
+        TRANSCRIPT_STREAM_ARN: transcriptStream.streamArn,
+        CAPTURE_BUCKET_ARN: mediaCaptureBucket.bucketArn,
+        AWS_ACCOUNT_ID: this.account,
+      },
     });
 
     const transcriptionStopFn = new NodejsFunction(this, 'TranscriptionStopFn', {
       entry: '../../services/meeting-api/transcriptionStop.ts',
       handler: 'stop',
       timeout: Duration.seconds(15),
+      environment: {
+        PIPELINE_TABLE_NAME: mediaPipelineTable.tableName,
+      },
     });
 
     // 必要最小のIAM権限を付与（PoCのためワイルドカード。後でリソース制限へ）
@@ -64,12 +103,65 @@ export class TimtamInfraStack extends Stack {
     transcriptionStartFn.addToRolePolicy(meetingPolicies);
     transcriptionStopFn.addToRolePolicy(meetingPolicies);
 
+    // Media Pipelines permissions for transcription Lambdas
+    const mediaPipelinePolicies = new iam.PolicyStatement({
+      actions: [
+        'chime:CreateMediaCapturePipeline',
+        'chime:DeleteMediaCapturePipeline',
+        'chime:GetMediaCapturePipeline',
+      ],
+      resources: ['*'],
+    });
+    transcriptionStartFn.addToRolePolicy(mediaPipelinePolicies);
+    transcriptionStopFn.addToRolePolicy(mediaPipelinePolicies);
+
+    // Grant DynamoDB access to transcription Lambdas
+    mediaPipelineTable.grantReadWriteData(transcriptionStartFn);
+    mediaPipelineTable.grantReadWriteData(transcriptionStopFn);
+
+    // Grant S3 write access to Chime Media Pipelines service
+    mediaCaptureBucket.addToResourcePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        principals: [new iam.ServicePrincipal('mediapipelines.chime.amazonaws.com')],
+        actions: ['s3:PutObject', 's3:PutObjectAcl'],
+        resources: [`${mediaCaptureBucket.bucketArn}/*`],
+      })
+    );
+
     // Ensure the Chime transcription service-linked role exists in this account
     // Required for Amazon Chime SDK live transcription with Amazon Transcribe
     new iam.CfnServiceLinkedRole(this, 'ChimeTranscriptionSlr', {
       awsServiceName: 'transcription.chime.amazonaws.com',
       description: 'Service-linked role for Amazon Chime transcription',
     });
+
+    // === Audio Consumer Lambda (S3 → Transcribe → Kinesis) ===
+    const audioConsumerFn = new NodejsFunction(this, 'AudioConsumerFn', {
+      entry: '../../services/audio-consumer/handler.ts',
+      timeout: Duration.minutes(5), // Audio processing can take time
+      memorySize: 512,
+      environment: {
+        KINESIS_STREAM_NAME: transcriptStream.streamName,
+      },
+    });
+
+    // Grant permissions for audio consumer
+    mediaCaptureBucket.grantRead(audioConsumerFn);
+    transcriptStream.grantWrite(audioConsumerFn);
+    audioConsumerFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['transcribe:StartStreamTranscription'],
+        resources: ['*'],
+      })
+    );
+
+    // S3 event notification to trigger audio consumer
+    mediaCaptureBucket.addEventNotification(
+      s3.EventType.OBJECT_CREATED,
+      new s3n.LambdaDestination(audioConsumerFn),
+      { suffix: '.wav' } // Chime Media Capture writes WAV files
+    );
 
     // === Orchestrator & TTS Lambdas ===
     const orchestratorFn = new NodejsFunction(this, 'OrchestratorFn', {
@@ -367,13 +459,6 @@ export class TimtamInfraStack extends Stack {
     });
 
     // === ECS Fargate Orchestrator (always-on service) ===
-    // Kinesis stream for final transcripts (created by CDK as requested)
-    const transcriptStream = new kinesis.Stream(this, 'TranscriptAsrStream', {
-      streamName: 'transcript-asr',
-      streamMode: kinesis.StreamMode.ON_DEMAND,
-      retentionPeriod: Duration.hours(24),
-    });
-
     // Use default VPC lookup (original design); relies on CDK env/account/region being set
     const vpc = ec2.Vpc.fromLookup(this, 'DefaultVpc', { isDefault: true });
     const cluster = new ecs.Cluster(this, 'OrchestratorCluster', { vpc });

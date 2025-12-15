@@ -1,0 +1,11 @@
+{
+  "name": "audio-consumer",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.600.0",
+    "@aws-sdk/client-transcribe-streaming": "3.600.0",
+    "@aws-sdk/client-kinesis": "3.600.0"
+  }
+}
