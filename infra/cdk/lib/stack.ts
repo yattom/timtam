@@ -172,17 +172,6 @@ export class TimtamInfraStack extends Stack {
 
     // (CORS は上で CF ドメインを含めて定義済み)
 
-    // Web assets deployment with invalidation (skip if dist not present)
-    const webDistPath = '../../web/timtam-web/dist';
-    if (fs.existsSync(webDistPath)) {
-      new s3deploy.BucketDeployment(this, 'DeployWeb', {
-        sources: [s3deploy.Source.asset(webDistPath)],
-        destinationBucket: siteBucket,
-        distribution: webDistribution,
-        distributionPaths: ['/*'],
-      });
-    }
-
     // Helper to build Lambda proxy integration URI
     const lambdaIntegrationUri = (fn: lambda.IFunction) =>
       `arn:aws:apigateway:${this.region}:lambda:path/2015-03-31/functions/${fn.functionArn}/invocations`;
@@ -440,6 +429,28 @@ export class TimtamInfraStack extends Stack {
       taskDefinition: taskDef,
       desiredCount: 1,
       assignPublicIp: true, // PoC: simplify networking
+    });
+
+    // === Web assets deployment ===
+    // Web assets deployment with invalidation (skip if dist not present)
+    const webDistPath = '../../web/timtam-web/dist';
+    if (fs.existsSync(webDistPath)) {
+      new s3deploy.BucketDeployment(this, 'DeployWeb', {
+        sources: [s3deploy.Source.asset(webDistPath)],
+        destinationBucket: siteBucket,
+        distribution: webDistribution,
+        distributionPaths: ['/*'],
+      });
+    }
+
+    // Deploy runtime config.js with API base URL
+    new s3deploy.BucketDeployment(this, 'DeployConfig', {
+      sources: [
+        s3deploy.Source.data('config.js', `window.API_BASE_URL='${apiBaseUrl}';`)
+      ],
+      destinationBucket: siteBucket,
+      distribution: webDistribution,
+      distributionPaths: ['/config.js'],
     });
 
     // === CloudFormation Outputs ===
