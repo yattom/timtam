@@ -388,7 +388,7 @@ export class TimtamInfraStack extends Stack {
         'kinesis:GetShardIterator',
         'kinesis:GetRecords'
       ],
-      resources: ['*'],
+      resources: [transcriptStream.streamArn],
     }));
     taskRole.addToPolicy(new iam.PolicyStatement({
       actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
@@ -419,6 +419,7 @@ export class TimtamInfraStack extends Stack {
         BEDROCK_REGION: 'ap-northeast-1',
         BEDROCK_MODEL_ID: 'anthropic.claude-haiku-4.5',
         WINDOW_LINES: '5',
+        POLL_INTERVAL_MS: '1000', // 1 second to avoid Kinesis rate limits (5 req/sec max)
         CONTROL_SQS_URL: controlQueue.queueUrl,
       },
     });

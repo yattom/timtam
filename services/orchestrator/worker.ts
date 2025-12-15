@@ -10,7 +10,7 @@ const BEDROCK_MODEL_ID = process.env.BEDROCK_MODEL_ID || 'anthropic.claude-haiku
 // MEETING_ID は SQS からの指示で動的変更する。初期値があればそれを使う。
 let CURRENT_MEETING_ID = process.env.MEETING_ID || '';
 const WINDOW_LINES = Number(process.env.WINDOW_LINES || '5');
-const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS || '200');
+const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS || '500');
 const CONTROL_SQS_URL = process.env.CONTROL_SQS_URL || '';
 
 type AsrEvent = {
@@ -168,18 +168,38 @@ async function getShardIterator(streamName: string): Promise<string> {
 }
 
 async function runLoop() {
+  console.log(JSON.stringify({
+    type: 'orchestrator.loop.config',
+    POLL_INTERVAL_MS,
+    WINDOW_LINES,
+    STREAM_NAME,
+    ts: Date.now()
+  }));
   if (!CURRENT_MEETING_ID) console.warn('CURRENT_MEETING_ID is empty. All events will be processed; set via CONTROL_SQS_URL or MEETING_ID env to restrict.');
   let shardIterator = await getShardIterator(STREAM_NAME);
   const window = new WindowBuffer(WINDOW_LINES);
   let consecutiveErrors = 0;
+  let loopCount = 0;
   for (;;) {
     try {
       // control plane (non-blocking)
       await pollControlOnce();
       const t0 = Date.now();
+      loopCount++;
       const recs = await kinesis.send(new GetRecordsCommand({ ShardIterator: shardIterator, Limit: 100 }));
       shardIterator = recs.NextShardIterator!;
       const list = recs.Records || [];
+
+      // Log periodically (heartbeat) or when we receive records
+      if (loopCount % 1000 === 0 || list.length > 0) {
+        console.log(JSON.stringify({
+          type: 'orchestrator.loop.poll',
+          loopCount,
+          recordCount: list.length,
+          consecutiveErrors,
+          ts: Date.now()
+        }));
+      }
       for (const r of list) {
         const dataStr = r.Data ? new TextDecoder().decode(r.Data as any) : '';
         let ev: AsrEvent | null = null;
@@ -204,13 +224,26 @@ async function runLoop() {
       }
       // ポーリング間隔とE2Eメトリクス
       const dt = Date.now() - t0;
-      if (dt < POLL_INTERVAL_MS) await new Promise((s) => setTimeout(s, POLL_INTERVAL_MS - dt));
+      const sleepTime = Math.max(0, POLL_INTERVAL_MS - dt);
+      if (sleepTime > 0) await new Promise((s) => setTimeout(s, sleepTime));
     } catch (e) {
       consecutiveErrors++;
-      console.error('orchestrator loop error', (e as any)?.message);
+      const errorMsg = (e as any)?.message || String(e);
+      console.error(JSON.stringify({
+        type: 'orchestrator.loop.error',
+        error: errorMsg,
+        consecutiveErrors,
+        loopCount,
+        ts: Date.now()
+      }));
       await metrics.putCountMetric('Errors', 1);
       if (consecutiveErrors > 10) {
-        console.error('Too many consecutive errors, backing off');
+        console.error(JSON.stringify({
+          type: 'orchestrator.loop.backoff',
+          consecutiveErrors,
+          backoffMs: 2000,
+          ts: Date.now()
+        }));
         await new Promise((s) => setTimeout(s, 2000));
       }
     }
@@ -218,6 +251,12 @@ async function runLoop() {
 }
 
 // エントリ
+console.log(JSON.stringify({
+  type: 'orchestrator.worker.start',
+  ts: Date.now(),
+  env: { STREAM_NAME, BEDROCK_REGION, BEDROCK_MODEL_ID, CURRENT_MEETING_ID, CONTROL_SQS_URL }
+}));
+
 runLoop().catch((e) => {
   console.error('worker fatal', e);
   process.exit(1);
