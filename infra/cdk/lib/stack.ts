@@ -52,6 +52,34 @@ export class TimtamInfraStack extends Stack {
       ],
     });
 
+    // Create service role for Chime Media Pipelines to access S3
+    const mediaPipelineRole = new iam.Role(this, 'MediaPipelineRole', {
+      assumedBy: new iam.ServicePrincipal('mediapipelines.chime.amazonaws.com'),
+      description: 'Service role for Chime Media Pipelines to write to S3',
+    });
+
+    // Grant the role full write permissions to S3 bucket
+    mediaCaptureBucket.grantWrite(mediaPipelineRole);
+
+    // Add comprehensive bucket policy for Chime Media Pipelines
+    mediaCaptureBucket.addToResourcePolicy(
+      new iam.PolicyStatement({
+        sid: 'AllowChimeMediaPipelinesWrite',
+        effect: iam.Effect.ALLOW,
+        principals: [new iam.ServicePrincipal('mediapipelines.chime.amazonaws.com')],
+        actions: [
+          's3:PutObject',
+          's3:PutObjectAcl',
+          's3:GetBucketLocation',
+          's3:GetBucketPolicy',
+        ],
+        resources: [
+          mediaCaptureBucket.bucketArn,
+          `${mediaCaptureBucket.bucketArn}/*`,
+        ],
+      })
+    );
+
     // === Meeting API Lambdas（作成のみ。ルートは後続のTODOで追加） ===
     const createMeetingFn = new NodejsFunction(this, 'CreateMeetingFn', {
       entry: '../../services/meeting-api/createMeeting.ts',
@@ -75,6 +103,7 @@ export class TimtamInfraStack extends Stack {
         PIPELINE_TABLE_NAME: mediaPipelineTable.tableName,
         TRANSCRIPT_STREAM_ARN: transcriptStream.streamArn,
         CAPTURE_BUCKET_ARN: mediaCaptureBucket.bucketArn,
+        MEDIA_PIPELINE_ROLE_ARN: mediaPipelineRole.roleArn,
         AWS_ACCOUNT_ID: this.account,
       },
     });
@@ -122,16 +151,6 @@ export class TimtamInfraStack extends Stack {
     // Grant DynamoDB access to transcription Lambdas
     mediaPipelineTable.grantReadWriteData(transcriptionStartFn);
     mediaPipelineTable.grantReadWriteData(transcriptionStopFn);
-
-    // Grant S3 write access to Chime Media Pipelines service
-    mediaCaptureBucket.addToResourcePolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        principals: [new iam.ServicePrincipal('mediapipelines.chime.amazonaws.com')],
-        actions: ['s3:PutObject', 's3:PutObjectAcl'],
-        resources: [`${mediaCaptureBucket.bucketArn}/*`],
-      })
-    );
 
     // Ensure the Chime transcription service-linked role exists in this account
     // Required for Amazon Chime SDK live transcription with Amazon Transcribe

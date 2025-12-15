@@ -14,6 +14,7 @@ const REGION = process.env.AWS_REGION || 'ap-northeast-1';
 const PIPELINE_TABLE_NAME = process.env.PIPELINE_TABLE_NAME!;
 const TRANSCRIPT_STREAM_ARN = process.env.TRANSCRIPT_STREAM_ARN!;
 const CAPTURE_BUCKET_ARN = process.env.CAPTURE_BUCKET_ARN!;
+const MEDIA_PIPELINE_ROLE_ARN = process.env.MEDIA_PIPELINE_ROLE_ARN!;
 const AWS_ACCOUNT_ID = process.env.AWS_ACCOUNT_ID!;
 
 const chime = new ChimeSDKMeetingsClient({ region: REGION });
