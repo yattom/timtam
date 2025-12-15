@@ -12,7 +12,6 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
-import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as kinesis from 'aws-cdk-lib/aws-kinesis';
 import * as fs from 'fs';
@@ -390,11 +389,6 @@ export class TimtamInfraStack extends Stack {
     const vpc = ec2.Vpc.fromLookup(this, 'DefaultVpc', { isDefault: true });
     const cluster = new ecs.Cluster(this, 'OrchestratorCluster', { vpc });
 
-    const repo = new ecr.Repository(this, 'OrchestratorEcrRepo', {
-      repositoryName: 'timtam-orchestrator',
-      imageScanOnPush: true,
-    });
-
     const taskRole = new iam.Role(this, 'OrchestratorTaskRole', {
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
     });
@@ -426,7 +420,9 @@ export class TimtamInfraStack extends Stack {
       retention: logs.RetentionDays.ONE_WEEK,
     });
     const container = taskDef.addContainer('OrchestratorContainer', {
-      image: ecs.ContainerImage.fromEcrRepository(repo, 'latest'),
+      image: ecs.ContainerImage.fromAsset('../../services/orchestrator', {
+        file: 'Dockerfile',
+      }),
       logging: ecs.LogDriver.awsLogs({ logGroup, streamPrefix: 'orchestrator' }),
       environment: {
         // Stream name: can be changed later; default here is a functional name
@@ -455,7 +451,6 @@ export class TimtamInfraStack extends Stack {
     });
     new CfnOutput(this, 'TtsDefaultVoice', { value: 'Mizuki' });
     new CfnOutput(this, 'WebUrl', { value: `https://${webDistribution.distributionDomainName}` });
-    new CfnOutput(this, 'OrchestratorEcrRepositoryUri', { value: repo.repositoryUri });
     new CfnOutput(this, 'OrchestratorControlQueueUrl', { value: controlQueue.queueUrl });
     new CfnOutput(this, 'OrchestratorServiceName', { value: service.serviceName });
     new CfnOutput(this, 'TranscriptStreamName', { value: transcriptStream.streamName });

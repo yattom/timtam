@@ -1,10 +1,10 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Copy orchestrator package
-COPY services/orchestrator/package.json ./package.json
-COPY services/orchestrator/tsconfig.json ./tsconfig.json
-COPY services/orchestrator/*.ts ./
+# Copy orchestrator package (worker only, not Lambda handlers)
+COPY package.json ./package.json
+COPY tsconfig.json ./tsconfig.json
+COPY worker.ts ./worker.ts
 
 # Install deps and build (use npm inside container for simplicity)
 RUN npm install --omit=dev=false \
