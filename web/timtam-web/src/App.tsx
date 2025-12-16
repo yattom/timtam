@@ -8,7 +8,7 @@ import {
   AudioVideoFacade,
   DeviceChangeObserver,
 } from 'amazon-chime-sdk-js';
-import { addAttendee, createMeeting, getConfig, startTranscription, stopTranscription } from './api';
+import { addAttendee, createMeeting, getConfig, startTranscription, stopTranscription, getAiMessages, AiMessage } from './api';
 
 export function App() {
   const [apiBaseUrl, setApiBaseUrl] = useState<string>('');
@@ -30,6 +30,9 @@ export function App() {
   // Transcript states
   const [partialText, setPartialText] = useState<string>('');
   const [finalSegments, setFinalSegments] = useState<{ text: string; at: number }[]>([]);
+  // AI messages
+  const [aiMessages, setAiMessages] = useState<AiMessage[]>([]);
+  const [lastAiMessageTimestamp, setLastAiMessageTimestamp] = useState<number>(0);
   // (debug states removed)
 
   const audioElRef = useRef<HTMLAudioElement | null>(null);
@@ -50,6 +53,33 @@ export function App() {
       }
     })();
   }, []);
+
+  // Poll for AI messages when joined
+  useEffect(() => {
+    if (!joined || !meetingId) return;
+
+    let lastTimestamp = 0;
+
+    const pollMessages = async () => {
+      try {
+        const messages = await getAiMessages(meetingId, lastTimestamp);
+        if (messages.length > 0) {
+          setAiMessages(prev => [...prev, ...messages]);
+          const maxTimestamp = Math.max(...messages.map(m => m.timestamp));
+          lastTimestamp = maxTimestamp;
+        }
+      } catch (e: any) {
+        console.error('Failed to poll AI messages:', e?.message || e);
+      }
+    };
+
+    // Poll every 2 seconds
+    const intervalId = setInterval(pollMessages, 2000);
+    // Initial poll
+    pollMessages();
+
+    return () => clearInterval(intervalId);
+  }, [joined, meetingId]);
 
   useEffect(() => {
     // Observe microphone permission if supported
@@ -281,6 +311,8 @@ export function App() {
     setTranscribing(false);
     setPartialText('');
     setFinalSegments([]);
+    setAiMessages([]);
+    setLastAiMessageTimestamp(0);
   };
 
   const onToggleMute = async () => {
@@ -421,6 +453,23 @@ export function App() {
             )}
             {!partialText && finalSegments.length === 0 && (
               <div style={{ color: '#888' }}>ここに文字起こしが表示される（「文字起こし開始」を押して話してみてね）</div>
+            )}
+          </div>
+        </div>
+
+        <h3>AIアシスタント</h3>
+        <div style={{ border: '1px solid #ddd', borderRadius: 6, padding: 12, minHeight: 80, background: '#f0f8ff' }}>
+          <div style={{ display: 'grid', gap: 8 }}>
+            {aiMessages.map((msg, i) => (
+              <div key={msg.timestamp + '-' + i} style={{ padding: 8, background: '#e6f3ff', borderRadius: 4, borderLeft: '3px solid #2980b9' }}>
+                <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>
+                  {new Date(msg.timestamp).toLocaleTimeString('ja-JP')}
+                </div>
+                <div style={{ lineHeight: 1.5 }}>{msg.message}</div>
+              </div>
+            ))}
+            {aiMessages.length === 0 && (
+              <div style={{ color: '#888' }}>AIアシスタントからのメッセージがここに表示される</div>
             )}
           </div>
         </div>

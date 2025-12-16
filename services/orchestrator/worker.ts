@@ -2,11 +2,14 @@ import { KinesisClient, GetShardIteratorCommand, GetRecordsCommand, DescribeStre
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
 import { CloudWatchClient, PutMetricDataCommand } from '@aws-sdk/client-cloudwatch';
 import { SQSClient, ReceiveMessageCommand, DeleteMessageCommand } from '@aws-sdk/client-sqs';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 
 // 環境変数
 const STREAM_NAME = process.env.KINESIS_STREAM_NAME || 'timtam-asr';
 const BEDROCK_REGION = process.env.BEDROCK_REGION || 'us-east-1';
 const BEDROCK_MODEL_ID = process.env.BEDROCK_MODEL_ID || 'anthropic.claude-haiku-4.5';
+const AI_MESSAGES_TABLE = process.env.AI_MESSAGES_TABLE || 'timtam-ai-messages';
 // MEETING_ID は SQS からの指示で動的変更する。初期値があればそれを使う。
 let CURRENT_MEETING_ID = process.env.MEETING_ID || '';
 const WINDOW_LINES = Number(process.env.WINDOW_LINES || '5');
@@ -114,9 +117,46 @@ class TriggerLLM {
 }
 
 class Notifier {
-  // Phase 1: チャット投稿の代替としてログ出力
+  private ddb: DynamoDBDocumentClient;
+
+  constructor() {
+    const ddbClient = new DynamoDBClient({});
+    this.ddb = DynamoDBDocumentClient.from(ddbClient);
+  }
+
   async postChat(meetingId: string, message: string) {
-    console.log(JSON.stringify({ type: 'chat.post', meetingId, message, ts: Date.now() }));
+    const timestamp = Date.now();
+    const ttl = Math.floor(timestamp / 1000) + 86400; // Expire after 24 hours
+
+    // Write to DynamoDB for web UI polling
+    try {
+      await this.ddb.send(
+        new PutCommand({
+          TableName: AI_MESSAGES_TABLE,
+          Item: {
+            meetingId,
+            timestamp,
+            message,
+            ttl,
+            type: 'ai_intervention',
+          },
+        })
+      );
+      console.log(JSON.stringify({
+        type: 'chat.post',
+        meetingId,
+        message: message.substring(0, 100),
+        timestamp,
+        stored: 'dynamodb'
+      }));
+    } catch (err: any) {
+      console.error('Failed to store AI message', {
+        error: err?.message || err,
+        meetingId,
+      });
+      // Still log to CloudWatch as fallback
+      console.log(JSON.stringify({ type: 'chat.post', meetingId, message, ts: timestamp }));
+    }
   }
 }
 

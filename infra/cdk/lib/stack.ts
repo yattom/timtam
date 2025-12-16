@@ -32,6 +32,16 @@ export class TimtamInfraStack extends Stack {
       removalPolicy: this.node.tryGetContext('keepTables') ? undefined : RemovalPolicy.DESTROY,
     });
 
+    // === DynamoDB table for AI Messages (for web UI polling) ===
+    const aiMessagesTable = new dynamodb.Table(this, 'AiMessagesTable', {
+      tableName: 'timtam-ai-messages',
+      partitionKey: { name: 'meetingId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'timestamp', type: dynamodb.AttributeType.NUMBER },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: this.node.tryGetContext('keepTables') ? undefined : RemovalPolicy.DESTROY,
+      timeToLiveAttribute: 'ttl', // Auto-delete old messages
+    });
+
     // === Kinesis stream (created early so we can reference it in Lambda env) ===
     const transcriptStream = new kinesis.Stream(this, 'TranscriptAsrStream', {
       streamName: 'transcript-asr',
@@ -465,6 +475,17 @@ export class TimtamInfraStack extends Stack {
       runtime: lambda.Runtime.NODEJS_20_X,
     });
 
+    const aiMessagesFn = new NodejsFunction(this, 'AiMessagesFn', {
+      entry: '../../services/ai-messages/handler.ts',
+      handler: 'getMessages',
+      timeout: Duration.seconds(10),
+      runtime: lambda.Runtime.NODEJS_20_X,
+      environment: {
+        AI_MESSAGES_TABLE: aiMessagesTable.tableName,
+      },
+    });
+    aiMessagesTable.grantReadData(aiMessagesFn);
+
     // Config integration + route (GET /config)
     const configInt = new CfnIntegration(this, 'ConfigIntegration', {
       apiId: httpApi.ref,
@@ -505,6 +526,26 @@ export class TimtamInfraStack extends Stack {
       action: 'lambda:InvokeFunction',
     });
 
+    // AI Messages integration + route (GET /meetings/{meetingId}/messages)
+    const aiMessagesInt = new CfnIntegration(this, 'AiMessagesIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(aiMessagesFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const aiMessagesRoute = new CfnRoute(this, 'AiMessagesRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'GET /meetings/{meetingId}/messages',
+      target: `integrations/${aiMessagesInt.ref}`,
+    });
+    aiMessagesRoute.addDependency(aiMessagesInt);
+    aiMessagesFn.addPermission('InvokeByHttpApiAiMessages', {
+      principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+      sourceArn,
+      action: 'lambda:InvokeFunction',
+    });
+
     // === ECS Fargate Orchestrator (always-on service) ===
     // Use default VPC lookup (original design); relies on CDK env/account/region being set
     const vpc = ec2.Vpc.fromLookup(this, 'DefaultVpc', { isDefault: true });
@@ -513,7 +554,7 @@ export class TimtamInfraStack extends Stack {
     const taskRole = new iam.Role(this, 'OrchestratorTaskRole', {
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
     });
-    // Permissions: Kinesis read, Bedrock invoke, CloudWatch metrics, SQS consume
+    // Permissions: Kinesis read, Bedrock invoke, CloudWatch metrics, SQS consume, DynamoDB write
     taskRole.addToPolicy(new iam.PolicyStatement({
       actions: [
         'kinesis:DescribeStream',
@@ -531,6 +572,7 @@ export class TimtamInfraStack extends Stack {
       resources: ['*'],
     }));
     controlQueue.grantConsumeMessages(taskRole);
+    aiMessagesTable.grantWriteData(taskRole);
 
     const taskDef = new ecs.FargateTaskDefinition(this, 'OrchestratorTaskDef', {
       cpu: 512,
@@ -553,6 +595,7 @@ export class TimtamInfraStack extends Stack {
         WINDOW_LINES: '5',
         POLL_INTERVAL_MS: '1000', // 1 second to avoid Kinesis rate limits (5 req/sec max)
         CONTROL_SQS_URL: controlQueue.queueUrl,
+        AI_MESSAGES_TABLE: aiMessagesTable.tableName,
       },
     });
     container.addPortMappings({ containerPort: 3000 });

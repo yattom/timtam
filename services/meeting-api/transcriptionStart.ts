@@ -65,6 +65,13 @@ export const start: APIGatewayProxyHandlerV2 = async (event) => {
             Audio: {
               MuxType: 'AudioOnly',
             },
+            CompositedVideo: {
+              Layout: 'GridView',
+              Resolution: 'FHD',
+              GridViewConfiguration: {
+                ContentShareLayout: 'PresenterOnly',
+              },
+            },
             Content: {
               State: 'Disabled',
             },
