@@ -33,12 +33,15 @@ export function App() {
   // AI messages
   const [aiMessages, setAiMessages] = useState<AiMessage[]>([]);
   const [lastAiMessageTimestamp, setLastAiMessageTimestamp] = useState<number>(0);
+  // AI output area resize
+  const [aiOutputHeight, setAiOutputHeight] = useState<number>(300);
   // (debug states removed)
 
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const meetingRef = useRef<DefaultMeetingSession | null>(null);
   const audioVideoRef = useRef<AudioVideoFacade | null>(null);
   const transcriptHandlerRef = useRef<((event: any) => void) | null>(null);
+  const aiOutputRef = useRef<HTMLDivElement | null>(null);
   const deviceController = useMemo(() => new DefaultDeviceController(new ConsoleLogger('dc', LogLevel.WARN)), []);
 
   useEffect(() => {
@@ -80,6 +83,20 @@ export function App() {
 
     return () => clearInterval(intervalId);
   }, [joined, meetingId]);
+
+  // Auto-scroll AI output area when new messages arrive
+  useEffect(() => {
+    const container = aiOutputRef.current;
+    if (!container || aiMessages.length === 0) return;
+
+    // Check if user is at the bottom (with 50px tolerance)
+    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50;
+
+    if (isAtBottom) {
+      // Auto-scroll to bottom
+      container.scrollTop = container.scrollHeight;
+    }
+  }, [aiMessages]);
 
   useEffect(() => {
     // Observe microphone permission if supported
@@ -371,6 +388,26 @@ export function App() {
     }
   };
 
+  const onResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startHeight = aiOutputHeight;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const deltaY = moveEvent.clientY - startY;
+      const newHeight = Math.max(100, Math.min(800, startHeight + deltaY));
+      setAiOutputHeight(newHeight);
+    };
+
+    const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  };
+
   return (
     <div style={{ fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif', padding: 16, maxWidth: 900 }}>
       <h1 style={{ marginTop: 0 }}>timtam web — 会議MVP</h1>
@@ -442,34 +479,60 @@ export function App() {
       </section>
 
       <section style={{ display: 'grid', gap: 8 }}>
+        <h3>AIアシスタント</h3>
+        <div style={{ position: 'relative' }}>
+          <div
+            ref={aiOutputRef}
+            style={{
+              border: '1px solid #ddd',
+              borderRadius: 6,
+              padding: 12,
+              height: aiOutputHeight,
+              background: '#f0f8ff',
+              overflowY: 'auto',
+              overflowX: 'hidden'
+            }}
+          >
+            <div style={{ display: 'grid', gap: 8 }}>
+              {aiMessages.map((msg, i) => (
+                <div key={msg.timestamp + '-' + i} style={{ padding: 8, background: '#e6f3ff', borderRadius: 4, borderLeft: '3px solid #2980b9' }}>
+                  <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>
+                    {new Date(msg.timestamp).toLocaleTimeString('ja-JP')}
+                  </div>
+                  <div style={{ lineHeight: 1.5 }}>{msg.message}</div>
+                </div>
+              ))}
+              {aiMessages.length === 0 && (
+                <div style={{ color: '#888' }}>AIアシスタントからのメッセージがここに表示される</div>
+              )}
+            </div>
+          </div>
+          <div
+            onMouseDown={onResizeStart}
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              right: 0,
+              width: 20,
+              height: 20,
+              cursor: 'ns-resize',
+              background: 'linear-gradient(135deg, transparent 50%, #999 50%)',
+              borderBottomRightRadius: 6
+            }}
+          />
+        </div>
+
         <h3>文字起こし（擬似リアルタイム）</h3>
         <div style={{ border: '1px solid #ddd', borderRadius: 6, padding: 12, minHeight: 120, background: '#fafafa' }}>
           <div style={{ display: 'grid', gap: 6 }}>
-            {finalSegments.map((seg, i) => (
-              <div key={seg.at + '-' + i} style={{ lineHeight: 1.5 }}>{seg.text}</div>
-            ))}
             {partialText && (
               <div style={{ color: '#555' }}>{partialText}<span style={{ opacity: 0.5 }}> ▋</span></div>
             )}
+            {[...finalSegments].reverse().map((seg, i) => (
+              <div key={seg.at + '-' + i} style={{ lineHeight: 1.5 }}>{seg.text}</div>
+            ))}
             {!partialText && finalSegments.length === 0 && (
               <div style={{ color: '#888' }}>ここに文字起こしが表示される（「文字起こし開始」を押して話してみてね）</div>
-            )}
-          </div>
-        </div>
-
-        <h3>AIアシスタント</h3>
-        <div style={{ border: '1px solid #ddd', borderRadius: 6, padding: 12, minHeight: 80, background: '#f0f8ff' }}>
-          <div style={{ display: 'grid', gap: 8 }}>
-            {aiMessages.map((msg, i) => (
-              <div key={msg.timestamp + '-' + i} style={{ padding: 8, background: '#e6f3ff', borderRadius: 4, borderLeft: '3px solid #2980b9' }}>
-                <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>
-                  {new Date(msg.timestamp).toLocaleTimeString('ja-JP')}
-                </div>
-                <div style={{ lineHeight: 1.5 }}>{msg.message}</div>
-              </div>
-            ))}
-            {aiMessages.length === 0 && (
-              <div style={{ color: '#888' }}>AIアシスタントからのメッセージがここに表示される</div>
             )}
           </div>
         </div>
