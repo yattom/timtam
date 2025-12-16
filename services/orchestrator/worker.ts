@@ -3,15 +3,20 @@ import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedroc
 import { CloudWatchClient, PutMetricDataCommand } from '@aws-sdk/client-cloudwatch';
 import { SQSClient, ReceiveMessageCommand, DeleteMessageCommand } from '@aws-sdk/client-sqs';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
 
 // 環境変数
 const STREAM_NAME = process.env.KINESIS_STREAM_NAME || 'timtam-asr';
 const BEDROCK_REGION = process.env.BEDROCK_REGION || 'us-east-1';
 const BEDROCK_MODEL_ID = process.env.BEDROCK_MODEL_ID || 'anthropic.claude-haiku-4.5';
 const AI_MESSAGES_TABLE = process.env.AI_MESSAGES_TABLE || 'timtam-ai-messages';
+const CONFIG_TABLE_NAME = process.env.CONFIG_TABLE_NAME || 'timtam-orchestrator-config';
+const DEFAULT_PROMPT = process.env.DEFAULT_PROMPT ||
+  '会話の内容が具体的に寄りすぎていたり、抽象的になりすぎていたら指摘してください';
 // MEETING_ID は SQS からの指示で動的変更する。初期値があればそれを使う。
 let CURRENT_MEETING_ID = process.env.MEETING_ID || '';
+// PROMPT は SQS からの指示で動的変更する。初期値は環境変数またはデフォルト。
+let CURRENT_PROMPT = DEFAULT_PROMPT;
 const WINDOW_LINES = Number(process.env.WINDOW_LINES || '5');
 const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS || '500');
 const CONTROL_SQS_URL = process.env.CONTROL_SQS_URL || '';
@@ -69,12 +74,11 @@ class Metrics {
 
 class TriggerLLM {
   private bedrock = new BedrockRuntimeClient({ region: BEDROCK_REGION });
-  async judge(windowText: string, policy = '控えめ・確認優先'): Promise<TriggerResult | null> {
+  async judge(windowText: string): Promise<TriggerResult | null> {
     const prompt =
       `以下は会議の直近確定発話です。\n` +
-      `会話の内容が具体的に寄りすぎていたり、抽象的になりすぎていたら指摘してください\n` +
+      CURRENT_PROMPT + `\n` +
       `\n` +
-//      `\n` +
       '介入が必要かを判断し、次のJSON形式だけを厳密に返してください:\n' +
       '{"should_intervene": boolean, "reason": string, "message": string}\n' +
       '---\n' + windowText;
@@ -183,7 +187,20 @@ async function pollControlOnce() {
       const body = m.Body || '';
       try {
         const parsed = JSON.parse(body);
-        if (parsed && typeof parsed.meetingId === 'string') {
+
+        // Handle prompt update messages
+        if (parsed.type === 'prompt' && typeof parsed.prompt === 'string') {
+          CURRENT_PROMPT = parsed.prompt;
+          console.log(JSON.stringify({
+            type: 'orchestrator.control.prompt.set',
+            promptLength: CURRENT_PROMPT.length,
+            promptPreview: CURRENT_PROMPT.substring(0, 50),
+            ts: Date.now()
+          }));
+        }
+
+        // Handle meetingId messages (both new and legacy format)
+        if (parsed.type === 'meetingId' || (parsed.meetingId && !parsed.type)) {
           CURRENT_MEETING_ID = parsed.meetingId;
           console.log(JSON.stringify({ type: 'orchestrator.control.meeting.set', meetingId: CURRENT_MEETING_ID, ts: Date.now() }));
         }
@@ -308,14 +325,47 @@ async function runLoop() {
   }
 }
 
+// Initialize prompt from DynamoDB
+async function initializePrompt() {
+  try {
+    const ddbClient = new DynamoDBClient({ region: BEDROCK_REGION });
+    const ddb = DynamoDBDocumentClient.from(ddbClient);
+    const result = await ddb.send(new GetCommand({
+      TableName: CONFIG_TABLE_NAME,
+      Key: { configKey: 'current_prompt' }
+    }));
+    if (result.Item?.prompt) {
+      CURRENT_PROMPT = result.Item.prompt;
+      console.log(JSON.stringify({
+        type: 'orchestrator.config.prompt.loaded',
+        promptLength: CURRENT_PROMPT.length,
+        promptPreview: CURRENT_PROMPT.substring(0, 50),
+        ts: Date.now()
+      }));
+    } else {
+      console.log(JSON.stringify({
+        type: 'orchestrator.config.prompt.default',
+        promptLength: CURRENT_PROMPT.length,
+        promptPreview: CURRENT_PROMPT.substring(0, 50),
+        ts: Date.now()
+      }));
+    }
+  } catch (e) {
+    console.warn('Failed to load prompt from DynamoDB, using default', (e as any)?.message);
+  }
+}
+
 // エントリ
 console.log(JSON.stringify({
   type: 'orchestrator.worker.start',
   ts: Date.now(),
-  env: { STREAM_NAME, BEDROCK_REGION, BEDROCK_MODEL_ID, CURRENT_MEETING_ID, CONTROL_SQS_URL }
+  env: { STREAM_NAME, BEDROCK_REGION, BEDROCK_MODEL_ID, CURRENT_MEETING_ID, CONTROL_SQS_URL, CONFIG_TABLE_NAME }
 }));
 
-runLoop().catch((e) => {
+(async () => {
+  await initializePrompt();
+  await runLoop();
+})().catch((e) => {
   console.error('worker fatal', e);
   process.exit(1);
 });
