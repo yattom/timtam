@@ -42,6 +42,14 @@ export class TimtamInfraStack extends Stack {
       timeToLiveAttribute: 'ttl', // Auto-delete old messages
     });
 
+    // === DynamoDB table for Orchestrator Configuration ===
+    const orchestratorConfigTable = new dynamodb.Table(this, 'OrchestratorConfigTable', {
+      tableName: 'timtam-orchestrator-config',
+      partitionKey: { name: 'configKey', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: this.node.tryGetContext('keepTables') ? undefined : RemovalPolicy.DESTROY,
+    });
+
     // === Kinesis stream (created early so we can reference it in Lambda env) ===
     const transcriptStream = new kinesis.Stream(this, 'TranscriptAsrStream', {
       streamName: 'transcript-asr',
@@ -249,11 +257,46 @@ export class TimtamInfraStack extends Stack {
       resources: ['*'],
     }));
 
+    // === Orchestrator Configuration Lambdas ===
+    const DEFAULT_PROMPT = '会話の内容が具体的に寄りすぎていたり、抽象的になりすぎていたら指摘してください';
+
+    const getPromptFn = new NodejsFunction(this, 'GetPromptFn', {
+      entry: '../../services/orchestrator-config/getPrompt.ts',
+      timeout: Duration.seconds(10),
+      runtime: lambda.Runtime.NODEJS_20_X,
+      environment: {
+        CONFIG_TABLE_NAME: orchestratorConfigTable.tableName,
+        DEFAULT_PROMPT,
+      },
+    });
+    orchestratorConfigTable.grantReadData(getPromptFn);
+
+    const updatePromptFn = new NodejsFunction(this, 'UpdatePromptFn', {
+      entry: '../../services/orchestrator-config/updatePrompt.ts',
+      timeout: Duration.seconds(10),
+      runtime: lambda.Runtime.NODEJS_20_X,
+      environment: {
+        CONFIG_TABLE_NAME: orchestratorConfigTable.tableName,
+        CONTROL_SQS_URL: '', // Will be set after controlQueue is created
+      },
+      bundling: {
+        nodeModules: ['@aws-sdk/client-sqs'],
+        externalModules: ['aws-sdk'],
+        target: 'node20',
+        platform: 'node',
+      },
+    });
+    orchestratorConfigTable.grantWriteData(updatePromptFn);
+
     // === Orchestrator Control (SQS + Lambda trigger from UI) ===
     const controlQueue = new sqs.Queue(this, 'OrchestratorControlQueue', {
       visibilityTimeout: Duration.seconds(10),
       retentionPeriod: Duration.days(1),
     });
+
+    // Update updatePromptFn with SQS URL and grant permissions
+    updatePromptFn.addEnvironment('CONTROL_SQS_URL', controlQueue.queueUrl);
+    controlQueue.grantSendMessages(updatePromptFn);
 
     const startMeetingFn = new NodejsFunction(this, 'StartMeetingOrchestratorFn', {
       entry: '../../services/orchestrator/startMeeting.ts',
@@ -546,6 +589,46 @@ export class TimtamInfraStack extends Stack {
       action: 'lambda:InvokeFunction',
     });
 
+    // Get Prompt integration + route (GET /orchestrator/prompt)
+    const getPromptInt = new CfnIntegration(this, 'GetPromptIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(getPromptFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const getPromptRoute = new CfnRoute(this, 'GetPromptRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'GET /orchestrator/prompt',
+      target: `integrations/${getPromptInt.ref}`,
+    });
+    getPromptRoute.addDependency(getPromptInt);
+    getPromptFn.addPermission('InvokeByHttpApiGetPrompt', {
+      principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+      sourceArn,
+      action: 'lambda:InvokeFunction',
+    });
+
+    // Update Prompt integration + route (PUT /orchestrator/prompt)
+    const updatePromptInt = new CfnIntegration(this, 'UpdatePromptIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(updatePromptFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const updatePromptRoute = new CfnRoute(this, 'UpdatePromptRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'PUT /orchestrator/prompt',
+      target: `integrations/${updatePromptInt.ref}`,
+    });
+    updatePromptRoute.addDependency(updatePromptInt);
+    updatePromptFn.addPermission('InvokeByHttpApiUpdatePrompt', {
+      principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+      sourceArn,
+      action: 'lambda:InvokeFunction',
+    });
+
     // === ECS Fargate Orchestrator (always-on service) ===
     // Use default VPC lookup (original design); relies on CDK env/account/region being set
     const vpc = ec2.Vpc.fromLookup(this, 'DefaultVpc', { isDefault: true });
@@ -573,6 +656,7 @@ export class TimtamInfraStack extends Stack {
     }));
     controlQueue.grantConsumeMessages(taskRole);
     aiMessagesTable.grantWriteData(taskRole);
+    orchestratorConfigTable.grantReadData(taskRole);
 
     const taskDef = new ecs.FargateTaskDefinition(this, 'OrchestratorTaskDef', {
       cpu: 512,
@@ -596,6 +680,8 @@ export class TimtamInfraStack extends Stack {
         POLL_INTERVAL_MS: '1000', // 1 second to avoid Kinesis rate limits (5 req/sec max)
         CONTROL_SQS_URL: controlQueue.queueUrl,
         AI_MESSAGES_TABLE: aiMessagesTable.tableName,
+        CONFIG_TABLE_NAME: orchestratorConfigTable.tableName,
+        DEFAULT_PROMPT,
       },
     });
     container.addPortMappings({ containerPort: 3000 });
