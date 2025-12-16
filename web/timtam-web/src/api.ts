@@ -57,3 +57,16 @@ export async function stopTranscription(meetingId: string): Promise<void> {
   const res = await fetch(u(`/meetings/${encodeURIComponent(meetingId)}/transcription/stop`), { method: 'POST' });
   if (!res.ok) throw new Error(`transcription stop failed: ${res.status}`);
 }
+
+export type AiMessage = {
+  timestamp: number;
+  message: string;
+  type: string;
+};
+
+export async function getAiMessages(meetingId: string, since: number = 0): Promise<AiMessage[]> {
+  const res = await fetch(u(`/meetings/${encodeURIComponent(meetingId)}/messages?since=${since}`));
+  if (!res.ok) throw new Error(`get AI messages failed: ${res.status}`);
+  const data = await res.json();
+  return data.messages || [];
+}

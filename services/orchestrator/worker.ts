@@ -2,11 +2,14 @@ import { KinesisClient, GetShardIteratorCommand, GetRecordsCommand, DescribeStre
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
 import { CloudWatchClient, PutMetricDataCommand } from '@aws-sdk/client-cloudwatch';
 import { SQSClient, ReceiveMessageCommand, DeleteMessageCommand } from '@aws-sdk/client-sqs';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 
 // 環境変数
 const STREAM_NAME = process.env.KINESIS_STREAM_NAME || 'timtam-asr';
 const BEDROCK_REGION = process.env.BEDROCK_REGION || 'us-east-1';
 const BEDROCK_MODEL_ID = process.env.BEDROCK_MODEL_ID || 'anthropic.claude-haiku-4.5';
+const AI_MESSAGES_TABLE = process.env.AI_MESSAGES_TABLE || 'timtam-ai-messages';
 // MEETING_ID は SQS からの指示で動的変更する。初期値があればそれを使う。
 let CURRENT_MEETING_ID = process.env.MEETING_ID || '';
 const WINDOW_LINES = Number(process.env.WINDOW_LINES || '5');
@@ -68,7 +71,10 @@ class TriggerLLM {
   private bedrock = new BedrockRuntimeClient({ region: BEDROCK_REGION });
   async judge(windowText: string, policy = '控えめ・確認優先'): Promise<TriggerResult | null> {
     const prompt =
-      `以下は会議の直近確定発話です。プロンプト方針: ${policy}\n` +
+      `以下は会議の直近確定発話です。\n` +
+      `会話の内容が具体的に寄りすぎていたり、抽象的になりすぎていたら指摘してください\n` +
+      `\n` +
+//      `\n` +
       '介入が必要かを判断し、次のJSON形式だけを厳密に返してください:\n' +
       '{"should_intervene": boolean, "reason": string, "message": string}\n' +
       '---\n' + windowText;
@@ -96,8 +102,10 @@ class TriggerLLM {
       // ただし 本PoCではJSONそのものを返すように指示しているため、直接JSONとして解釈できる経路を優先
       if (parsed && parsed.should_intervene !== undefined) return parsed as TriggerResult;
       // モデルにより content に入る場合へのフォールバック
-      const embedded = parsed?.content?.[0]?.text;
+      let embedded = parsed?.content?.[0]?.text;
       if (typeof embedded === 'string') {
+        // Strip markdown code blocks if present (```json ... ```)
+        embedded = embedded.replace(/^```json\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
         const e = JSON.parse(embedded);
         return e as TriggerResult;
       }
@@ -112,9 +120,46 @@ class TriggerLLM {
 }
 
 class Notifier {
-  // Phase 1: チャット投稿の代替としてログ出力
+  private ddb: DynamoDBDocumentClient;
+
+  constructor() {
+    const ddbClient = new DynamoDBClient({});
+    this.ddb = DynamoDBDocumentClient.from(ddbClient);
+  }
+
   async postChat(meetingId: string, message: string) {
-    console.log(JSON.stringify({ type: 'chat.post', meetingId, message, ts: Date.now() }));
+    const timestamp = Date.now();
+    const ttl = Math.floor(timestamp / 1000) + 86400; // Expire after 24 hours
+
+    // Write to DynamoDB for web UI polling
+    try {
+      await this.ddb.send(
+        new PutCommand({
+          TableName: AI_MESSAGES_TABLE,
+          Item: {
+            meetingId,
+            timestamp,
+            message,
+            ttl,
+            type: 'ai_intervention',
+          },
+        })
+      );
+      console.log(JSON.stringify({
+        type: 'chat.post',
+        meetingId,
+        message: message.substring(0, 100),
+        timestamp,
+        stored: 'dynamodb'
+      }));
+    } catch (err: any) {
+      console.error('Failed to store AI message', {
+        error: err?.message || err,
+        meetingId,
+      });
+      // Still log to CloudWatch as fallback
+      console.log(JSON.stringify({ type: 'chat.post', meetingId, message, ts: timestamp }));
+    }
   }
 }
 
@@ -180,6 +225,8 @@ async function runLoop() {
   const window = new WindowBuffer(WINDOW_LINES);
   let consecutiveErrors = 0;
   let loopCount = 0;
+  let lastLLMCallTime = 0;
+  const LLM_COOLDOWN_MS = 5000; // Wait at least 5 seconds between LLM calls
   for (;;) {
     try {
       // control plane (non-blocking)
@@ -211,14 +258,25 @@ async function runLoop() {
         // final文をウィンドウに追加
         window.push(ev.text);
 
-        // トリガー判定
-        const winText = window.content();
-        const judgeStart = Date.now();
-        const res = await trigger.judge(winText);
-        await metrics.putLatencyMetric('ASRToDecisionLatency', Date.now() - (ev.timestamp || judgeStart));
+        // トリガー判定 (Rate limiting: only call LLM if cooldown has passed)
+        const now = Date.now();
+        if (now - lastLLMCallTime >= LLM_COOLDOWN_MS) {
+          const winText = window.content();
+          const judgeStart = Date.now();
+          const res = await trigger.judge(winText);
+          lastLLMCallTime = Date.now();
+          await metrics.putLatencyMetric('ASRToDecisionLatency', Date.now() - (ev.timestamp || judgeStart));
 
-        if (res && res.should_intervene) {
-          await notifier.postChat(ev.meetingId, res.message);
+          if (res && res.should_intervene) {
+            await notifier.postChat(ev.meetingId, res.message);
+          }
+        } else {
+          console.log(JSON.stringify({
+            type: 'orchestrator.llm.skipped',
+            reason: 'cooldown',
+            timeSinceLastCall: now - lastLLMCallTime,
+            ts: now
+          }));
         }
         consecutiveErrors = 0;
       }
