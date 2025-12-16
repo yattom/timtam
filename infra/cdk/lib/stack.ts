@@ -51,9 +51,12 @@ export class TimtamInfraStack extends Stack {
     });
 
     // === Kinesis stream (created early so we can reference it in Lambda env) ===
+    // Use PROVISIONED with 1 shard since orchestrator reads from single shard only
+    // and filters by CURRENT_MEETING_ID (non-standard consumer pattern)
     const transcriptStream = new kinesis.Stream(this, 'TranscriptAsrStream', {
       streamName: 'transcript-asr',
-      streamMode: kinesis.StreamMode.ON_DEMAND,
+      streamMode: kinesis.StreamMode.PROVISIONED,
+      shardCount: 1,
       retentionPeriod: Duration.hours(24),
     });
 
