@@ -71,7 +71,10 @@ class TriggerLLM {
   private bedrock = new BedrockRuntimeClient({ region: BEDROCK_REGION });
   async judge(windowText: string, policy = '控えめ・確認優先'): Promise<TriggerResult | null> {
     const prompt =
-      `以下は会議の直近確定発話です。プロンプト方針: ${policy}\n` +
+      `以下は会議の直近確定発話です。\n` +
+      `会話の内容が具体的に寄りすぎていたり、抽象的になりすぎていたら指摘してください\n` +
+      `\n` +
+//      `\n` +
       '介入が必要かを判断し、次のJSON形式だけを厳密に返してください:\n' +
       '{"should_intervene": boolean, "reason": string, "message": string}\n' +
       '---\n' + windowText;
