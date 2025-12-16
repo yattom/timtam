@@ -96,8 +96,10 @@ class TriggerLLM {
       // ただし 本PoCではJSONそのものを返すように指示しているため、直接JSONとして解釈できる経路を優先
       if (parsed && parsed.should_intervene !== undefined) return parsed as TriggerResult;
       // モデルにより content に入る場合へのフォールバック
-      const embedded = parsed?.content?.[0]?.text;
+      let embedded = parsed?.content?.[0]?.text;
       if (typeof embedded === 'string') {
+        // Strip markdown code blocks if present (```json ... ```)
+        embedded = embedded.replace(/^```json\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
         const e = JSON.parse(embedded);
         return e as TriggerResult;
       }
@@ -180,6 +182,8 @@ async function runLoop() {
   const window = new WindowBuffer(WINDOW_LINES);
   let consecutiveErrors = 0;
   let loopCount = 0;
+  let lastLLMCallTime = 0;
+  const LLM_COOLDOWN_MS = 5000; // Wait at least 5 seconds between LLM calls
   for (;;) {
     try {
       // control plane (non-blocking)
@@ -211,14 +215,25 @@ async function runLoop() {
         // final文をウィンドウに追加
         window.push(ev.text);
 
-        // トリガー判定
-        const winText = window.content();
-        const judgeStart = Date.now();
-        const res = await trigger.judge(winText);
-        await metrics.putLatencyMetric('ASRToDecisionLatency', Date.now() - (ev.timestamp || judgeStart));
+        // トリガー判定 (Rate limiting: only call LLM if cooldown has passed)
+        const now = Date.now();
+        if (now - lastLLMCallTime >= LLM_COOLDOWN_MS) {
+          const winText = window.content();
+          const judgeStart = Date.now();
+          const res = await trigger.judge(winText);
+          lastLLMCallTime = Date.now();
+          await metrics.putLatencyMetric('ASRToDecisionLatency', Date.now() - (ev.timestamp || judgeStart));
 
-        if (res && res.should_intervene) {
-          await notifier.postChat(ev.meetingId, res.message);
+          if (res && res.should_intervene) {
+            await notifier.postChat(ev.meetingId, res.message);
+          }
+        } else {
+          console.log(JSON.stringify({
+            type: 'orchestrator.llm.skipped',
+            reason: 'cooldown',
+            timeSinceLastCall: now - lastLLMCallTime,
+            ts: now
+          }));
         }
         consecutiveErrors = 0;
       }

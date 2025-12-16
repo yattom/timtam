@@ -184,16 +184,25 @@ export class TimtamInfraStack extends Stack {
     transcriptStream.grantWrite(audioConsumerFn);
     audioConsumerFn.addToRolePolicy(
       new iam.PolicyStatement({
-        actions: ['transcribe:StartStreamTranscription'],
+        actions: [
+          'transcribe:StartTranscriptionJob',
+          'transcribe:GetTranscriptionJob',
+        ],
         resources: ['*'],
       })
     );
 
     // S3 event notification to trigger audio consumer
+    // Chime Media Capture can write either .wav or .mp4 files depending on configuration
     mediaCaptureBucket.addEventNotification(
       s3.EventType.OBJECT_CREATED,
       new s3n.LambdaDestination(audioConsumerFn),
-      { suffix: '.wav' } // Chime Media Capture writes WAV files
+      { suffix: '.wav' }
+    );
+    mediaCaptureBucket.addEventNotification(
+      s3.EventType.OBJECT_CREATED,
+      new s3n.LambdaDestination(audioConsumerFn),
+      { suffix: '.mp4' }
     );
 
     // === Orchestrator & TTS Lambdas ===
@@ -540,7 +549,7 @@ export class TimtamInfraStack extends Stack {
         // Stream name: can be changed later; default here is a functional name
         KINESIS_STREAM_NAME: transcriptStream.streamName,
         BEDROCK_REGION: 'ap-northeast-1',
-        BEDROCK_MODEL_ID: 'anthropic.claude-haiku-4.5',
+        BEDROCK_MODEL_ID: 'arn:aws:bedrock:ap-northeast-1:030046728177:inference-profile/global.anthropic.claude-haiku-4-5-20251001-v1:0',
         WINDOW_LINES: '5',
         POLL_INTERVAL_MS: '1000', // 1 second to avoid Kinesis rate limits (5 req/sec max)
         CONTROL_SQS_URL: controlQueue.queueUrl,
