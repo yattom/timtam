@@ -12,9 +12,7 @@ import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 
 const REGION = process.env.AWS_REGION || 'ap-northeast-1';
 const PIPELINE_TABLE_NAME = process.env.PIPELINE_TABLE_NAME!;
-const TRANSCRIPT_STREAM_ARN = process.env.TRANSCRIPT_STREAM_ARN!;
 const CAPTURE_BUCKET_ARN = process.env.CAPTURE_BUCKET_ARN!;
-const MEDIA_PIPELINE_ROLE_ARN = process.env.MEDIA_PIPELINE_ROLE_ARN!;
 const AWS_ACCOUNT_ID = process.env.AWS_ACCOUNT_ID!;
 
 const chime = new ChimeSDKMeetingsClient({ region: REGION });
@@ -53,10 +51,9 @@ export const start: APIGatewayProxyHandlerV2 = async (event) => {
       requestId: (clientResp as any)?.$metadata?.requestId
     });
 
-    // Step 2: Create Media Capture Pipeline for audio capture
-    // NOTE: This captures audio to S3. For full integration with Transcribe → Kinesis,
-    // we need to implement a consumer that reads from S3/KVS, transcribes, and writes to Kinesis.
-    // For Phase 1 PoC, we'll use client-side transcription events forwarded from browser.
+    // Step 2: Create Media Capture Pipeline for server-side audio capture
+    // Captures meeting audio to S3 bucket for server-side processing
+    // Audio files trigger AudioConsumerFn → Transcribe → Kinesis → Orchestrator
     const pipelineResp = await mediaPipelines.send(
       new CreateMediaCapturePipelineCommand({
         SourceType: 'ChimeSdkMeeting',

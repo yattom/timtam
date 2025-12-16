@@ -45,6 +45,7 @@ export class TimtamInfraStack extends Stack {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       encryption: s3.BucketEncryption.S3_MANAGED,
       enforceSSL: true,
+      objectOwnership: s3.ObjectOwnership.BUCKET_OWNER_PREFERRED,
       lifecycleRules: [
         {
           expiration: Duration.days(1), // Auto-delete after 1 day (PoC)
@@ -52,31 +53,29 @@ export class TimtamInfraStack extends Stack {
       ],
     });
 
-    // Create service role for Chime Media Pipelines to access S3
-    const mediaPipelineRole = new iam.Role(this, 'MediaPipelineRole', {
-      assumedBy: new iam.ServicePrincipal('mediapipelines.chime.amazonaws.com'),
-      description: 'Service role for Chime Media Pipelines to write to S3',
-    });
-
-    // Grant the role full write permissions to S3 bucket
-    mediaCaptureBucket.grantWrite(mediaPipelineRole);
-
-    // Add comprehensive bucket policy for Chime Media Pipelines
+    // Bucket policy for Chime Media Pipelines service
+    // Based on AWS sample: https://github.com/aws-samples/amazon-chime-media-capture-pipeline-demo
+    // Security conditions prevent confused deputy attacks
     mediaCaptureBucket.addToResourcePolicy(
       new iam.PolicyStatement({
-        sid: 'AllowChimeMediaPipelinesWrite',
+        sid: 'AWSChimeMediaCaptureBucketPolicy',
         effect: iam.Effect.ALLOW,
         principals: [new iam.ServicePrincipal('mediapipelines.chime.amazonaws.com')],
         actions: [
           's3:PutObject',
           's3:PutObjectAcl',
-          's3:GetBucketLocation',
-          's3:GetBucketPolicy',
         ],
         resources: [
-          mediaCaptureBucket.bucketArn,
           `${mediaCaptureBucket.bucketArn}/*`,
         ],
+        conditions: {
+          StringEquals: {
+            'aws:SourceAccount': this.account,
+          },
+          ArnLike: {
+            'aws:SourceArn': `arn:aws:chime:*:${this.account}:*`,
+          },
+        },
       })
     );
 
@@ -101,9 +100,7 @@ export class TimtamInfraStack extends Stack {
       runtime: lambda.Runtime.NODEJS_20_X,
       environment: {
         PIPELINE_TABLE_NAME: mediaPipelineTable.tableName,
-        TRANSCRIPT_STREAM_ARN: transcriptStream.streamArn,
         CAPTURE_BUCKET_ARN: mediaCaptureBucket.bucketArn,
-        MEDIA_PIPELINE_ROLE_ARN: mediaPipelineRole.roleArn,
         AWS_ACCOUNT_ID: this.account,
       },
     });
@@ -152,11 +149,23 @@ export class TimtamInfraStack extends Stack {
     mediaPipelineTable.grantReadWriteData(transcriptionStartFn);
     mediaPipelineTable.grantReadWriteData(transcriptionStopFn);
 
+    // CRITICAL: Grant Lambda read/write access to capture bucket
+    // Required per AWS sample for CreateMediaCapturePipeline to succeed
+    mediaCaptureBucket.grantReadWrite(transcriptionStartFn);
+    mediaCaptureBucket.grantReadWrite(transcriptionStopFn);
+
     // Ensure the Chime transcription service-linked role exists in this account
     // Required for Amazon Chime SDK live transcription with Amazon Transcribe
     new iam.CfnServiceLinkedRole(this, 'ChimeTranscriptionSlr', {
       awsServiceName: 'transcription.chime.amazonaws.com',
       description: 'Service-linked role for Amazon Chime transcription',
+    });
+
+    // Ensure the Chime Media Pipelines service-linked role exists in this account
+    // Required for Amazon Chime SDK Media Pipelines to access S3
+    new iam.CfnServiceLinkedRole(this, 'ChimeMediaPipelinesSlr', {
+      awsServiceName: 'mediapipelines.chime.amazonaws.com',
+      description: 'Service-linked role for Amazon Chime Media Pipelines',
     });
 
     // === Audio Consumer Lambda (S3 → Transcribe → Kinesis) ===
