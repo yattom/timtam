@@ -85,7 +85,7 @@ class TriggerLLM {
 
     const payload: any = {
       messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
-      max_tokens: 200,
+      max_tokens: 500,
       temperature: 0.2,
     };
     if (String(BEDROCK_MODEL_ID).includes('anthropic')) {

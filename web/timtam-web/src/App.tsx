@@ -201,6 +201,9 @@ export function App() {
     const av = meetingSession.audioVideo;
     audioVideoRef.current = av;
 
+    // Extract meetingId from meeting object to avoid closure capturing empty state
+    const currentMeetingId = meeting.MeetingId;
+
     // Bind speaker output first so remote audio can play even without mic
     if (audioElRef.current) {
       await av.bindAudioElement(audioElRef.current);
@@ -275,9 +278,9 @@ export function App() {
               }
 
               // Send transcription event to server (with speaker info)
-              if (meetingId && text) {
+              if (currentMeetingId && text) {
                 sendTranscriptionEvent(
-                  meetingId,
+                  currentMeetingId,
                   speakerAttendeeId || 'unknown',
                   speakerExternalUserId,
                   text,
@@ -331,9 +334,9 @@ export function App() {
               }
 
               // Send transcription event to server (with speaker info)
-              if (meetingId && text) {
+              if (currentMeetingId && text) {
                 sendTranscriptionEvent(
-                  meetingId,
+                  currentMeetingId,
                   speakerAttendeeId || 'unknown',
                   speakerExternalUserId,
                   text,
