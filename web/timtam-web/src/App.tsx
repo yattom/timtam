@@ -29,7 +29,7 @@ export function App() {
   const [micPermission, setMicPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown');
   // Transcript states
   const [partialText, setPartialText] = useState<string>('');
-  const [finalSegments, setFinalSegments] = useState<{ text: string; at: number }[]>([]);
+  const [finalSegments, setFinalSegments] = useState<{ text: string; at: number; speakerId?: string }[]>([]);
   // AI messages
   const [aiMessages, setAiMessages] = useState<AiMessage[]>([]);
   const [lastAiMessageTimestamp, setLastAiMessageTimestamp] = useState<number>(0);
@@ -273,7 +273,7 @@ export function App() {
                 setPartialText(text);
               } else {
                 // Finalized: append and clear partial if it matches
-                setFinalSegments(prev => [...prev, { text, at: Date.now() }]);
+                setFinalSegments(prev => [...prev, { text, at: Date.now(), speakerId: speakerExternalUserId || speakerAttendeeId }]);
                 setPartialText('');
               }
 
@@ -329,7 +329,7 @@ export function App() {
               if (isPartial) {
                 setPartialText(text);
               } else {
-                setFinalSegments(prev => [...prev, { text, at: Date.now() }]);
+                setFinalSegments(prev => [...prev, { text, at: Date.now(), speakerId: speakerExternalUserId || speakerAttendeeId }]);
                 setPartialText('');
               }
 
@@ -627,7 +627,10 @@ export function App() {
               <div style={{ color: '#555' }}>{partialText}<span style={{ opacity: 0.5 }}> ▋</span></div>
             )}
             {[...finalSegments].reverse().map((seg, i) => (
-              <div key={seg.at + '-' + i} style={{ lineHeight: 1.5 }}>{seg.text}</div>
+              <div key={seg.at + '-' + i} style={{ lineHeight: 1.5 }}>
+                {seg.speakerId && <span style={{ color: '#2980b9', fontWeight: 600, marginRight: 8 }}>[{seg.speakerId}]</span>}
+                {seg.text}
+              </div>
             ))}
             {!partialText && finalSegments.length === 0 && (
               <div style={{ color: '#888' }}>ここに文字起こしが表示される（「文字起こし開始」を押して話してみてね）</div>
