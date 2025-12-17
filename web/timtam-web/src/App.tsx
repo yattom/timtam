@@ -8,7 +8,7 @@ import {
   AudioVideoFacade,
   DeviceChangeObserver,
 } from 'amazon-chime-sdk-js';
-import { addAttendee, createMeeting, getConfig, startTranscription, stopTranscription, getAiMessages, AiMessage, getOrchestratorPrompt, updateOrchestratorPrompt } from './api';
+import { addAttendee, createMeeting, getConfig, startTranscription, stopTranscription, getAiMessages, AiMessage, getOrchestratorPrompt, updateOrchestratorPrompt, sendTranscriptionEvent } from './api';
 
 export function App() {
   const [apiBaseUrl, setApiBaseUrl] = useState<string>('');
@@ -250,12 +250,41 @@ export function App() {
                 text = (alt.Items as any[]).map((it: any) => it?.Content ?? it?.content ?? '').join('');
               }
               if (!text) continue;
+
+              // Extract speaker information from TranscriptEvent
+              // TranscriptEvent Items contain Attendee with attendeeId and externalUserId
+              const items = alt?.Items ?? alt?.items ?? [];
+              let speakerAttendeeId: string | undefined;
+              let speakerExternalUserId: string | undefined;
+
+              if (Array.isArray(items) && items.length > 0) {
+                // Get attendee info from first item (all items in result have same speaker)
+                const firstItem = items[0];
+                const attendeeInfo = firstItem?.Attendee ?? firstItem?.attendee;
+                speakerAttendeeId = attendeeInfo?.AttendeeId ?? attendeeInfo?.attendeeId;
+                speakerExternalUserId = attendeeInfo?.ExternalUserId ?? attendeeInfo?.externalUserId;
+              }
+
+              // Update UI
               if (isPartial) {
                 setPartialText(text);
               } else {
                 // Finalized: append and clear partial if it matches
                 setFinalSegments(prev => [...prev, { text, at: Date.now() }]);
                 setPartialText('');
+              }
+
+              // Send transcription event to server (with speaker info)
+              if (meetingId && text) {
+                sendTranscriptionEvent(
+                  meetingId,
+                  speakerAttendeeId || 'unknown',
+                  speakerExternalUserId,
+                  text,
+                  !isPartial
+                ).catch(err => {
+                  console.error('Failed to send transcription event:', err);
+                });
               }
             }
           } catch {
@@ -280,11 +309,38 @@ export function App() {
                 text = (alt.Items as any[]).map((it: any) => it?.Content ?? it?.content ?? '').join('');
               }
               if (!text) continue;
+
+              // Extract speaker information from fallback event format
+              const items = alt?.Items ?? alt?.items ?? [];
+              let speakerAttendeeId: string | undefined;
+              let speakerExternalUserId: string | undefined;
+
+              if (Array.isArray(items) && items.length > 0) {
+                const firstItem = items[0];
+                const attendeeInfo = firstItem?.Attendee ?? firstItem?.attendee;
+                speakerAttendeeId = attendeeInfo?.AttendeeId ?? attendeeInfo?.attendeeId;
+                speakerExternalUserId = attendeeInfo?.ExternalUserId ?? attendeeInfo?.externalUserId;
+              }
+
+              // Update UI
               if (isPartial) {
                 setPartialText(text);
               } else {
                 setFinalSegments(prev => [...prev, { text, at: Date.now() }]);
                 setPartialText('');
+              }
+
+              // Send transcription event to server (with speaker info)
+              if (meetingId && text) {
+                sendTranscriptionEvent(
+                  meetingId,
+                  speakerAttendeeId || 'unknown',
+                  speakerExternalUserId,
+                  text,
+                  !isPartial
+                ).catch(err => {
+                  console.error('Failed to send transcription event:', err);
+                });
               }
             }
           } catch {}

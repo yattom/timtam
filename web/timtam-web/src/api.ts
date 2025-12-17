@@ -58,6 +58,27 @@ export async function stopTranscription(meetingId: string): Promise<void> {
   if (!res.ok) throw new Error(`transcription stop failed: ${res.status}`);
 }
 
+export async function sendTranscriptionEvent(
+  meetingId: string,
+  attendeeId: string,
+  externalUserId: string | undefined,
+  text: string,
+  isFinal: boolean
+): Promise<void> {
+  const res = await fetch(u(`/meetings/${encodeURIComponent(meetingId)}/transcription/events`), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      attendeeId,
+      externalUserId,
+      text,
+      isFinal,
+      timestamp: Date.now(),
+    }),
+  });
+  if (!res.ok) throw new Error(`send transcription event failed: ${res.status}`);
+}
+
 export type AiMessage = {
   timestamp: number;
   message: string;
