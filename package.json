@@ -12,6 +12,9 @@
     "cdk:diff": "pnpm --filter timtam-infra cdk diff --profile admin",
     "cdk:bootstrap": "pnpm --filter timtam-infra cdk bootstrap --profile admin",
     "infra:synth-deploy": "pnpm --filter timtam-infra run synth-deploy",
-    "sso:admin": "pnpm --filter timtam-infra run sso:admin"
+    "sso:admin": "pnpm --filter timtam-infra run sso:admin",
+    "infra:close": "aws lambda list-functions --query \"Functions[?starts_with(FunctionName, 'TimtamInfraStack-')].FunctionName\" --output text --profile admin | tr '\\t' '\\n' | xargs -I {} aws lambda put-function-concurrency --function-name {} --profile admin --reserved-concurrent-executions 0 > /dev/null",
+    "infra:open": "aws lambda list-functions --query \"Functions[?starts_with(FunctionName, 'TimtamInfraStack-')].FunctionName\" --output text --profile admin | tr '\\t' '\\n' | xargs -I {} aws lambda delete-function-concurrency --function-name {} --profile admin > /dev/null"
+
   }
 }
