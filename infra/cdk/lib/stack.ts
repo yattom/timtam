@@ -643,6 +643,7 @@ export class TimtamInfraStack extends Stack {
       destinationBucket: siteBucket,
       distribution: webDistribution,
       distributionPaths: ['/config.js'],
+      prune: false, // Don't delete other files in the bucket
     });
 
     // === CloudFormation Outputs ===
