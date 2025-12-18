@@ -700,6 +700,7 @@ export function App() {
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             placeholder="ひらがなで入力（未入力ならランダム動物名）"
+            maxLength={50}
             style={{ padding: 8, borderRadius: 4, border: '1px solid #ccc', minWidth: 220 }}
           />
           <button onClick={onSaveDisplayName}>保存</button>

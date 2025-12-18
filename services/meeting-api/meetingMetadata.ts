@@ -29,6 +29,7 @@ export const upsertParticipant: APIGatewayProxyHandlerV2 = async (event) => {
 
     if (!attendeeId) return json(400, { ok: false, error: 'attendeeId is required' });
     if (!displayName) return json(400, { ok: false, error: 'displayName is required' });
+    if (displayName.length > 50) return json(400, { ok: false, error: 'displayName must be 50 characters or less' });
 
     const now = Date.now();
 
