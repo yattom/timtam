@@ -25,6 +25,8 @@ export class TimtamInfraStack extends Stack {
     // HTTP API は Web Distribution 作成後に定義して、CORS に CF ドメインを含める
 
     // === DynamoDB table for Media Pipeline ARNs ===
+    // DEPRECATED: Will be removed once transcriptionStart/Stop are updated
+    // Currently kept to avoid breaking existing deployments
     const mediaPipelineTable = new dynamodb.Table(this, 'MediaPipelineTable', {
       tableName: 'timtam-media-pipelines',
       partitionKey: { name: 'meetingId', type: dynamodb.AttributeType.STRING },
@@ -61,44 +63,8 @@ export class TimtamInfraStack extends Stack {
     });
 
     // === S3 bucket for Media Capture Pipeline audio ===
-    const mediaCaptureBucket = new s3.Bucket(this, 'MediaCaptureBucket', {
-      bucketName: `timtam-media-capture-${this.account}-${this.region}`,
-      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-      encryption: s3.BucketEncryption.S3_MANAGED,
-      enforceSSL: true,
-      objectOwnership: s3.ObjectOwnership.BUCKET_OWNER_PREFERRED,
-      lifecycleRules: [
-        {
-          expiration: Duration.days(1), // Auto-delete after 1 day (PoC)
-        },
-      ],
-    });
-
-    // Bucket policy for Chime Media Pipelines service
-    // Based on AWS sample: https://github.com/aws-samples/amazon-chime-media-capture-pipeline-demo
-    // Security conditions prevent confused deputy attacks
-    mediaCaptureBucket.addToResourcePolicy(
-      new iam.PolicyStatement({
-        sid: 'AWSChimeMediaCaptureBucketPolicy',
-        effect: iam.Effect.ALLOW,
-        principals: [new iam.ServicePrincipal('mediapipelines.chime.amazonaws.com')],
-        actions: [
-          's3:PutObject',
-          's3:PutObjectAcl',
-        ],
-        resources: [
-          `${mediaCaptureBucket.bucketArn}/*`,
-        ],
-        conditions: {
-          StringEquals: {
-            'aws:SourceAccount': this.account,
-          },
-          ArnLike: {
-            'aws:SourceArn': `arn:aws:chime:*:${this.account}:*`,
-          },
-        },
-      })
-    );
+    // REMOVED: No longer needed with TranscriptEvent migration
+    // Audio is no longer captured server-side via Media Capture Pipeline
 
     // === Meeting API Lambdas（作成のみ。ルートは後続のTODOで追加） ===
     const createMeetingFn = new NodejsFunction(this, 'CreateMeetingFn', {
@@ -119,11 +85,7 @@ export class TimtamInfraStack extends Stack {
       handler: 'start',
       timeout: Duration.seconds(15),
       runtime: lambda.Runtime.NODEJS_20_X,
-      environment: {
-        PIPELINE_TABLE_NAME: mediaPipelineTable.tableName,
-        CAPTURE_BUCKET_ARN: mediaCaptureBucket.bucketArn,
-        AWS_ACCOUNT_ID: this.account,
-      },
+      // No longer needs Media Pipeline environment variables
     });
 
     const transcriptionStopFn = new NodejsFunction(this, 'TranscriptionStopFn', {
@@ -131,8 +93,16 @@ export class TimtamInfraStack extends Stack {
       handler: 'stop',
       timeout: Duration.seconds(15),
       runtime: lambda.Runtime.NODEJS_20_X,
+      // No longer needs Media Pipeline environment variables
+    });
+
+    // New Lambda for receiving TranscriptEvent from browser
+    const transcriptionEventsFn = new NodejsFunction(this, 'TranscriptionEventsFn', {
+      entry: '../../services/meeting-api/transcriptionEvents.ts',
+      timeout: Duration.seconds(10),
+      runtime: lambda.Runtime.NODEJS_20_X,
       environment: {
-        PIPELINE_TABLE_NAME: mediaPipelineTable.tableName,
+        KINESIS_STREAM_NAME: transcriptStream.streamName,
       },
     });
 
@@ -154,26 +124,8 @@ export class TimtamInfraStack extends Stack {
     transcriptionStartFn.addToRolePolicy(meetingPolicies);
     transcriptionStopFn.addToRolePolicy(meetingPolicies);
 
-    // Media Pipelines permissions for transcription Lambdas
-    const mediaPipelinePolicies = new iam.PolicyStatement({
-      actions: [
-        'chime:CreateMediaCapturePipeline',
-        'chime:DeleteMediaCapturePipeline',
-        'chime:GetMediaCapturePipeline',
-      ],
-      resources: ['*'],
-    });
-    transcriptionStartFn.addToRolePolicy(mediaPipelinePolicies);
-    transcriptionStopFn.addToRolePolicy(mediaPipelinePolicies);
-
-    // Grant DynamoDB access to transcription Lambdas
-    mediaPipelineTable.grantReadWriteData(transcriptionStartFn);
-    mediaPipelineTable.grantReadWriteData(transcriptionStopFn);
-
-    // CRITICAL: Grant Lambda read/write access to capture bucket
-    // Required per AWS sample for CreateMediaCapturePipeline to succeed
-    mediaCaptureBucket.grantReadWrite(transcriptionStartFn);
-    mediaCaptureBucket.grantReadWrite(transcriptionStopFn);
+    // Grant Kinesis write permission to transcriptionEvents Lambda
+    transcriptStream.grantWrite(transcriptionEventsFn);
 
     // Ensure the Chime transcription service-linked role exists in this account
     // Required for Amazon Chime SDK live transcription with Amazon Transcribe
@@ -182,49 +134,9 @@ export class TimtamInfraStack extends Stack {
       description: 'Service-linked role for Amazon Chime transcription',
     });
 
-    // Ensure the Chime Media Pipelines service-linked role exists in this account
-    // Required for Amazon Chime SDK Media Pipelines to access S3
-    new iam.CfnServiceLinkedRole(this, 'ChimeMediaPipelinesSlr', {
-      awsServiceName: 'mediapipelines.chime.amazonaws.com',
-      description: 'Service-linked role for Amazon Chime Media Pipelines',
-    });
-
-    // === Audio Consumer Lambda (S3 → Transcribe → Kinesis) ===
-    const audioConsumerFn = new NodejsFunction(this, 'AudioConsumerFn', {
-      entry: '../../services/audio-consumer/handler.ts',
-      timeout: Duration.minutes(5), // Audio processing can take time
-      memorySize: 512,
-      runtime: lambda.Runtime.NODEJS_20_X,
-      environment: {
-        KINESIS_STREAM_NAME: transcriptStream.streamName,
-      },
-    });
-
-    // Grant permissions for audio consumer
-    mediaCaptureBucket.grantRead(audioConsumerFn);
-    transcriptStream.grantWrite(audioConsumerFn);
-    audioConsumerFn.addToRolePolicy(
-      new iam.PolicyStatement({
-        actions: [
-          'transcribe:StartTranscriptionJob',
-          'transcribe:GetTranscriptionJob',
-        ],
-        resources: ['*'],
-      })
-    );
-
-    // S3 event notification to trigger audio consumer
-    // Chime Media Capture can write either .wav or .mp4 files depending on configuration
-    mediaCaptureBucket.addEventNotification(
-      s3.EventType.OBJECT_CREATED,
-      new s3n.LambdaDestination(audioConsumerFn),
-      { suffix: '.wav' }
-    );
-    mediaCaptureBucket.addEventNotification(
-      s3.EventType.OBJECT_CREATED,
-      new s3n.LambdaDestination(audioConsumerFn),
-      { suffix: '.mp4' }
-    );
+    // === Audio Consumer Lambda ===
+    // REMOVED: No longer needed with TranscriptEvent migration
+    // Browser now sends transcription events directly to API
 
     // === Orchestrator & TTS Lambdas ===
     const orchestratorFn = new NodejsFunction(this, 'OrchestratorFn', {
@@ -429,9 +341,24 @@ export class TimtamInfraStack extends Stack {
     });
     transcriptionStopRoute.addDependency(transcriptionStopInt);
 
+    // Transcription events integration + route (NEW: for browser TranscriptEvent)
+    const transcriptionEventsInt = new CfnIntegration(this, 'TranscriptionEventsIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(transcriptionEventsFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const transcriptionEventsRoute = new CfnRoute(this, 'TranscriptionEventsRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'POST /meetings/{meetingId}/transcription/events',
+      target: `integrations/${transcriptionEventsInt.ref}`,
+    });
+    transcriptionEventsRoute.addDependency(transcriptionEventsInt);
+
     // Allow API Gateway to invoke these Lambdas
     const sourceArn = `arn:aws:execute-api:${this.region}:${this.account}:${httpApi.ref}/*/*/*`;
-    [createMeetingFn, addAttendeeFn, transcriptionStartFn, transcriptionStopFn].forEach((fn, i) => {
+    [createMeetingFn, addAttendeeFn, transcriptionStartFn, transcriptionStopFn, transcriptionEventsFn].forEach((fn, i) => {
       fn.addPermission(`InvokeByHttpApi${i}`, {
         principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
         sourceArn,
@@ -716,6 +643,7 @@ export class TimtamInfraStack extends Stack {
       destinationBucket: siteBucket,
       distribution: webDistribution,
       distributionPaths: ['/config.js'],
+      prune: false, // Don't delete other files in the bucket
     });
 
     // === CloudFormation Outputs ===

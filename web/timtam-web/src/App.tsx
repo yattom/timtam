@@ -8,7 +8,7 @@ import {
   AudioVideoFacade,
   DeviceChangeObserver,
 } from 'amazon-chime-sdk-js';
-import { addAttendee, createMeeting, getConfig, startTranscription, stopTranscription, getAiMessages, AiMessage, getOrchestratorPrompt, updateOrchestratorPrompt } from './api';
+import { addAttendee, createMeeting, getConfig, startTranscription, stopTranscription, getAiMessages, AiMessage, getOrchestratorPrompt, updateOrchestratorPrompt, sendTranscriptionEvent } from './api';
 
 export function App() {
   const [apiBaseUrl, setApiBaseUrl] = useState<string>('');
@@ -29,7 +29,7 @@ export function App() {
   const [micPermission, setMicPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown');
   // Transcript states
   const [partialText, setPartialText] = useState<string>('');
-  const [finalSegments, setFinalSegments] = useState<{ text: string; at: number }[]>([]);
+  const [finalSegments, setFinalSegments] = useState<{ text: string; at: number; speakerId?: string }[]>([]);
   // AI messages
   const [aiMessages, setAiMessages] = useState<AiMessage[]>([]);
   const [lastAiMessageTimestamp, setLastAiMessageTimestamp] = useState<number>(0);
@@ -201,6 +201,9 @@ export function App() {
     const av = meetingSession.audioVideo;
     audioVideoRef.current = av;
 
+    // Extract meetingId from meeting object to avoid closure capturing empty state
+    const currentMeetingId = meeting.MeetingId;
+
     // Bind speaker output first so remote audio can play even without mic
     if (audioElRef.current) {
       await av.bindAudioElement(audioElRef.current);
@@ -250,12 +253,41 @@ export function App() {
                 text = (alt.Items as any[]).map((it: any) => it?.Content ?? it?.content ?? '').join('');
               }
               if (!text) continue;
+
+              // Extract speaker information from TranscriptEvent
+              // TranscriptEvent Items contain Attendee with attendeeId and externalUserId
+              const items = alt?.Items ?? alt?.items ?? [];
+              let speakerAttendeeId: string | undefined;
+              let speakerExternalUserId: string | undefined;
+
+              if (Array.isArray(items) && items.length > 0) {
+                // Get attendee info from first item (all items in result have same speaker)
+                const firstItem = items[0];
+                const attendeeInfo = firstItem?.Attendee ?? firstItem?.attendee;
+                speakerAttendeeId = attendeeInfo?.AttendeeId ?? attendeeInfo?.attendeeId;
+                speakerExternalUserId = attendeeInfo?.ExternalUserId ?? attendeeInfo?.externalUserId;
+              }
+
+              // Update UI
               if (isPartial) {
                 setPartialText(text);
               } else {
                 // Finalized: append and clear partial if it matches
-                setFinalSegments(prev => [...prev, { text, at: Date.now() }]);
+                setFinalSegments(prev => [...prev, { text, at: Date.now(), speakerId: speakerExternalUserId || speakerAttendeeId }]);
                 setPartialText('');
+              }
+
+              // Send transcription event to server (with speaker info)
+              if (currentMeetingId && text) {
+                sendTranscriptionEvent(
+                  currentMeetingId,
+                  speakerAttendeeId || 'unknown',
+                  speakerExternalUserId,
+                  text,
+                  !isPartial
+                ).catch(err => {
+                  console.error('Failed to send transcription event:', err);
+                });
               }
             }
           } catch {
@@ -280,11 +312,38 @@ export function App() {
                 text = (alt.Items as any[]).map((it: any) => it?.Content ?? it?.content ?? '').join('');
               }
               if (!text) continue;
+
+              // Extract speaker information from fallback event format
+              const items = alt?.Items ?? alt?.items ?? [];
+              let speakerAttendeeId: string | undefined;
+              let speakerExternalUserId: string | undefined;
+
+              if (Array.isArray(items) && items.length > 0) {
+                const firstItem = items[0];
+                const attendeeInfo = firstItem?.Attendee ?? firstItem?.attendee;
+                speakerAttendeeId = attendeeInfo?.AttendeeId ?? attendeeInfo?.attendeeId;
+                speakerExternalUserId = attendeeInfo?.ExternalUserId ?? attendeeInfo?.externalUserId;
+              }
+
+              // Update UI
               if (isPartial) {
                 setPartialText(text);
               } else {
-                setFinalSegments(prev => [...prev, { text, at: Date.now() }]);
+                setFinalSegments(prev => [...prev, { text, at: Date.now(), speakerId: speakerExternalUserId || speakerAttendeeId }]);
                 setPartialText('');
+              }
+
+              // Send transcription event to server (with speaker info)
+              if (currentMeetingId && text) {
+                sendTranscriptionEvent(
+                  currentMeetingId,
+                  speakerAttendeeId || 'unknown',
+                  speakerExternalUserId,
+                  text,
+                  !isPartial
+                ).catch(err => {
+                  console.error('Failed to send transcription event:', err);
+                });
               }
             }
           } catch {}
@@ -568,7 +627,10 @@ export function App() {
               <div style={{ color: '#555' }}>{partialText}<span style={{ opacity: 0.5 }}> ▋</span></div>
             )}
             {[...finalSegments].reverse().map((seg, i) => (
-              <div key={seg.at + '-' + i} style={{ lineHeight: 1.5 }}>{seg.text}</div>
+              <div key={seg.at + '-' + i} style={{ lineHeight: 1.5 }}>
+                {seg.speakerId && <span style={{ color: '#2980b9', fontWeight: 600, marginRight: 8 }}>[{seg.speakerId}]</span>}
+                {seg.text}
+              </div>
             ))}
             {!partialText && finalSegments.length === 0 && (
               <div style={{ color: '#888' }}>ここに文字起こしが表示される（「文字起こし開始」を押して話してみてね）</div>

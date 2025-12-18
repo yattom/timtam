@@ -85,7 +85,7 @@ class TriggerLLM {
 
     const payload: any = {
       messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
-      max_tokens: 200,
+      max_tokens: 500,
       temperature: 0.2,
     };
     if (String(BEDROCK_MODEL_ID).includes('anthropic')) {
@@ -273,7 +273,20 @@ async function runLoop() {
         if (!ev.isFinal) continue; // finalのみ
 
         // final文をウィンドウに追加
-        window.push(ev.text);
+        // Include speaker information if available
+        const speakerPrefix = ev.speakerId ? `[${ev.speakerId}] ` : '';
+        window.push(speakerPrefix + ev.text);
+
+        // Log speaker information for debugging
+        if (ev.speakerId) {
+          console.log(JSON.stringify({
+            type: 'orchestrator.transcript.speaker',
+            meetingId: ev.meetingId,
+            speakerId: ev.speakerId,
+            textLength: ev.text.length,
+            ts: Date.now()
+          }));
+        }
 
         // トリガー判定 (Rate limiting: only call LLM if cooldown has passed)
         const now = Date.now();

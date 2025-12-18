@@ -1,8 +1,10 @@
 # ADR 0008: Chime Media Pipelines for Server-Side Transcription
 
-- Status: Accepted
+- Status: Superseded by TranscriptEvent migration (Issue #8, 2025-12-17)
 - Date: 2025-12-15
 - Owners: timtam PoC チーム
+
+**UPDATE 2025-12-17**: このADRで実装したMedia Capture Pipeline方式は、Issue #8「発言者を特定して促せるようにしたい」対応のため、ChimeSDK TranscriptEventをブラウザ経由でサーバーに送信する方式に移行した。詳細はADR 0009参照。
 
 ## 背景 / Context
 
