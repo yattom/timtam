@@ -8,7 +8,19 @@ import {
   AudioVideoFacade,
   DeviceChangeObserver,
 } from 'amazon-chime-sdk-js';
-import { addAttendee, createMeeting, getConfig, startTranscription, stopTranscription, getAiMessages, AiMessage, getOrchestratorPrompt, updateOrchestratorPrompt, sendTranscriptionEvent } from './api';
+import { addAttendee, createMeeting, getConfig, startTranscription, stopTranscription, getAiMessages, AiMessage, getOrchestratorPrompt, updateOrchestratorPrompt, sendTranscriptionEvent, upsertParticipantProfile, getParticipants, endMeeting } from './api';
+
+const ANIMAL_NAMES = [
+  'ねこ', 'いぬ', 'うさぎ', 'ぞう', 'らいおん', 'きつね', 'たぬき', 'しか', 'さる', 'ごりら',
+  'くま', 'とら', 'かめ', 'ぺんぎん', 'ぱんだ', 'ひつじ', 'やぎ', 'うま', 'しか', 'らくだ',
+  'いるか', 'らっこ', 'かものはし', 'なまけもの', 'ふくろう', 'かえる', 'おっとせい'
+];
+
+const NAME_STORAGE_KEY = 'timtam.displayName';
+
+type FinalSegment = { text: string; at: number; speakerAttendeeId?: string; speakerExternalUserId?: string };
+
+const randomAnimalName = () => ANIMAL_NAMES[Math.floor(Math.random() * ANIMAL_NAMES.length)] || 'どうぶつ';
 
 export function App() {
   const [apiBaseUrl, setApiBaseUrl] = useState<string>('');
@@ -18,6 +30,10 @@ export function App() {
   const [meetingId, setMeetingId] = useState<string>('');
   const [joinMeetingId, setJoinMeetingId] = useState<string>('');
   const [attendeeId, setAttendeeId] = useState<string>('');
+  const [externalUserId, setExternalUserId] = useState<string>('');
+  const [displayName, setDisplayName] = useState<string>('');
+  const [nameMessage, setNameMessage] = useState<string>('');
+  const [meetingEndedAt, setMeetingEndedAt] = useState<number | null>(null);
 
   const [audioInputs, setAudioInputs] = useState<MediaDeviceInfo[]>([]);
   const [audioOutputs, setAudioOutputs] = useState<MediaDeviceInfo[]>([]);
@@ -29,7 +45,8 @@ export function App() {
   const [micPermission, setMicPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown');
   // Transcript states
   const [partialText, setPartialText] = useState<string>('');
-  const [finalSegments, setFinalSegments] = useState<{ text: string; at: number; speakerId?: string }[]>([]);
+  const [finalSegments, setFinalSegments] = useState<FinalSegment[]>([]);
+  const [participantNames, setParticipantNames] = useState<Record<string, string>>({});
   // AI messages
   const [aiMessages, setAiMessages] = useState<AiMessage[]>([]);
   const [lastAiMessageTimestamp, setLastAiMessageTimestamp] = useState<number>(0);
@@ -47,7 +64,22 @@ export function App() {
   const audioVideoRef = useRef<AudioVideoFacade | null>(null);
   const transcriptHandlerRef = useRef<((event: any) => void) | null>(null);
   const aiOutputRef = useRef<HTMLDivElement | null>(null);
+  const participantNamesRef = useRef<Record<string, string>>({});
+  const pendingNameLookupsRef = useRef<Set<string>>(new Set());
   const deviceController = useMemo(() => new DefaultDeviceController(new ConsoleLogger('dc', LogLevel.WARN)), []);
+
+  useEffect(() => {
+    const storedName = (typeof localStorage !== 'undefined') ? localStorage.getItem(NAME_STORAGE_KEY) : null;
+    if (storedName) {
+      setDisplayName(storedName);
+    } else {
+      setDisplayName(randomAnimalName());
+    }
+  }, []);
+
+  useEffect(() => {
+    participantNamesRef.current = participantNames;
+  }, [participantNames]);
 
   useEffect(() => {
     (async () => {
@@ -75,6 +107,118 @@ export function App() {
       }
     })();
   }, [apiBaseUrl]);
+
+  const persistDisplayName = (name: string) => {
+    const trimmed = (name || '').trim();
+    const resolved = trimmed || randomAnimalName();
+    setDisplayName(resolved);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(NAME_STORAGE_KEY, resolved);
+    }
+    return resolved;
+  };
+
+  const updateParticipantNames = (entries: Record<string, string>) => {
+    setParticipantNames((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const [k, v] of Object.entries(entries)) {
+        if (v && next[k] !== v) {
+          next[k] = v;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  };
+
+  const fetchParticipantsByIds = async (ids: (string | undefined)[]) => {
+    if (!meetingId) return;
+    const targets = ids.filter((id): id is string => !!id && !participantNamesRef.current[id]);
+    const uniqueTargets = targets.filter((id) => !pendingNameLookupsRef.current.has(id));
+    if (uniqueTargets.length === 0) return;
+
+    uniqueTargets.forEach((id) => pendingNameLookupsRef.current.add(id));
+    try {
+      const res = await getParticipants(meetingId, uniqueTargets);
+      const updates: Record<string, string> = {};
+      for (const p of res.participants || []) {
+        const label = p.displayName || p.attendeeId || p.externalUserId;
+        if (p.attendeeId) updates[p.attendeeId] = label;
+        if (p.externalUserId) updates[p.externalUserId] = label;
+      }
+      if (Object.keys(updates).length > 0) {
+        updateParticipantNames(updates);
+      }
+    } catch (e) {
+      console.error('Failed to fetch participant names', e);
+    } finally {
+      uniqueTargets.forEach((id) => pendingNameLookupsRef.current.delete(id));
+    }
+  };
+
+  const resolveSpeakerLabel = (seg: FinalSegment) => {
+    for (const id of [seg.speakerAttendeeId, seg.speakerExternalUserId]) {
+      if (id && participantNames[id]) return participantNames[id];
+    }
+    return seg.speakerAttendeeId || seg.speakerExternalUserId;
+  };
+
+  const registerParticipantProfile = async (meetingIdValue: string, attendee: any, nameOverride?: string) => {
+    const attendeeKey: string | undefined = attendee?.AttendeeId || attendee?.attendeeId;
+    const externalUserIdValue: string | undefined = attendee?.ExternalUserId || attendee?.externalUserId;
+    if (!attendeeKey) return;
+
+    const resolvedName = persistDisplayName(nameOverride ?? displayName);
+    updateParticipantNames({
+      [attendeeKey]: resolvedName,
+      ...(externalUserIdValue ? { [externalUserIdValue]: resolvedName } : {}),
+    });
+
+    try {
+      await upsertParticipantProfile(meetingIdValue, {
+        attendeeId: attendeeKey,
+        externalUserId: externalUserIdValue,
+        displayName: resolvedName,
+        startedAt: Date.now(),
+      });
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    }
+  };
+
+  const refreshParticipantDirectory = async (meetingIdValue: string) => {
+    try {
+      const res = await getParticipants(meetingIdValue);
+      const updates: Record<string, string> = {};
+      for (const p of res.participants || []) {
+        const label = p.displayName || p.attendeeId || p.externalUserId;
+        if (p.attendeeId) updates[p.attendeeId] = label;
+        if (p.externalUserId) updates[p.externalUserId] = label;
+      }
+      if (Object.keys(updates).length > 0) updateParticipantNames(updates);
+      if (typeof res.endedAt === 'number') {
+        setMeetingEndedAt(res.endedAt);
+      } else {
+        setMeetingEndedAt(null);
+      }
+    } catch (e) {
+      console.error('Failed to refresh participants', e);
+    }
+  };
+
+  const onSaveDisplayName = async () => {
+    const saved = persistDisplayName(displayName);
+    setNameMessage('名前を保存したよ');
+    setTimeout(() => setNameMessage(''), 2000);
+    if (joined && meetingId && attendeeId) {
+      await registerParticipantProfile(
+        meetingId,
+        { AttendeeId: attendeeId, ExternalUserId: externalUserId },
+        saved
+      );
+    }
+  };
 
   // Poll for AI messages when joined
   useEffect(() => {
@@ -268,12 +412,16 @@ export function App() {
                 speakerExternalUserId = attendeeInfo?.ExternalUserId ?? attendeeInfo?.externalUserId;
               }
 
+              if (speakerAttendeeId || speakerExternalUserId) {
+                fetchParticipantsByIds([speakerAttendeeId, speakerExternalUserId]);
+              }
+
               // Update UI
               if (isPartial) {
                 setPartialText(text);
               } else {
                 // Finalized: append and clear partial if it matches
-                setFinalSegments(prev => [...prev, { text, at: Date.now(), speakerId: speakerExternalUserId || speakerAttendeeId }]);
+                setFinalSegments(prev => [...prev, { text, at: Date.now(), speakerAttendeeId, speakerExternalUserId }]);
                 setPartialText('');
               }
 
@@ -281,7 +429,7 @@ export function App() {
               if (currentMeetingId && text) {
                 sendTranscriptionEvent(
                   currentMeetingId,
-                  speakerAttendeeId || 'unknown',
+                  speakerAttendeeId || speakerExternalUserId || 'unknown',
                   speakerExternalUserId,
                   text,
                   !isPartial
@@ -325,11 +473,15 @@ export function App() {
                 speakerExternalUserId = attendeeInfo?.ExternalUserId ?? attendeeInfo?.externalUserId;
               }
 
+              if (speakerAttendeeId || speakerExternalUserId) {
+                fetchParticipantsByIds([speakerAttendeeId, speakerExternalUserId]);
+              }
+
               // Update UI
               if (isPartial) {
                 setPartialText(text);
               } else {
-                setFinalSegments(prev => [...prev, { text, at: Date.now(), speakerId: speakerExternalUserId || speakerAttendeeId }]);
+                setFinalSegments(prev => [...prev, { text, at: Date.now(), speakerAttendeeId, speakerExternalUserId }]);
                 setPartialText('');
               }
 
@@ -337,7 +489,7 @@ export function App() {
               if (currentMeetingId && text) {
                 sendTranscriptionEvent(
                   currentMeetingId,
-                  speakerAttendeeId || 'unknown',
+                  speakerAttendeeId || speakerExternalUserId || 'unknown',
                   speakerExternalUserId,
                   text,
                   !isPartial
@@ -367,6 +519,10 @@ export function App() {
 
       setMeetingId(createdMeetingId);
       setAttendeeId(createdAttendeeId || '');
+      setExternalUserId(attendeeResp?.attendee?.ExternalUserId || '');
+      setMeetingEndedAt(null);
+      await registerParticipantProfile(createdMeetingId, attendeeResp.attendee);
+      await refreshParticipantDirectory(createdMeetingId);
       await configureAndStart(meetingResp.meeting, attendeeResp.attendee);
     } catch (e: any) {
       setError(e?.message || String(e));
@@ -385,6 +541,10 @@ export function App() {
       if (!meetingObj?.MeetingId) throw new Error('指定の meetingId が見つからないか、取得に失敗した');
       setMeetingId(meetingObj.MeetingId);
       setAttendeeId(createdAttendeeId || '');
+      setExternalUserId(attendeeObj?.ExternalUserId || '');
+      setMeetingEndedAt(null);
+      await registerParticipantProfile(meetingObj.MeetingId, attendeeObj);
+      await refreshParticipantDirectory(meetingObj.MeetingId);
       await configureAndStart(meetingObj, attendeeObj);
     } catch (e: any) {
       setError(e?.message || String(e));
@@ -408,6 +568,9 @@ export function App() {
     setFinalSegments([]);
     setAiMessages([]);
     setLastAiMessageTimestamp(0);
+    setParticipantNames({});
+    participantNamesRef.current = {};
+    setMeetingEndedAt(null);
   };
 
   const onToggleMute = async () => {
@@ -442,6 +605,17 @@ export function App() {
       await stopTranscription(meetingId);
       setTranscribing(false);
       setPartialText('');
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    }
+  };
+
+  const onEndMeeting = async () => {
+    if (!meetingId) return;
+    try {
+      const res = await endMeeting(meetingId);
+      setMeetingEndedAt(res?.endedAt ?? Date.now());
+      setTranscribing(false);
     } catch (e: any) {
       setError(e?.message || String(e));
     }
@@ -518,6 +692,30 @@ export function App() {
         <div style={{ color: 'white', background: '#c0392b', padding: 8, borderRadius: 4, marginBottom: 12 }}>{error}</div>
       )}
 
+      <section style={{ display: 'grid', gap: 8, marginBottom: 16 }}>
+        <h3>あなたの名前</h3>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            type="text"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            placeholder="ひらがなで入力（未入力ならランダム動物名）"
+            style={{ padding: 8, borderRadius: 4, border: '1px solid #ccc', minWidth: 220 }}
+          />
+          <button onClick={onSaveDisplayName}>保存</button>
+          {nameMessage && <span style={{ color: '#27ae60', fontSize: 14 }}>{nameMessage}</span>}
+        </div>
+        <div style={{ color: '#666', fontSize: 13 }}>
+          会議に入るとき、この名前とChimeのattendeeIdをDynamoDBに保存して全員に表示するよ。
+          未入力ならランダムで動物の名前を入れておくね。
+        </div>
+        {meetingEndedAt && (
+          <div style={{ color: '#c0392b', fontSize: 13 }}>
+            この会議は終了済みとして記録されています（{new Date(meetingEndedAt).toLocaleString('ja-JP')}）。
+          </div>
+        )}
+      </section>
+
       <section style={{ display: 'grid', gap: 12, marginBottom: 16 }}>
         {micPermission !== 'granted' && (
           <div style={{ background: '#fffbe6', border: '1px solid #f1c40f', padding: 8, borderRadius: 4 }}>
@@ -570,6 +768,7 @@ export function App() {
               ) : (
                 <button onClick={onStopTranscription}>停止</button>
               )}
+              <button onClick={onEndMeeting} disabled={!!meetingEndedAt}>会議終了を記録</button>
             </>
           )}
         </div>
@@ -628,7 +827,7 @@ export function App() {
             )}
             {[...finalSegments].reverse().map((seg, i) => (
               <div key={seg.at + '-' + i} style={{ lineHeight: 1.5 }}>
-                {seg.speakerId && <span style={{ color: '#2980b9', fontWeight: 600, marginRight: 8 }}>[{seg.speakerId}]</span>}
+                {resolveSpeakerLabel(seg) && <span style={{ color: '#2980b9', fontWeight: 600, marginRight: 8 }}>[{resolveSpeakerLabel(seg)}]</span>}
                 {seg.text}
               </div>
             ))}
