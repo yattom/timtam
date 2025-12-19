@@ -17,6 +17,7 @@ import * as logs from 'aws-cdk-lib/aws-logs';
 import * as kinesis from 'aws-cdk-lib/aws-kinesis';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as fs from 'fs';
+import * as path from 'path';
 
 export class TimtamInfraStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
@@ -720,26 +721,31 @@ export class TimtamInfraStack extends Stack {
     });
 
     // === Web assets deployment ===
-    // Web assets deployment with invalidation (skip if dist not present)
-    const webDistPath = '../../web/timtam-web/dist';
-    if (fs.existsSync(webDistPath)) {
-      new s3deploy.BucketDeployment(this, 'DeployWeb', {
-        sources: [s3deploy.Source.asset(webDistPath)],
-        destinationBucket: siteBucket,
-        distribution: webDistribution,
-        distributionPaths: ['/*'],
-      });
+    // Deploy web assets and runtime config.js together to avoid S3 bucket conflicts
+    const webDistPath = path.join(__dirname, '../../../web/timtam-web/dist');
+
+    // Build check: fail fast if web build is missing
+    if (!fs.existsSync(webDistPath)) {
+      throw new Error(
+        `Web build not found at ${webDistPath}! Run "pnpm build" in web/timtam-web first.`
+      );
     }
 
-    // Deploy runtime config.js with API base URL
-    new s3deploy.BucketDeployment(this, 'DeployConfig', {
+    // Generate runtime config.js using Source.data() to properly resolve CDK tokens at deploy time
+    const configSource = s3deploy.Source.data(
+      'config.js',
+      `window.API_BASE_URL='${apiBaseUrl}';`
+    );
+
+    // Deploy web assets and config.js together
+    new s3deploy.BucketDeployment(this, 'DeployWebsite', {
       sources: [
-        s3deploy.Source.data('config.js', `window.API_BASE_URL='${apiBaseUrl}';`)
+        s3deploy.Source.asset(webDistPath),
+        configSource,
       ],
       destinationBucket: siteBucket,
       distribution: webDistribution,
-      distributionPaths: ['/config.js'],
-      prune: false, // Don't delete other files in the bucket
+      distributionPaths: ['/*'],
     });
 
     // === CloudFormation Outputs ===
