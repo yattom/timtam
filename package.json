@@ -13,8 +13,12 @@
     "cdk:bootstrap": "pnpm --filter timtam-infra cdk bootstrap --profile admin",
     "infra:synth-deploy": "pnpm --filter timtam-infra run synth-deploy",
     "sso:admin": "pnpm --filter timtam-infra run sso:admin",
-    "infra:close": "aws lambda list-functions --query \"Functions[?starts_with(FunctionName, 'TimtamInfraStack-')].FunctionName\" --output text --profile admin | tr '\\t' '\\n' | xargs -I {} aws lambda put-function-concurrency --function-name {} --profile admin --reserved-concurrent-executions 0 > /dev/null",
-    "infra:open": "aws lambda list-functions --query \"Functions[?starts_with(FunctionName, 'TimtamInfraStack-')].FunctionName\" --output text --profile admin | tr '\\t' '\\n' | xargs -I {} aws lambda delete-function-concurrency --function-name {} --profile admin > /dev/null"
+    "infra:close": "pnpm run infra:close:lambda && pnpm run infra:close:cloudfront",
+    "infra:close:lambda": "aws lambda list-functions --query \"Functions[?starts_with(FunctionName, 'TimtamInfraStack-')].FunctionName\" --output text --profile admin | tr '\\t' '\\n' | xargs -I {} aws lambda put-function-concurrency --function-name {} --profile admin --reserved-concurrent-executions 0 > /dev/null",
+    "infra:close:cloudfront": "bash -c 'DIST_ID=$(aws cloudfront list-distributions --profile admin --query \"DistributionList.Items[0].Id\" --output text) && CONFIG_JSON=$(aws cloudfront get-distribution-config --id \"$DIST_ID\" --profile admin) && ETAG=$(echo \"$CONFIG_JSON\" | jq -r \".ETag\") && NEW_CONFIG=$(echo \"$CONFIG_JSON\" | jq \".DistributionConfig.Enabled = false | .DistributionConfig\") && aws cloudfront update-distribution --id \"$DIST_ID\" --if-match \"$ETAG\" --distribution-config \"$NEW_CONFIG\" --profile admin > /dev/null'",
+    "infra:open": "pnpm run infra:open:lambda && pnpm run infra:open:cloudfront",
+    "infra:open:lambda": "aws lambda list-functions --query \"Functions[?starts_with(FunctionName, 'TimtamInfraStack-')].FunctionName\" --output text --profile admin | tr '\\t' '\\n' | xargs -I {} aws lambda delete-function-concurrency --function-name {} --profile admin > /dev/null",
+    "infra:open:cloudfront": "bash -c 'DIST_ID=$(aws cloudfront list-distributions --profile admin --query \"DistributionList.Items[0].Id\" --output text) && CONFIG_JSON=$(aws cloudfront get-distribution-config --id \"$DIST_ID\" --profile admin) && ETAG=$(echo \"$CONFIG_JSON\" | jq -r \".ETag\") && NEW_CONFIG=$(echo \"$CONFIG_JSON\" | jq \".DistributionConfig.Enabled = true | .DistributionConfig\") && aws cloudfront update-distribution --id \"$DIST_ID\" --if-match \"$ETAG\" --distribution-config \"$NEW_CONFIG\" --profile admin > /dev/null'"
 
   }
 }
