@@ -33,32 +33,43 @@ export const upsertParticipant: APIGatewayProxyHandlerV2 = async (event) => {
 
     const now = Date.now();
 
+    // Get current participants map
+    const getResult = await ddb.send(
+      new GetCommand({
+        TableName: MEETINGS_METADATA_TABLE,
+        Key: { meetingId },
+      })
+    );
+
+    const currentParticipants = (getResult.Item?.participants as Record<string, any>) || {};
+
+    // Update or add the participant
+    currentParticipants[attendeeId] = {
+      attendeeId,
+      externalUserId,
+      displayName,
+      updatedAt: now,
+      joinedAt: currentParticipants[attendeeId]?.joinedAt || now,
+    };
+
+    // Write back the updated participants map
     await ddb.send(
       new UpdateCommand({
         TableName: MEETINGS_METADATA_TABLE,
         Key: { meetingId },
         UpdateExpression:
-          'SET #participants = if_not_exists(#participants, :empty), ' +
-          '#participants.#attendeeId = :participant, ' +
+          'SET #participants = :participants, ' +
           '#updatedAt = :now, ' +
           '#startedAt = if_not_exists(#startedAt, :startedAt), ' +
           '#isActive = :active',
         ExpressionAttributeNames: {
           '#participants': 'participants',
-          '#attendeeId': attendeeId,
           '#updatedAt': 'updatedAt',
           '#startedAt': 'startedAt',
           '#isActive': 'isActive',
         },
         ExpressionAttributeValues: {
-          ':empty': {},
-          ':participant': {
-            attendeeId,
-            externalUserId,
-            displayName,
-            updatedAt: now,
-            joinedAt: now,
-          },
+          ':participants': currentParticipants,
           ':now': now,
           ':startedAt': startedAt || now,
           ':active': true,
