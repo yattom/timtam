@@ -104,7 +104,8 @@ export const getParticipants: APIGatewayProxyHandlerV2 = async (event) => {
 
     const participants = Object.values(participantsMap).filter((p: any) => {
       if (!filterIds) return true;
-      return p?.attendeeId && filterIds.includes(p.attendeeId);
+      return (p?.attendeeId && filterIds.includes(p.attendeeId)) ||
+             (p?.externalUserId && filterIds.includes(p.externalUserId));
     });
 
     return json(200, {

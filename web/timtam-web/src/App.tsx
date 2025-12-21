@@ -66,6 +66,7 @@ export function App() {
   const aiOutputRef = useRef<HTMLDivElement | null>(null);
   const participantNamesRef = useRef<Record<string, string>>({});
   const pendingNameLookupsRef = useRef<Set<string>>(new Set());
+  const meetingIdRef = useRef<string>('');
   const deviceController = useMemo(() => new DefaultDeviceController(new ConsoleLogger('dc', LogLevel.WARN)), []);
 
   useEffect(() => {
@@ -80,6 +81,10 @@ export function App() {
   useEffect(() => {
     participantNamesRef.current = participantNames;
   }, [participantNames]);
+
+  useEffect(() => {
+    meetingIdRef.current = meetingId;
+  }, [meetingId]);
 
   useEffect(() => {
     (async () => {
@@ -133,14 +138,14 @@ export function App() {
   };
 
   const fetchParticipantsByIds = async (ids: (string | undefined)[]) => {
-    if (!meetingId) return;
+    if (!meetingIdRef.current) return;
     const targets = ids.filter((id): id is string => !!id && !participantNamesRef.current[id]);
     const uniqueTargets = targets.filter((id) => !pendingNameLookupsRef.current.has(id));
     if (uniqueTargets.length === 0) return;
 
     uniqueTargets.forEach((id) => pendingNameLookupsRef.current.add(id));
     try {
-      const res = await getParticipants(meetingId, uniqueTargets);
+      const res = await getParticipants(meetingIdRef.current, uniqueTargets);
       const updates: Record<string, string> = {};
       for (const p of res.participants || []) {
         const label = p.displayName || p.attendeeId || p.externalUserId;
@@ -518,6 +523,7 @@ export function App() {
       const createdAttendeeId: string | undefined = attendeeResp?.attendee?.AttendeeId;
 
       setMeetingId(createdMeetingId);
+      meetingIdRef.current = createdMeetingId; // Update ref immediately for handlers
       setAttendeeId(createdAttendeeId || '');
       setExternalUserId(attendeeResp?.attendee?.ExternalUserId || '');
       setMeetingEndedAt(null);
@@ -540,6 +546,7 @@ export function App() {
       const createdAttendeeId: string | undefined = attendeeObj?.AttendeeId;
       if (!meetingObj?.MeetingId) throw new Error('指定の meetingId が見つからないか、取得に失敗した');
       setMeetingId(meetingObj.MeetingId);
+      meetingIdRef.current = meetingObj.MeetingId; // Update ref immediately for handlers
       setAttendeeId(createdAttendeeId || '');
       setExternalUserId(attendeeObj?.ExternalUserId || '');
       setMeetingEndedAt(null);
