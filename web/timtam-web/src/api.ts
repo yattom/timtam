@@ -58,6 +58,41 @@ export async function stopTranscription(meetingId: string): Promise<void> {
   if (!res.ok) throw new Error(`transcription stop failed: ${res.status}`);
 }
 
+export type ParticipantProfile = {
+  attendeeId: string;
+  externalUserId?: string;
+  displayName: string;
+  updatedAt?: number;
+};
+
+export async function upsertParticipantProfile(
+  meetingId: string,
+  payload: { attendeeId: string; externalUserId?: string; displayName: string; startedAt?: number }
+): Promise<void> {
+  const res = await fetch(u(`/meetings/${encodeURIComponent(meetingId)}/participants`), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`save participant failed: ${res.status}`);
+}
+
+export async function getParticipants(
+  meetingId: string,
+  attendeeIds?: string[]
+): Promise<{ participants: ParticipantProfile[]; startedAt?: number; endedAt?: number; isActive?: boolean }> {
+  const query = attendeeIds && attendeeIds.length > 0 ? `?attendeeIds=${attendeeIds.map(encodeURIComponent).join(',')}` : '';
+  const res = await fetch(u(`/meetings/${encodeURIComponent(meetingId)}/participants${query}`));
+  if (!res.ok) throw new Error(`get participants failed: ${res.status}`);
+  return res.json();
+}
+
+export async function endMeeting(meetingId: string): Promise<{ endedAt?: number }> {
+  const res = await fetch(u(`/meetings/${encodeURIComponent(meetingId)}/end`), { method: 'POST' });
+  if (!res.ok) throw new Error(`end meeting failed: ${res.status}`);
+  return res.json();
+}
+
 export async function sendTranscriptionEvent(
   meetingId: string,
   attendeeId: string,

@@ -17,6 +17,7 @@ import * as logs from 'aws-cdk-lib/aws-logs';
 import * as kinesis from 'aws-cdk-lib/aws-kinesis';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as fs from 'fs';
+import * as path from 'path';
 
 export class TimtamInfraStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
@@ -42,6 +43,14 @@ export class TimtamInfraStack extends Stack {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: this.node.tryGetContext('keepTables') ? undefined : RemovalPolicy.DESTROY,
       timeToLiveAttribute: 'ttl', // Auto-delete old messages
+    });
+
+    // === DynamoDB table for meeting metadata (participants, start/end timestamps) ===
+    const meetingsMetadataTable = new dynamodb.Table(this, 'MeetingsMetadataTable', {
+      tableName: 'timtam-meetings-metadata',
+      partitionKey: { name: 'meetingId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: this.node.tryGetContext('keepTables') ? undefined : RemovalPolicy.DESTROY,
     });
 
     // === DynamoDB table for Orchestrator Configuration ===
@@ -94,6 +103,36 @@ export class TimtamInfraStack extends Stack {
       timeout: Duration.seconds(15),
       runtime: lambda.Runtime.NODEJS_20_X,
       // No longer needs Media Pipeline environment variables
+    });
+
+    const upsertParticipantFn = new NodejsFunction(this, 'UpsertParticipantFn', {
+      entry: '../../services/meeting-api/meetingMetadata.ts',
+      handler: 'upsertParticipant',
+      timeout: Duration.seconds(15),
+      runtime: lambda.Runtime.NODEJS_20_X,
+      environment: {
+        MEETINGS_METADATA_TABLE: meetingsMetadataTable.tableName,
+      },
+    });
+
+    const getParticipantsFn = new NodejsFunction(this, 'GetParticipantsFn', {
+      entry: '../../services/meeting-api/meetingMetadata.ts',
+      handler: 'getParticipants',
+      timeout: Duration.seconds(15),
+      runtime: lambda.Runtime.NODEJS_20_X,
+      environment: {
+        MEETINGS_METADATA_TABLE: meetingsMetadataTable.tableName,
+      },
+    });
+
+    const endMeetingFn = new NodejsFunction(this, 'EndMeetingFn', {
+      entry: '../../services/meeting-api/meetingMetadata.ts',
+      handler: 'endMeeting',
+      timeout: Duration.seconds(15),
+      runtime: lambda.Runtime.NODEJS_20_X,
+      environment: {
+        MEETINGS_METADATA_TABLE: meetingsMetadataTable.tableName,
+      },
     });
 
     // New Lambda for receiving TranscriptEvent from browser
@@ -341,6 +380,52 @@ export class TimtamInfraStack extends Stack {
     });
     transcriptionStopRoute.addDependency(transcriptionStopInt);
 
+    // Meeting metadata routes (participants upsert/list, end meeting)
+    const meetingMetadataInt = new CfnIntegration(this, 'MeetingMetadataIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(upsertParticipantFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+
+    const upsertParticipantRoute = new CfnRoute(this, 'UpsertParticipantRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'POST /meetings/{meetingId}/participants',
+      target: `integrations/${meetingMetadataInt.ref}`,
+    });
+    upsertParticipantRoute.addDependency(meetingMetadataInt);
+
+    const getParticipantsInt = new CfnIntegration(this, 'GetParticipantsIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(getParticipantsFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+
+    const getParticipantsRoute = new CfnRoute(this, 'GetParticipantsRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'GET /meetings/{meetingId}/participants',
+      target: `integrations/${getParticipantsInt.ref}`,
+    });
+    getParticipantsRoute.addDependency(getParticipantsInt);
+
+    const endMeetingInt = new CfnIntegration(this, 'EndMeetingIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(endMeetingFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+
+    const endMeetingRoute = new CfnRoute(this, 'EndMeetingRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'POST /meetings/{meetingId}/end',
+      target: `integrations/${endMeetingInt.ref}`,
+    });
+    endMeetingRoute.addDependency(endMeetingInt);
+
     // Transcription events integration + route (NEW: for browser TranscriptEvent)
     const transcriptionEventsInt = new CfnIntegration(this, 'TranscriptionEventsIntegration', {
       apiId: httpApi.ref,
@@ -358,7 +443,16 @@ export class TimtamInfraStack extends Stack {
 
     // Allow API Gateway to invoke these Lambdas
     const sourceArn = `arn:aws:execute-api:${this.region}:${this.account}:${httpApi.ref}/*/*/*`;
-    [createMeetingFn, addAttendeeFn, transcriptionStartFn, transcriptionStopFn, transcriptionEventsFn].forEach((fn, i) => {
+    [
+      createMeetingFn,
+      addAttendeeFn,
+      transcriptionStartFn,
+      transcriptionStopFn,
+      transcriptionEventsFn,
+      upsertParticipantFn,
+      getParticipantsFn,
+      endMeetingFn,
+    ].forEach((fn, i) => {
       fn.addPermission(`InvokeByHttpApi${i}`, {
         principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
         sourceArn,
@@ -458,6 +552,9 @@ export class TimtamInfraStack extends Stack {
       },
     });
     aiMessagesTable.grantReadData(aiMessagesFn);
+    meetingsMetadataTable.grantReadWriteData(upsertParticipantFn);
+    meetingsMetadataTable.grantReadWriteData(endMeetingFn);
+    meetingsMetadataTable.grantReadData(getParticipantsFn);
 
     // Config integration + route (GET /config)
     const configInt = new CfnIntegration(this, 'ConfigIntegration', {
@@ -624,26 +721,31 @@ export class TimtamInfraStack extends Stack {
     });
 
     // === Web assets deployment ===
-    // Web assets deployment with invalidation (skip if dist not present)
-    const webDistPath = '../../web/timtam-web/dist';
-    if (fs.existsSync(webDistPath)) {
-      new s3deploy.BucketDeployment(this, 'DeployWeb', {
-        sources: [s3deploy.Source.asset(webDistPath)],
-        destinationBucket: siteBucket,
-        distribution: webDistribution,
-        distributionPaths: ['/*'],
-      });
+    // Deploy web assets and runtime config.js together to avoid S3 bucket conflicts
+    const webDistPath = path.join(__dirname, '../../../web/timtam-web/dist');
+
+    // Build check: fail fast if web build is missing
+    if (!fs.existsSync(webDistPath)) {
+      throw new Error(
+        `Web build not found at ${webDistPath}! Run "pnpm build" in web/timtam-web first.`
+      );
     }
 
-    // Deploy runtime config.js with API base URL
-    new s3deploy.BucketDeployment(this, 'DeployConfig', {
+    // Generate runtime config.js using Source.data() to properly resolve CDK tokens at deploy time
+    const configSource = s3deploy.Source.data(
+      'config.js',
+      `window.API_BASE_URL='${apiBaseUrl}';`
+    );
+
+    // Deploy web assets and config.js together
+    new s3deploy.BucketDeployment(this, 'DeployWebsite', {
       sources: [
-        s3deploy.Source.data('config.js', `window.API_BASE_URL='${apiBaseUrl}';`)
+        s3deploy.Source.asset(webDistPath),
+        configSource,
       ],
       destinationBucket: siteBucket,
       distribution: webDistribution,
-      distributionPaths: ['/config.js'],
-      prune: false, // Don't delete other files in the bucket
+      distributionPaths: ['/*'],
     });
 
     // === CloudFormation Outputs ===
