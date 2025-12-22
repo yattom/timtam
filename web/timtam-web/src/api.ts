@@ -149,3 +149,38 @@ export async function updateOrchestratorPrompt(prompt: string): Promise<void> {
     throw new Error(errorData.error || `update orchestrator prompt failed: ${res.status}`);
   }
 }
+
+export type MultiPromptConfig = {
+  config: any;
+  updatedAt: number;
+};
+
+export async function getMultiPromptConfig(): Promise<MultiPromptConfig> {
+  const res = await fetch(u('/orchestrator/multi-prompt-config'));
+  if (!res.ok) throw new Error(`get multi-prompt config failed: ${res.status}`);
+  return res.json();
+}
+
+export async function updateMultiPromptConfig(config: any): Promise<void> {
+  const res = await fetch(u('/orchestrator/multi-prompt-config'), {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ config }),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || `update multi-prompt config failed: ${res.status}`);
+  }
+}
+
+export type PromptStates = {
+  meetingId: string;
+  states: Record<string, any>;
+  timestamp: number;
+};
+
+export async function getPromptStates(meetingId: string): Promise<PromptStates> {
+  const res = await fetch(u(`/orchestrator/prompt-states/${encodeURIComponent(meetingId)}`));
+  if (!res.ok) throw new Error(`get prompt states failed: ${res.status}`);
+  return res.json();
+}

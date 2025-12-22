@@ -9,6 +9,7 @@ import {
   DeviceChangeObserver,
 } from 'amazon-chime-sdk-js';
 import { addAttendee, createMeeting, getConfig, startTranscription, stopTranscription, getAiMessages, AiMessage, getOrchestratorPrompt, updateOrchestratorPrompt, sendTranscriptionEvent, upsertParticipantProfile, getParticipants, endMeeting } from './api';
+import { MultiPromptConfig } from './MultiPromptConfig';
 
 const ANIMAL_NAMES = [
   'ねこ', 'いぬ', 'うさぎ', 'ぞう', 'らいおん', 'きつね', 'たぬき', 'しか', 'さる', 'ごりら',
@@ -887,6 +888,10 @@ export function App() {
         <h3>ログ</h3>
         <p style={{ color: '#666' }}>meetingId: {meetingId || '-'} <button onClick={() => navigator.clipboard?.writeText(meetingId)} disabled={!meetingId}>コピー</button></p>
         <p style={{ color: '#666' }}>attendeeId: {attendeeId || '-'}</p>
+      </section>
+
+      <section style={{ marginTop: 24, borderTop: '2px solid #ddd', paddingTop: 16 }}>
+        <MultiPromptConfig meetingId={meetingId} />
       </section>
     </div>
   );
