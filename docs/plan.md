@@ -31,26 +31,6 @@
 
 NOTICE: TODOリストはフラットな箇条書きで、着手順に上から並べること。新しい項目もフラットに、実施順になるよう途中に挿入する。セクションを分けたり階層化するのは禁止。
 
-- [ ] DynamoDB に orchestrator-config テーブル作成（CDK: configKey(PK), prompt, updatedAt）
-- [ ] orchestrator-config テーブルにデフォルトプロンプトを初期化する Lambda 関数作成
-- [ ] Lambda 関数 getPrompt 作成（GET /orchestrator/prompt で現在のプロンプトを返す）
-- [ ] Lambda 関数 updatePrompt 作成（PUT /orchestrator/prompt でプロンプト更新、DynamoDB 保存、SQS 送信）
-- [ ] API Gateway に GET/PUT /orchestrator/prompt ルート追加（CDK）
-- [ ] updatePrompt に SQS 送信権限付与（CDK）
-- [ ] getPrompt/updatePrompt に DynamoDB アクセス権限付与（CDK）
-- [ ] orchestrator worker に CURRENT_PROMPT 変数追加とデフォルト値設定
-- [ ] orchestrator worker の pollControlOnce を拡張してプロンプトメッセージ処理追加
-- [ ] orchestrator worker の TriggerLLM.judge メソッドを CURRENT_PROMPT 使用に変更
-- [ ] orchestrator worker の起動時に DynamoDB から初期プロンプト読み込み処理追加
-- [ ] orchestrator worker の judge メソッドから policy パラメータ削除
-- [ ] orchestrator の環境変数に CONFIG_TABLE_NAME と DEFAULT_PROMPT 追加（CDK）
-- [ ] orchestrator タスクロールに config テーブル読み取り権限追加（CDK）
-- [ ] Web UI の api.ts に getOrchestratorPrompt と updateOrchestratorPrompt 関数追加
-- [ ] Web UI の App.tsx にプロンプト設定セクション追加（textarea、保存ボタン、リセットボタン）
-- [ ] Web UI で起動時に現在のプロンプトを取得して表示
-- [ ] CDK デプロイして DynamoDB テーブルと Lambda 関数を作成
-- [ ] orchestrator Docker イメージ再ビルドとデプロイ
-- [ ] プロンプト更新機能の動作確認（UI → API → SQS → worker → LLM）
 - [ ] IAM リソース絞り込み（Bedrock 推論プロファイル ARN / Polly Voice）
 - [ ] ドキュメント更新（README/AGENTS/クライアント側）: `/config` と `/health` の利用方法を追記
 - [ ] フロントで音声ON/OFF切替と再生
@@ -114,6 +94,26 @@ NOTICE: TODOリストはフラットな箇条書きで、着手順に上から�
 - [x] Orchestrator の Kinesis 購読動作確認（Media Pipelines からのデータ受信）
 - [x] Lambda ランタイムを Node.js 20 に更新（全関数）
 - [x] 介入メッセージを会議チャット欄に表示（自動送出OFF既定）
+- [x] DynamoDB に orchestrator-config テーブル作成（CDK: configKey(PK), prompt, updatedAt）
+- [x] orchestrator-config テーブルにデフォルトプロンプトを初期化する Lambda 関数作成
+- [x] Lambda 関数 getPrompt 作成（GET /orchestrator/prompt で現在のプロンプトを返す）
+- [x] Lambda 関数 updatePrompt 作成（PUT /orchestrator/prompt でプロンプト更新、DynamoDB 保存、SQS 送信）
+- [x] API Gateway に GET/PUT /orchestrator/prompt ルート追加（CDK）
+- [x] updatePrompt に SQS 送信権限付与（CDK）
+- [x] getPrompt/updatePrompt に DynamoDB アクセス権限付与（CDK）
+- [x] orchestrator worker に CURRENT_PROMPT 変数追加とデフォルト値設定
+- [x] orchestrator worker の pollControlOnce を拡張してプロンプトメッセージ処理追加
+- [x] orchestrator worker の TriggerLLM.judge メソッドを CURRENT_PROMPT 使用に変更
+- [x] orchestrator worker の起動時に DynamoDB から初期プロンプト読み込み処理追加
+- [x] orchestrator worker の judge メソッドから policy パラメータ削除
+- [x] orchestrator の環境変数に CONFIG_TABLE_NAME と DEFAULT_PROMPT 追加（CDK）
+- [x] orchestrator タスクロールに config テーブル読み取り権限追加（CDK）
+- [x] Web UI の api.ts に getOrchestratorPrompt と updateOrchestratorPrompt 関数追加
+- [x] Web UI の App.tsx にプロンプト設定セクション追加（textarea、保存ボタン、リセットボタン）
+- [x] Web UI で起動時に現在のプロンプトを取得して表示
+- [x] CDK デプロイして DynamoDB テーブルと Lambda 関数を作成
+- [x] orchestrator Docker イメージ再ビルドとデプロイ
+- [x] プロンプト更新機能の動作確認（UI → API → SQS → worker → LLM）
 
 ## 設計・技術スタック（初期方針）
 - 会議: Amazon Chime SDK（ブラウザクライアント）
