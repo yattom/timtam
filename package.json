@@ -11,6 +11,7 @@
     "cdk:destroy": "pnpm --filter timtam-infra cdk destroy --profile admin",
     "cdk:diff": "pnpm --filter timtam-infra cdk diff --profile admin",
     "cdk:bootstrap": "pnpm --filter timtam-infra cdk bootstrap --profile admin",
+    "cdk:info": "aws cloudfront list-distributions --profile admin --query 'DistributionList.Items[0].[DomainName,Id,Status]' --output table",
     "infra:synth-deploy": "pnpm --filter timtam-infra run synth-deploy",
     "sso:admin": "pnpm --filter timtam-infra run sso:admin",
     "infra:close": "pnpm run infra:close:lambda && pnpm run infra:close:ecs && pnpm run infra:close:cloudfront",
