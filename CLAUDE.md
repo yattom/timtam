@@ -1,4 +1,5 @@
 # Guideline for Claude Code
 
-Refer AGENTS.md as the basic guidelines.
+You must AGENTS.md first before reply anything.
+
 
