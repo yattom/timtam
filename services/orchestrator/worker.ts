@@ -36,6 +36,12 @@ type TriggerResult = {
   message: string;
 };
 
+type JudgeResult = {
+  result: TriggerResult | null;
+  prompt: string;
+  rawResponse: string;
+};
+
 class WindowBuffer {
   private lines: string[] = [];
   constructor(private maxLines: number) {}
@@ -74,7 +80,7 @@ class Metrics {
 
 class TriggerLLM {
   private bedrock = new BedrockRuntimeClient({ region: BEDROCK_REGION });
-  async judge(windowText: string): Promise<TriggerResult | null> {
+  async judge(windowText: string): Promise<JudgeResult> {
     const prompt =
       `以下は会議の直近確定発話です。\n` +
       CURRENT_PROMPT + `\n` +
@@ -100,26 +106,29 @@ class TriggerLLM {
     const start = Date.now();
     const res = await this.bedrock.send(new InvokeModelCommand(req));
     const txt = new TextDecoder().decode(res.body as any);
+    let result: TriggerResult | null = null;
     try {
       const parsed = JSON.parse(txt);
       // Anthropic on Bedrock (messages API) は {content:[{type:'text',text:'...'}]} 形式のことが多い
       // ただし 本PoCではJSONそのものを返すように指示しているため、直接JSONとして解釈できる経路を優先
-      if (parsed && parsed.should_intervene !== undefined) return parsed as TriggerResult;
-      // モデルにより content に入る場合へのフォールバック
-      let embedded = parsed?.content?.[0]?.text;
-      if (typeof embedded === 'string') {
-        // Strip markdown code blocks if present (```json ... ```)
-        embedded = embedded.replace(/^```json\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
-        const e = JSON.parse(embedded);
-        return e as TriggerResult;
+      if (parsed && parsed.should_intervene !== undefined) {
+        result = parsed as TriggerResult;
+      } else {
+        // モデルにより content に入る場合へのフォールバック
+        let embedded = parsed?.content?.[0]?.text;
+        if (typeof embedded === 'string') {
+          // Strip markdown code blocks if present (```json ... ```)
+          embedded = embedded.replace(/^```json\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+          const e = JSON.parse(embedded);
+          result = e as TriggerResult;
+        }
       }
     } catch (e) {
       console.warn('LLM parse failed', (e as any)?.message, txt);
-      return null;
     } finally {
       metrics.putLatencyMetric('LLM.InvokeLatency', Date.now() - start);
     }
-    return null;
+    return { result, prompt, rawResponse: txt };
   }
 }
 
@@ -163,6 +172,47 @@ class Notifier {
       });
       // Still log to CloudWatch as fallback
       console.log(JSON.stringify({ type: 'chat.post', meetingId, message, ts: timestamp }));
+    }
+  }
+
+  async postLlmCallLog(meetingId: string, prompt: string, rawResponse: string, nodeId: string = 'default') {
+    const timestamp = Date.now();
+    const ttl = Math.floor(timestamp / 1000) + 86400; // Expire after 24 hours
+
+    const logData = {
+      nodeId,
+      prompt,
+      rawResponse,
+      timestamp,
+    };
+
+    try {
+      await this.ddb.send(
+        new PutCommand({
+          TableName: AI_MESSAGES_TABLE,
+          Item: {
+            meetingId,
+            timestamp,
+            message: JSON.stringify(logData),
+            ttl,
+            type: 'llm_call',
+          },
+        })
+      );
+      console.log(JSON.stringify({
+        type: 'llm_call.logged',
+        meetingId,
+        nodeId,
+        promptLength: prompt.length,
+        responseLength: rawResponse.length,
+        timestamp,
+      }));
+    } catch (err: any) {
+      console.error('Failed to store LLM call log', {
+        error: err?.message || err,
+        meetingId,
+        nodeId,
+      });
     }
   }
 }
@@ -293,12 +343,15 @@ async function runLoop() {
         if (now - lastLLMCallTime >= LLM_COOLDOWN_MS) {
           const winText = window.content();
           const judgeStart = Date.now();
-          const res = await trigger.judge(winText);
+          const judgeResult = await trigger.judge(winText);
           lastLLMCallTime = Date.now();
           await metrics.putLatencyMetric('ASRToDecisionLatency', Date.now() - (ev.timestamp || judgeStart));
 
-          if (res && res.should_intervene) {
-            await notifier.postChat(ev.meetingId, res.message);
+          // Log LLM call (prompt and response)
+          await notifier.postLlmCallLog(ev.meetingId, judgeResult.prompt, judgeResult.rawResponse);
+
+          if (judgeResult.result && judgeResult.result.should_intervene) {
+            await notifier.postChat(ev.meetingId, judgeResult.result.message);
           }
         } else {
           console.log(JSON.stringify({
