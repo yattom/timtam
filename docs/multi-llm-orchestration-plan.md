@@ -86,84 +86,78 @@ edges:
    - PerformanceMetrics: レイテンシ・トークン使用量
 2. **TranscriptAnalysis** - トランスクリプトと結果の対比ビュー
 
-## 実装ステップ
+## 実装ステップ（段階的アプローチ）
 
-### Phase 1: インフラ構築
-1. 新規DynamoDBテーブル作成（workflows, executions）
-   - **変更ファイル**: `/home/yattom/work/timtam/infra/cdk/lib/stack.ts`
-2. デフォルトワークフロー（既存プロンプトのYAML変換版）をシード
-3. 機能フラグ追加（`use_multi_llm_orchestrator: boolean`）
+モニタリングUIから始め、小さな機能を1つずつ追加して動作確認しながら進める。各ステップでE2E（バックエンド→API→フロントエンド）の変更を行い、ユーザーが実際に動くものを確認できるようにする。
 
-### Phase 2: コア実装
-1. YAML解析・検証
-   - **新規ファイル**:
-     - `services/orchestrator/WorkflowDefinition.ts`
-     - `services/orchestrator/schema.json`
-2. 時系列メモストア
-   - **新規ファイル**: `services/orchestrator/TemporalNotesStore.ts`
-3. ノードエグゼキュータ
-   - **新規ファイル**:
-     - `services/orchestrator/executors/BaseExecutor.ts`
-     - `services/orchestrator/executors/LLMNodeExecutor.ts`
-     - `services/orchestrator/executors/LogicNodeExecutor.ts`
-4. トリガーマネージャー
-   - **新規ファイル**: `services/orchestrator/TriggerManager.ts`
-5. オーケストレーターエンジン
-   - **新規ファイル**: `services/orchestrator/OrchestratorEngine.ts`
+### Step 1: LLM呼び出しログの可視化
+**目的**: 現在のシステムがどうLLMを呼んでいるか見えるようにする
 
-### Phase 3: ワーカー統合
-1. worker.tsの拡張
+1. worker.tsでLLM呼び出し時にプロンプトとレスポンスをDynamoDBに保存（type: 'llm_call'）
    - **変更ファイル**: `services/orchestrator/worker.ts`
-   - 既存TriggerLLMをOrchestratorEngineで置き換え
-   - 機能フラグによるデュアルモード運用
-2. 単体テスト・統合テスト作成
-   - **新規ファイル**: `services/orchestrator/test/*.test.ts`
+   - 既存の`timtam-ai-messages`テーブルを利用
+2. App.tsxでLLM呼び出しログを表示するUI追加（折りたたみ可能）
+   - **変更ファイル**: `web/timtam-web/src/App.tsx`
+   - 既存の`getAiMessages` APIを流用
 
-### Phase 4: API実装
-1. ワークフロー管理エンドポイント
-   - **新規ファイル**:
-     - `services/orchestrator-api/workflows.ts` (GET/PUT/DELETE /orchestrator/workflows)
-     - `services/orchestrator-api/executions.ts` (GET /orchestrator/executions/{meetingId})
-     - `services/orchestrator-api/notes.ts` (GET /orchestrator/notes/{meetingId})
-2. APIルート追加
+**確認できること**: ブラウザで会議中にLLMが呼ばれたときの完全なプロンプトと生レスポンスが見える
+
+### Step 2: 2つのLLM並列実行
+**目的**: 複数のLLMが協調動作する基礎を作る
+
+1. worker.tsに2つ目のLLM呼び出しを追加（ハードコード、異なるプロンプト）
+   - **変更ファイル**: `services/orchestrator/worker.ts`
+   - 例: 1つ目は抽象度監視、2つ目は発言回数カウント
+2. 2つのLLMが並列実行されるように実装
+3. 各LLMの結果をチャットに表示
+
+**確認できること**: 2つのLLMが異なる観点から会議を監視し、それぞれコメントする
+
+### Step 3: モニタリングUI改善
+**目的**: 複数LLMの動作を時系列で理解できるようにする
+
+1. App.tsxでLLM呼び出しログを時系列で表示するUI改善
+   - **変更ファイル**: `web/timtam-web/src/App.tsx`
+2. どのLLMがいつ呼ばれたか区別できるようにする（ノードID表示）
+
+**確認できること**: タイムラインで各LLMの実行タイミングと結果が一覧できる
+
+### Step 4: メモ機能の導入
+**目的**: LLM間でメモを共有し、より高度な連携を実現
+
+1. TemporalNotesStore実装（インメモリKVストア）
+   - **新規ファイル**: `services/orchestrator/TemporalNotesStore.ts`
+2. 1つ目のLLMがメモに書き込む処理を追加
+   - **変更ファイル**: `services/orchestrator/worker.ts`
+3. 2つ目のLLMがメモを読んでプロンプトに埋め込む処理を追加
+4. メモの状態をUIで表示（NotesInspectorコンポーネント）
+   - **新規ファイル**: `web/timtam-web/src/components/NotesInspector.tsx`
+   - API追加が必要な場合は追加
+
+**確認できること**: 1つ目のLLMがカウントした値を2つ目のLLMが読んで判断に使う、などの連携動作
+
+### Step 5: YAML設定化
+**目的**: ハードコードされたワークフローを設定ファイル化し、柔軟に変更可能にする
+
+1. YAML解析・検証の実装
+   - **新規ファイル**: `services/orchestrator/WorkflowDefinition.ts`
+2. ハードコードしたワークフローをYAMLファイル化
+   - **新規ファイル**: `docs/examples/dual-llm-workflow.yaml`
+3. DynamoDBにワークフロー定義を保存
+   - **新規テーブル**: `timtam-orchestrator-workflows`
    - **変更ファイル**: `infra/cdk/lib/stack.ts`
+4. worker.tsをYAML駆動に変更
+   - **変更ファイル**: `services/orchestrator/worker.ts`
 
-### Phase 5: モニタリングUI
-1. コンポーネント作成
-   - **新規ファイル**:
-     - `web/timtam-web/src/components/OrchestratorMonitor.tsx`
-     - `web/timtam-web/src/components/ExecutionTimeline.tsx`
-     - `web/timtam-web/src/components/NotesInspector.tsx`
-     - `web/timtam-web/src/components/WorkflowGraph.tsx`
-     - `web/timtam-web/src/components/PerformanceMetrics.tsx`
-2. 既存UIへの統合
-   - **変更ファイル**:
-     - `web/timtam-web/src/App.tsx` (OrchestratorMonitor組み込み)
-     - `web/timtam-web/src/api.ts` (APIクライアント拡張)
+**確認できること**: YAMLを編集してワークフロー定義を変更できる
 
-### Phase 6: トランスクリプト分析ビュー
-1. トランスクリプトAPI
-   - **新規ファイル**: `services/meeting-api/transcript.ts` (GET /meetings/{id}/transcript)
-2. 分析コンポーネント
-   - **新規ファイル**: `web/timtam-web/src/components/TranscriptAnalysis.tsx`
-
-### Phase 7: ドキュメント・サンプル
-1. YAMLスキーマドキュメント
-   - **新規ファイル**: `docs/workflow-schema.md`
-2. サンプルワークフロー
-   - **新規ファイル**:
-     - `docs/examples/abstraction-monitor.yaml`
-     - `docs/examples/groupthink-detector.yaml`
-     - `docs/examples/question-counter.yaml`
-3. ファシリテーターガイド
-   - **新規ファイル**: `docs/facilitator-guide.md`
-
-### Phase 8: デプロイ・ロールアウト
-1. CDKデプロイ（インフラ更新）
-2. Dockerイメージリビルド（orchestrator）
-3. ECSサービス更新
-4. Webアプリビルド・デプロイ
-5. テストミーティングで段階的有効化
+### 将来の拡張（Step 6以降）
+- ワークフローグラフ可視化（WorkflowGraph コンポーネント）
+- トリガー・条件の高度化（TriggerManager）
+- ロジックノード対応（LogicNodeExecutor）
+- トランスクリプト分析ビュー（TranscriptAnalysis）
+- パフォーマンスメトリクス（PerformanceMetrics）
+- ワークフロー管理UI（作成・編集・削除）
 
 ## 主要な技術的決定
 
