@@ -799,14 +799,47 @@ export function App() {
             }}
           >
             <div style={{ display: 'grid', gap: 8 }}>
-              {aiMessages.map((msg, i) => (
-                <div key={msg.timestamp + '-' + i} style={{ padding: 8, background: '#e6f3ff', borderRadius: 4, borderLeft: '3px solid #2980b9' }}>
-                  <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>
-                    {new Date(msg.timestamp).toLocaleTimeString('ja-JP')}
-                  </div>
-                  <div style={{ lineHeight: 1.5 }}>{msg.message}</div>
-                </div>
-              ))}
+              {aiMessages.map((msg, i) => {
+                if (msg.type === 'llm_call') {
+                  // LLM呼び出しログ
+                  let logData: any = {};
+                  try {
+                    logData = JSON.parse(msg.message);
+                  } catch {}
+
+                  return (
+                    <details key={msg.timestamp + '-' + i} style={{ padding: 8, background: '#fff9e6', borderRadius: 4, borderLeft: '3px solid #f39c12' }}>
+                      <summary style={{ cursor: 'pointer', fontSize: 12, color: '#666', marginBottom: 4 }}>
+                        🔍 LLM Call - {new Date(msg.timestamp).toLocaleTimeString('ja-JP')} - Node: {logData.nodeId || 'default'}
+                      </summary>
+                      <div style={{ marginTop: 8, fontSize: 13 }}>
+                        <div style={{ marginBottom: 8 }}>
+                          <strong>Prompt:</strong>
+                          <pre style={{ whiteSpace: 'pre-wrap', background: '#f5f5f5', padding: 8, borderRadius: 4, fontSize: 12, marginTop: 4 }}>
+                            {logData.prompt || '(empty)'}
+                          </pre>
+                        </div>
+                        <div>
+                          <strong>Raw Response:</strong>
+                          <pre style={{ whiteSpace: 'pre-wrap', background: '#f5f5f5', padding: 8, borderRadius: 4, fontSize: 12, marginTop: 4 }}>
+                            {logData.rawResponse || '(empty)'}
+                          </pre>
+                        </div>
+                      </div>
+                    </details>
+                  );
+                } else {
+                  // AI介入メッセージ
+                  return (
+                    <div key={msg.timestamp + '-' + i} style={{ padding: 8, background: '#e6f3ff', borderRadius: 4, borderLeft: '3px solid #2980b9' }}>
+                      <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>
+                        {new Date(msg.timestamp).toLocaleTimeString('ja-JP')}
+                      </div>
+                      <div style={{ lineHeight: 1.5 }}>{msg.message}</div>
+                    </div>
+                  );
+                }
+              })}
               {aiMessages.length === 0 && (
                 <div style={{ color: '#888' }}>AIアシスタントからのメッセージがここに表示される</div>
               )}
