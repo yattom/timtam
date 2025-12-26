@@ -48,6 +48,14 @@ type GraspConfig = {
   inputLength?: number; // undefined = 全部、数値 = 最新N行
   cooldownMs: number;
   outputHandler: 'chat' | 'note' | 'both';
+  noteTag?: string;  // 'note' または 'both' の場合、このタグでメモを保存
+};
+
+type Note = {
+  tag: string;        // メモの種類（例: 'participant-mood', 'topic-summary'）
+  content: string;    // メモの内容
+  timestamp: number;  // 作成時刻
+  createdBy: string;  // 作成した Grasp の nodeId
 };
 
 class WindowBuffer {
@@ -63,6 +71,75 @@ class WindowBuffer {
     }
     const start = Math.max(0, this.lines.length - lastN);
     return this.lines.slice(start).join('\n');
+  }
+}
+
+class Notebook {
+  private meetingId: string;
+  private notes: Note[] = [];
+
+  constructor(meetingId: string) {
+    this.meetingId = meetingId;
+  }
+
+  addNote(tag: string, content: string, createdBy: string): void {
+    this.notes.push({
+      tag,
+      content,
+      timestamp: Date.now(),
+      createdBy
+    });
+    console.log(JSON.stringify({
+      type: 'notebook.note.added',
+      meetingId: this.meetingId,
+      tag,
+      createdBy,
+      contentLength: content.length,
+      totalNotes: this.notes.length,
+      ts: Date.now()
+    }));
+  }
+
+  getNotesByTag(tag: string): Note[] {
+    return this.notes.filter(note => note.tag === tag);
+  }
+
+  getLatestNoteByTag(tag: string): Note | null {
+    const notes = this.getNotesByTag(tag);
+    return notes.length > 0 ? notes[notes.length - 1] : null;
+  }
+
+  getAllNotes(): Note[] {
+    return [...this.notes];
+  }
+
+  getMeetingId(): string {
+    return this.meetingId;
+  }
+}
+
+class NotesStore {
+  private notebooks: Map<string, Notebook> = new Map();
+
+  getNotebook(meetingId: string): Notebook {
+    if (!this.notebooks.has(meetingId)) {
+      this.notebooks.set(meetingId, new Notebook(meetingId));
+      console.log(JSON.stringify({
+        type: 'notebook.created',
+        meetingId,
+        ts: Date.now()
+      }));
+    }
+    return this.notebooks.get(meetingId)!;
+  }
+
+  clearNotebook(meetingId: string): void {
+    this.notebooks.delete(meetingId);
+    console.log(JSON.stringify({
+      type: 'notebook.cleared',
+      meetingId,
+      ts: Date.now()
+    }));
   }
 }
 
@@ -241,6 +318,7 @@ class Grasp {
     meetingId: string,
     notifier: Notifier,
     metrics: Metrics,
+    notebook: Notebook,
     asrTimestamp?: number  // ASR イベントのタイムスタンプ（E2E レイテンシ測定用）
   ): Promise<void> {
     const startTime = Date.now();
@@ -264,10 +342,16 @@ class Grasp {
 
       // 出力処理
       if (result.result && result.result.should_intervene) {
+        // チャットへの投稿
         if (this.config.outputHandler === 'chat' || this.config.outputHandler === 'both') {
           await notifier.postChat(meetingId, result.result.message);
         }
-        // 'note' の処理は後で実装
+
+        // ノートへの記録
+        if (this.config.outputHandler === 'note' || this.config.outputHandler === 'both') {
+          const tag = this.config.noteTag || this.config.nodeId;  // デフォルトは nodeId
+          notebook.addNote(tag, result.result.message, this.config.nodeId);
+        }
       }
 
       const now = Date.now();
@@ -301,6 +385,7 @@ const triggerLlm = new TriggerLLM();
 const notifier = new Notifier();
 const metrics = new Metrics();
 const sqs = new SQSClient({});
+const notesStore = new NotesStore();
 
 // Grasp インスタンス（各LLM呼び出しの設定）
 const judgeGrasp = new Grasp(
@@ -454,9 +539,10 @@ async function runLoop() {
 
         // 各 Grasp を実行（それぞれが独自のクールダウンを持つ）
         const now = Date.now();
+        const notebook = notesStore.getNotebook(ev.meetingId);
         for (const grasp of grasps) {
           if (grasp.shouldExecute(now)) {
-            await grasp.execute(window, ev.meetingId, notifier, metrics, ev.timestamp);
+            await grasp.execute(window, ev.meetingId, notifier, metrics, notebook, ev.timestamp);
           }
         }
         consecutiveErrors = 0;
