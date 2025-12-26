@@ -44,7 +44,7 @@ type JudgeResult = {
 
 type GraspConfig = {
   nodeId: string;
-  promptTemplate: string | ((input: string) => string);
+  promptTemplate: string | ((input: string, notebook?: Notebook) => string);
   inputLength?: number; // undefined = 全部、数値 = 最新N行
   cooldownMs: number;
   outputHandler: 'chat' | 'note' | 'both';
@@ -329,9 +329,9 @@ class Grasp {
         ? windowBuffer.content(this.config.inputLength)
         : windowBuffer.content();
 
-      // プロンプトを生成
+      // プロンプトを生成（notebook を渡して、他の Grasp のメモにアクセス可能にする）
       const prompt = typeof this.config.promptTemplate === 'function'
-        ? this.config.promptTemplate(inputText)
+        ? this.config.promptTemplate(inputText, notebook)
         : this.config.promptTemplate + '\n---\n' + inputText;
 
       // LLM呼び出し
@@ -421,8 +421,62 @@ const toneObserverGrasp = new Grasp(
   triggerLlm
 );
 
+// テスト用: 参加者の雰囲気を観察してノートに記録
+const moodGrasp = new Grasp(
+  {
+    nodeId: 'mood-observer',
+    promptTemplate: (input: string) =>
+      `以下は会議の直近確定発話です。\n` +
+      `参加者の雰囲気や感情を観察してください。\n` +
+      `例えば: 活発、落ち着いている、緊張している、議論が白熱している、など。\n` +
+      `\n` +
+      '観察結果を次のJSON形式だけを厳密に返してください:\n' +
+      '{"should_intervene": true, "reason": "観察理由", "message": "雰囲気の簡潔な説明"}\n' +
+      '---\n' + input,
+    inputLength: WINDOW_LINES,
+    cooldownMs: 30000, // 30秒に1回
+    outputHandler: 'note',
+    noteTag: 'participant-mood',
+  },
+  triggerLlm
+);
+
+// テスト用: 雰囲気メモを読み込んで、それに基づいて介入
+const moodBasedInterventionGrasp = new Grasp(
+  {
+    nodeId: 'mood-based-intervention',
+    promptTemplate: (input: string, notebook?: Notebook) => {
+      let moodContext = '';
+      if (notebook) {
+        const moodNotes = notebook.getNotesByTag('participant-mood');
+        if (moodNotes.length > 0) {
+          // 最新3件のメモを取得
+          const recentMoods = moodNotes.slice(-3).map(note =>
+            `[${new Date(note.timestamp).toLocaleTimeString()}] ${note.content}`
+          ).join('\n');
+          moodContext = `\n\n【これまでの雰囲気観察】\n${recentMoods}\n`;
+        }
+      }
+
+      return (
+        `以下は会議の直近確定発話です。\n` +
+        `これまでの雰囲気観察を踏まえて、必要に応じて会議の進行をサポートしてください。\n` +
+        moodContext +
+        `\n` +
+        '介入が必要かを判断し、次のJSON形式だけを厳密に返してください:\n' +
+        '{"should_intervene": boolean, "reason": string, "message": string}\n' +
+        '---\n' + input
+      );
+    },
+    inputLength: WINDOW_LINES,
+    cooldownMs: 45000, // 45秒に1回
+    outputHandler: 'chat',
+  },
+  triggerLlm
+);
+
 // すべての Grasp のリスト（新しい Grasp はここに追加するだけ）
-const grasps = [judgeGrasp, toneObserverGrasp];
+const grasps = [judgeGrasp, toneObserverGrasp, moodGrasp, moodBasedInterventionGrasp];
 
 async function pollControlOnce() {
   if (!CONTROL_SQS_URL) return;
