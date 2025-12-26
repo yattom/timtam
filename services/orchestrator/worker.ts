@@ -336,6 +336,9 @@ const toneObserverGrasp = new Grasp(
   triggerLlm
 );
 
+// すべての Grasp のリスト（新しい Grasp はここに追加するだけ）
+const grasps = [judgeGrasp, toneObserverGrasp];
+
 async function pollControlOnce() {
   if (!CONTROL_SQS_URL) return;
   try {
@@ -451,15 +454,10 @@ async function runLoop() {
 
         // 各 Grasp を実行（それぞれが独自のクールダウンを持つ）
         const now = Date.now();
-
-        // 介入判定 Grasp（E2E レイテンシ測定のため ASR タイムスタンプを渡す）
-        if (judgeGrasp.shouldExecute(now)) {
-          await judgeGrasp.execute(window, ev.meetingId, notifier, metrics, ev.timestamp);
-        }
-
-        // トーン観察 Grasp（E2E レイテンシ測定のため ASR タイムスタンプを渡す）
-        if (toneObserverGrasp.shouldExecute(now)) {
-          await toneObserverGrasp.execute(window, ev.meetingId, notifier, metrics, ev.timestamp);
+        for (const grasp of grasps) {
+          if (grasp.shouldExecute(now)) {
+            await grasp.execute(window, ev.meetingId, notifier, metrics, ev.timestamp);
+          }
         }
         consecutiveErrors = 0;
       }
