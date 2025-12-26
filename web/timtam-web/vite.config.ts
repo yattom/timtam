@@ -9,4 +9,7 @@ export default defineConfig({
     // Guard against `process.env` lookups in browser bundles.
     'process.env': {},
   },
+  build: {
+    sourcemap: true,
+  },
 });

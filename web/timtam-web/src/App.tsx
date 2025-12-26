@@ -260,9 +260,11 @@ export function App() {
     // Check if user is at the bottom (with 50px tolerance)
     const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50;
 
-    if (isAtBottom) {
-      // Auto-scroll to bottom
-      container.scrollTop = container.scrollHeight;
+    if (!isAtBottom) {
+      // Auto-scroll to bottom after DOM update
+      setTimeout(() => {
+        container.scrollTop = container.scrollHeight;
+      }, 0);
     }
   }, [aiMessages]);
 
@@ -860,24 +862,6 @@ export function App() {
           />
         </div>
 
-        <h3>文字起こし（擬似リアルタイム）</h3>
-        <div style={{ border: '1px solid #ddd', borderRadius: 6, padding: 12, minHeight: 120, background: '#fafafa' }}>
-          <div style={{ display: 'grid', gap: 6 }}>
-            {partialText && (
-              <div style={{ color: '#555' }}>{partialText}<span style={{ opacity: 0.5 }}> ▋</span></div>
-            )}
-            {[...finalSegments].reverse().map((seg, i) => (
-              <div key={seg.at + '-' + i} style={{ lineHeight: 1.5 }}>
-                {resolveSpeakerLabel(seg) && <span style={{ color: '#2980b9', fontWeight: 600, marginRight: 8 }}>[{resolveSpeakerLabel(seg)}]</span>}
-                {seg.text}
-              </div>
-            ))}
-            {!partialText && finalSegments.length === 0 && (
-              <div style={{ color: '#888' }}>ここに文字起こしが表示される（「文字起こし開始」を押して話してみてね）</div>
-            )}
-          </div>
-        </div>
-
         <h3>オーケストレーター設定</h3>
         <div style={{ border: '1px solid #ddd', borderRadius: 6, padding: 12, background: '#fff9f0' }}>
           <div style={{ marginBottom: 8, color: '#666', fontSize: 14 }}>
@@ -913,6 +897,24 @@ export function App() {
               }}>
                 {promptMessage.text}
               </span>
+            )}
+          </div>
+        </div>
+
+        <h3>文字起こし（擬似リアルタイム）</h3>
+        <div style={{ border: '1px solid #ddd', borderRadius: 6, padding: 12, minHeight: 120, background: '#fafafa' }}>
+          <div style={{ display: 'grid', gap: 6 }}>
+            {partialText && (
+              <div style={{ color: '#555' }}>{partialText}<span style={{ opacity: 0.5 }}> ▋</span></div>
+            )}
+            {[...finalSegments].reverse().map((seg, i) => (
+              <div key={seg.at + '-' + i} style={{ lineHeight: 1.5 }}>
+                {resolveSpeakerLabel(seg) && <span style={{ color: '#2980b9', fontWeight: 600, marginRight: 8 }}>[{resolveSpeakerLabel(seg)}]</span>}
+                {seg.text}
+              </div>
+            ))}
+            {!partialText && finalSegments.length === 0 && (
+              <div style={{ color: '#888' }}>ここに文字起こしが表示される（「文字起こし開始」を押して話してみてね）</div>
             )}
           </div>
         </div>
