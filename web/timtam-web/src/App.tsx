@@ -809,6 +809,30 @@ export function App() {
                     logData = JSON.parse(msg.message);
                   } catch {}
 
+                  // Extract and prettify content from raw response
+                  let contentDisplay: string = '(empty)';
+                  try {
+                    const response = JSON.parse(logData.rawResponse);
+                    const contentText = response?.content?.[0]?.text;
+                    if (contentText) {
+                      // Try to extract JSON from markdown code block
+                      const match = contentText.match(/```json\n([\s\S]*?)\n```/);
+                      if (match) {
+                        const jsonContent = JSON.parse(match[1]);
+                        contentDisplay = JSON.stringify(jsonContent, null, 2);
+                      } else {
+                        // If no code block, try to parse directly
+                        try {
+                          const jsonContent = JSON.parse(contentText);
+                          contentDisplay = JSON.stringify(jsonContent, null, 2);
+                        } catch {
+                          // If not JSON, display as is
+                          contentDisplay = contentText;
+                        }
+                      }
+                    }
+                  } catch {}
+
                   return (
                     <details key={msg.timestamp + '-' + i} style={{ padding: 8, background: '#fff9e6', borderRadius: 4, borderLeft: '3px solid #f39c12' }}>
                       <summary style={{ cursor: 'pointer', fontSize: 12, color: '#666', marginBottom: 4 }}>
@@ -821,12 +845,20 @@ export function App() {
                             {logData.prompt || '(empty)'}
                           </pre>
                         </div>
-                        <div>
-                          <strong>Raw Response:</strong>
+                        <div style={{ marginBottom: 8 }}>
+                          <strong>Content:</strong>
+                          <pre style={{ whiteSpace: 'pre-wrap', background: '#f5f5f5', padding: 8, borderRadius: 4, fontSize: 12, marginTop: 4 }}>
+                            {contentDisplay}
+                          </pre>
+                        </div>
+                        <details>
+                          <summary style={{ cursor: 'pointer', fontSize: 12, color: '#888', marginBottom: 4 }}>
+                            Full Raw Response (with envelope)
+                          </summary>
                           <pre style={{ whiteSpace: 'pre-wrap', background: '#f5f5f5', padding: 8, borderRadius: 4, fontSize: 12, marginTop: 4 }}>
                             {logData.rawResponse || '(empty)'}
                           </pre>
-                        </div>
+                        </details>
                       </div>
                     </details>
                   );
