@@ -42,6 +42,14 @@ type JudgeResult = {
   rawResponse: string;
 };
 
+type GraspConfig = {
+  nodeId: string;
+  promptTemplate: string | ((input: string) => string);
+  inputLength?: number; // undefined = 全部、数値 = 最新N行
+  cooldownMs: number;
+  outputHandler: 'chat' | 'note' | 'both';
+};
+
 class WindowBuffer {
   private lines: string[] = [];
   push(line: string) {
@@ -126,30 +134,6 @@ class TriggerLLM {
       metrics.putLatencyMetric(`LLM.${nodeId}.InvokeLatency`, Date.now() - start);
     }
     return { result, prompt, rawResponse: txt };
-  }
-
-  async judge(windowText: string): Promise<JudgeResult> {
-    const prompt =
-      `以下は会議の直近確定発話です。\n` +
-      CURRENT_PROMPT + `\n` +
-      `\n` +
-      '介入が必要かを判断し、次のJSON形式だけを厳密に返してください:\n' +
-      '{"should_intervene": boolean, "reason": string, "message": string}\n' +
-      '---\n' + windowText;
-
-    return this.invoke(prompt, 'judge');
-  }
-
-  async observeTone(windowText: string): Promise<JudgeResult> {
-    const prompt =
-      `以下は会議の確定発話です。\n` +
-      `ここまでの会議の流れを整理してください。` +
-      `\n` +
-      'コメントが必要かを判断し、次のJSON形式だけを厳密に返してください:\n' +
-      '{"should_intervene": boolean, "reason": string, "message": string}\n' +
-      '---\n' + windowText;
-
-    return this.invoke(prompt, 'tone-observer');
   }
 }
 
@@ -238,11 +222,119 @@ class Notifier {
   }
 }
 
+class Grasp {
+  private config: GraspConfig;
+  private lastExecutionTime: number = 0;
+  private llm: TriggerLLM;
+
+  constructor(config: GraspConfig, llm: TriggerLLM) {
+    this.config = config;
+    this.llm = llm;
+  }
+
+  shouldExecute(now: number): boolean {
+    return now - this.lastExecutionTime >= this.config.cooldownMs;
+  }
+
+  async execute(
+    windowBuffer: WindowBuffer,
+    meetingId: string,
+    notifier: Notifier,
+    metrics: Metrics,
+    asrTimestamp?: number  // ASR イベントのタイムスタンプ（E2E レイテンシ測定用）
+  ): Promise<void> {
+    const startTime = Date.now();
+
+    try {
+      // 入力テキストを取得
+      const inputText = this.config.inputLength !== undefined
+        ? windowBuffer.content(this.config.inputLength)
+        : windowBuffer.content();
+
+      // プロンプトを生成
+      const prompt = typeof this.config.promptTemplate === 'function'
+        ? this.config.promptTemplate(inputText)
+        : this.config.promptTemplate + '\n---\n' + inputText;
+
+      // LLM呼び出し
+      const result = await this.llm.invoke(prompt, this.config.nodeId);
+
+      // ログを記録
+      await notifier.postLlmCallLog(meetingId, result.prompt, result.rawResponse, this.config.nodeId);
+
+      // 出力処理
+      if (result.result && result.result.should_intervene) {
+        if (this.config.outputHandler === 'chat' || this.config.outputHandler === 'both') {
+          await notifier.postChat(meetingId, result.result.message);
+        }
+        // 'note' の処理は後で実装
+      }
+
+      const now = Date.now();
+
+      // Grasp 実行レイテンシを記録（全 Grasp 共通）
+      await metrics.putLatencyMetric(`Grasp.${this.config.nodeId}.ExecutionLatency`, now - startTime);
+
+      // ASR → 判定の E2E レイテンシを記録（ASR タイムスタンプがある場合）
+      if (asrTimestamp) {
+        await metrics.putLatencyMetric(`Grasp.${this.config.nodeId}.E2ELatency`, now - asrTimestamp);
+      }
+
+      this.lastExecutionTime = now;
+    } catch (e) {
+      const now = Date.now();
+      console.error(JSON.stringify({
+        type: 'orchestrator.grasp.error',
+        nodeId: this.config.nodeId,
+        error: (e as any)?.message || String(e),
+        errorName: (e as any)?.name,
+        ts: now
+      }));
+      await metrics.putCountMetric(`Grasp.${this.config.nodeId}.Errors`, 1);
+      this.lastExecutionTime = now; // エラーでも時刻を更新してリトライループを防ぐ
+    }
+  }
+}
+
 const kinesis = new KinesisClient({});
-const trigger = new TriggerLLM();
+const triggerLlm = new TriggerLLM();
 const notifier = new Notifier();
 const metrics = new Metrics();
 const sqs = new SQSClient({});
+
+// Grasp インスタンス（各LLM呼び出しの設定）
+const judgeGrasp = new Grasp(
+  {
+    nodeId: 'judge',
+    promptTemplate: (input: string) =>
+      `以下は会議の直近確定発話です。\n` +
+      CURRENT_PROMPT + `\n` +
+      `\n` +
+      '介入が必要かを判断し、次のJSON形式だけを厳密に返してください:\n' +
+      '{"should_intervene": boolean, "reason": string, "message": string}\n' +
+      '---\n' + input,
+    inputLength: WINDOW_LINES,
+    cooldownMs: 5000,
+    outputHandler: 'chat',
+  },
+  triggerLlm
+);
+
+const toneObserverGrasp = new Grasp(
+  {
+    nodeId: 'tone-observer',
+    promptTemplate: (input: string) =>
+      `以下は会議の確定発話です。\n` +
+      `ここまでの会議の流れを整理してください。\n` +
+      `\n` +
+      'コメントが必要かを判断し、次のJSON形式だけを厳密に返してください:\n' +
+      '{"should_intervene": boolean, "reason": string, "message": string}\n' +
+      '---\n' + input,
+    cooldownMs: 60000, // 1分に1回
+    outputHandler: 'chat',
+  },
+  triggerLlm
+);
 
 async function pollControlOnce() {
   if (!CONTROL_SQS_URL) return;
@@ -313,8 +405,6 @@ async function runLoop() {
   const window = new WindowBuffer();
   let consecutiveErrors = 0;
   let loopCount = 0;
-  let lastLLMCallTime = 0;
-  const LLM_COOLDOWN_MS = 5000; // Wait at least 5 seconds between LLM calls
   for (;;) {
     try {
       // control plane (non-blocking)
@@ -359,62 +449,17 @@ async function runLoop() {
           }));
         }
 
-        // トリガー判定 (Rate limiting: only call LLM if cooldown has passed)
+        // 各 Grasp を実行（それぞれが独自のクールダウンを持つ）
         const now = Date.now();
-        if (now - lastLLMCallTime >= LLM_COOLDOWN_MS) {
-          const judgeStart = Date.now();
 
-          // 1つ目のLLM呼び出し: 介入判定（最新5行のみ）
-          try {
-            const judgeResult = await trigger.judge(window.content(WINDOW_LINES));
-            await metrics.putLatencyMetric('ASRToDecisionLatency', Date.now() - (ev.timestamp || judgeStart));
+        // 介入判定 Grasp（E2E レイテンシ測定のため ASR タイムスタンプを渡す）
+        if (judgeGrasp.shouldExecute(now)) {
+          await judgeGrasp.execute(window, ev.meetingId, notifier, metrics, ev.timestamp);
+        }
 
-            // Log LLM call (prompt and response)
-            await notifier.postLlmCallLog(ev.meetingId, judgeResult.prompt, judgeResult.rawResponse, 'judge');
-
-            if (judgeResult.result && judgeResult.result.should_intervene) {
-              await notifier.postChat(ev.meetingId, judgeResult.result.message);
-            }
-          } catch (e) {
-            console.error(JSON.stringify({
-              type: 'orchestrator.llm.error',
-              nodeId: 'judge',
-              error: (e as any)?.message || String(e),
-              errorName: (e as any)?.name,
-              ts: Date.now()
-            }));
-            await metrics.putCountMetric('LLM.judge.Errors', 1);
-          }
-
-          // 2つ目のLLM呼び出し: トーン観察（全ログ）
-          try {
-            const toneResult = await trigger.observeTone(window.content());
-
-            // Log LLM call (prompt and response)
-            await notifier.postLlmCallLog(ev.meetingId, toneResult.prompt, toneResult.rawResponse, 'tone-observer');
-
-            if (toneResult.result && toneResult.result.should_intervene) {
-              await notifier.postChat(ev.meetingId, toneResult.result.message);
-            }
-          } catch (e) {
-            console.error(JSON.stringify({
-              type: 'orchestrator.llm.error',
-              nodeId: 'tone-observer',
-              error: (e as any)?.message || String(e),
-              errorName: (e as any)?.name,
-              ts: Date.now()
-            }));
-            await metrics.putCountMetric('LLM.tone-observer.Errors', 1);
-          }
-
-          lastLLMCallTime = Date.now();
-        } else {
-          console.log(JSON.stringify({
-            type: 'orchestrator.llm.skipped',
-            reason: 'cooldown',
-            timeSinceLastCall: now - lastLLMCallTime,
-            ts: now
-          }));
+        // トーン観察 Grasp（E2E レイテンシ測定のため ASR タイムスタンプを渡す）
+        if (toneObserverGrasp.shouldExecute(now)) {
+          await toneObserverGrasp.execute(window, ev.meetingId, notifier, metrics, ev.timestamp);
         }
         consecutiveErrors = 0;
       }
