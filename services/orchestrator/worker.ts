@@ -20,6 +20,8 @@ let CURRENT_PROMPT = DEFAULT_PROMPT;
 const WINDOW_LINES = Number(process.env.WINDOW_LINES || '5');
 const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS || '500');
 const CONTROL_SQS_URL = process.env.CONTROL_SQS_URL || '';
+const MEETINGS_METADATA_TABLE = process.env.MEETINGS_METADATA_TABLE || 'timtam-meetings-metadata';
+const MEETING_DURATION_MS = Number(process.env.MEETING_DURATION_MS || '3600000'); // デフォルト60分
 
 type AsrEvent = {
   meetingId: string;
@@ -74,10 +76,12 @@ class Metrics {
 
 class TriggerLLM {
   private bedrock = new BedrockRuntimeClient({ region: BEDROCK_REGION });
-  async judge(windowText: string): Promise<TriggerResult | null> {
+  async judge(windowText: string, timeContext?: string): Promise<TriggerResult | null> {
+    const timeContextStr = timeContext ? `\n${timeContext}\n` : '';
     const prompt =
       `以下は会議の直近確定発話です。\n` +
       CURRENT_PROMPT + `\n` +
+      timeContextStr +
       `\n` +
       '介入が必要かを判断し、次のJSON形式だけを厳密に返してください:\n' +
       '{"should_intervene": boolean, "reason": string, "message": string}\n' +
@@ -120,6 +124,89 @@ class TriggerLLM {
       metrics.putLatencyMetric('LLM.InvokeLatency', Date.now() - start);
     }
     return null;
+  }
+}
+
+class MeetingTimeTracker {
+  private ddb: DynamoDBDocumentClient;
+  private meetingStartTime: number | null = null;
+  private lastHalfwayCheck = false;
+
+  constructor() {
+    const ddbClient = new DynamoDBClient({});
+    this.ddb = DynamoDBDocumentClient.from(ddbClient);
+  }
+
+  async loadMeetingStartTime(meetingId: string): Promise<number | null> {
+    try {
+      const result = await this.ddb.send(
+        new GetCommand({
+          TableName: MEETINGS_METADATA_TABLE,
+          Key: { meetingId },
+        })
+      );
+      if (result.Item?.startedAt) {
+        this.meetingStartTime = result.Item.startedAt;
+        console.log(JSON.stringify({
+          type: 'orchestrator.meeting.time.loaded',
+          meetingId,
+          startedAt: this.meetingStartTime,
+          ts: Date.now()
+        }));
+        return this.meetingStartTime;
+      }
+    } catch (e) {
+      console.warn('Failed to load meeting start time', (e as any)?.message);
+    }
+    return null;
+  }
+
+  getElapsedRatio(): number {
+    if (!this.meetingStartTime) return 0;
+    const elapsed = Date.now() - this.meetingStartTime;
+    return Math.min(elapsed / MEETING_DURATION_MS, 1.0);
+  }
+
+  getCooldownMs(): number {
+    const ratio = this.getElapsedRatio();
+    if (ratio < 0.33) {
+      return 10000; // 序盤: 10秒
+    } else if (ratio < 0.66) {
+      return 5000; // 中盤: 5秒
+    } else {
+      return 3000; // 終盤: 3秒
+    }
+  }
+
+  getTimeContext(): string {
+    const ratio = this.getElapsedRatio();
+    const elapsedMin = Math.floor((Date.now() - (this.meetingStartTime || Date.now())) / 60000);
+    const totalMin = Math.floor(MEETING_DURATION_MS / 60000);
+    const remainingMin = Math.max(0, totalMin - elapsedMin);
+
+    if (ratio < 0.33) {
+      return `【会議時間】経過: ${elapsedMin}分 / 予定: ${totalMin}分 (序盤)`;
+    } else if (ratio < 0.66) {
+      return `【会議時間】経過: ${elapsedMin}分 / 予定: ${totalMin}分 / 残り: ${remainingMin}分 (中盤)`;
+    } else {
+      return `【会議時間】経過: ${elapsedMin}分 / 予定: ${totalMin}分 / 残り: ${remainingMin}分 (終盤・時間を意識してください)`;
+    }
+  }
+
+  shouldCheckHalfway(): boolean {
+    const ratio = this.getElapsedRatio();
+    // 半分経過(0.48-0.52の範囲)で一度だけチェック
+    if (ratio >= 0.48 && ratio <= 0.52 && !this.lastHalfwayCheck) {
+      this.lastHalfwayCheck = true;
+      return true;
+    }
+    return false;
+  }
+
+  getHalfwayPrompt(): string {
+    const totalMin = Math.floor(MEETING_DURATION_MS / 60000);
+    const remainingMin = Math.floor(totalMin / 2);
+    return `会議時間が半分経過しました。残り${remainingMin}分で何が行えるか、参加者に確認を促してください。`;
   }
 }
 
@@ -172,6 +259,7 @@ const trigger = new TriggerLLM();
 const notifier = new Notifier();
 const metrics = new Metrics();
 const sqs = new SQSClient({});
+const timeTracker = new MeetingTimeTracker();
 
 async function pollControlOnce() {
   if (!CONTROL_SQS_URL) return;
@@ -203,6 +291,8 @@ async function pollControlOnce() {
         if (parsed.type === 'meetingId' || (parsed.meetingId && !parsed.type)) {
           CURRENT_MEETING_ID = parsed.meetingId;
           console.log(JSON.stringify({ type: 'orchestrator.control.meeting.set', meetingId: CURRENT_MEETING_ID, ts: Date.now() }));
+          // Load meeting start time for time-based intervention
+          await timeTracker.loadMeetingStartTime(CURRENT_MEETING_ID);
         }
       } catch {
         // ignore
@@ -235,15 +325,21 @@ async function runLoop() {
     POLL_INTERVAL_MS,
     WINDOW_LINES,
     STREAM_NAME,
+    MEETING_DURATION_MS,
     ts: Date.now()
   }));
   if (!CURRENT_MEETING_ID) console.warn('CURRENT_MEETING_ID is empty. All events will be processed; set via CONTROL_SQS_URL or MEETING_ID env to restrict.');
+
+  // Load meeting start time if CURRENT_MEETING_ID is set
+  if (CURRENT_MEETING_ID) {
+    await timeTracker.loadMeetingStartTime(CURRENT_MEETING_ID);
+  }
+
   let shardIterator = await getShardIterator(STREAM_NAME);
   const window = new WindowBuffer(WINDOW_LINES);
   let consecutiveErrors = 0;
   let loopCount = 0;
   let lastLLMCallTime = 0;
-  const LLM_COOLDOWN_MS = 5000; // Wait at least 5 seconds between LLM calls
   for (;;) {
     try {
       // control plane (non-blocking)
@@ -288,12 +384,27 @@ async function runLoop() {
           }));
         }
 
+        // 半分経過チェック
+        if (timeTracker.shouldCheckHalfway()) {
+          const halfwayPrompt = timeTracker.getHalfwayPrompt();
+          console.log(JSON.stringify({
+            type: 'orchestrator.meeting.halfway',
+            meetingId: ev.meetingId,
+            ts: Date.now()
+          }));
+          // 半分経過時の特別な介入
+          await notifier.postChat(ev.meetingId, halfwayPrompt);
+        }
+
         // トリガー判定 (Rate limiting: only call LLM if cooldown has passed)
+        // クールダウン時間を経過時間に応じて動的に変更
+        const LLM_COOLDOWN_MS = timeTracker.getCooldownMs();
         const now = Date.now();
         if (now - lastLLMCallTime >= LLM_COOLDOWN_MS) {
           const winText = window.content();
+          const timeContext = timeTracker.getTimeContext();
           const judgeStart = Date.now();
-          const res = await trigger.judge(winText);
+          const res = await trigger.judge(winText, timeContext);
           lastLLMCallTime = Date.now();
           await metrics.putLatencyMetric('ASRToDecisionLatency', Date.now() - (ev.timestamp || judgeStart));
 
@@ -305,6 +416,7 @@ async function runLoop() {
             type: 'orchestrator.llm.skipped',
             reason: 'cooldown',
             timeSinceLastCall: now - lastLLMCallTime,
+            cooldownMs: LLM_COOLDOWN_MS,
             ts: now
           }));
         }
