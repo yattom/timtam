@@ -260,7 +260,7 @@ export function App() {
     // Check if user is at the bottom (with 50px tolerance)
     const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50;
 
-    if (isAtBottom) {
+    if (!isAtBottom) {
       // Auto-scroll to bottom after DOM update
       setTimeout(() => {
         container.scrollTop = container.scrollHeight;
