@@ -786,45 +786,6 @@ export function App() {
       </section>
 
       <section style={{ display: 'grid', gap: 8 }}>
-        <h3>オーケストレーター設定</h3>
-        <div style={{ border: '1px solid #ddd', borderRadius: 6, padding: 12, background: '#fff9f0' }}>
-          <div style={{ marginBottom: 8, color: '#666', fontSize: 14 }}>
-            介入判断プロンプト（会議の直近発話に対してAIが判断する際の指示）:
-          </div>
-          <textarea
-            value={promptEditing}
-            onChange={(e) => setPromptEditing(e.target.value)}
-            rows={4}
-            style={{
-              width: '100%',
-              fontFamily: 'monospace',
-              fontSize: 14,
-              padding: 8,
-              borderRadius: 4,
-              border: '1px solid #ccc',
-              resize: 'vertical'
-            }}
-            disabled={promptSaving}
-          />
-          <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
-            <button onClick={onSavePrompt} disabled={promptSaving || promptEditing === orchestratorPrompt}>
-              {promptSaving ? '保存中...' : '保存'}
-            </button>
-            <button onClick={onResetPrompt} disabled={promptSaving || promptEditing === orchestratorPrompt}>
-              リセット
-            </button>
-            {promptMessage && (
-              <span style={{
-                color: promptMessage.type === 'success' ? '#27ae60' : '#c0392b',
-                fontSize: 14,
-                marginLeft: 4
-              }}>
-                {promptMessage.text}
-              </span>
-            )}
-          </div>
-        </div>
-
         <h3>AIアシスタント</h3>
         <div style={{ position: 'relative' }}>
           <div
@@ -866,6 +827,45 @@ export function App() {
               borderBottomRightRadius: 6
             }}
           />
+        </div>
+
+        <h3>オーケストレーター設定</h3>
+        <div style={{ border: '1px solid #ddd', borderRadius: 6, padding: 12, background: '#fff9f0' }}>
+          <div style={{ marginBottom: 8, color: '#666', fontSize: 14 }}>
+            介入判断プロンプト（会議の直近発話に対してAIが判断する際の指示）:
+          </div>
+          <textarea
+            value={promptEditing}
+            onChange={(e) => setPromptEditing(e.target.value)}
+            rows={4}
+            style={{
+              width: '100%',
+              fontFamily: 'monospace',
+              fontSize: 14,
+              padding: 8,
+              borderRadius: 4,
+              border: '1px solid #ccc',
+              resize: 'vertical'
+            }}
+            disabled={promptSaving}
+          />
+          <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+            <button onClick={onSavePrompt} disabled={promptSaving || promptEditing === orchestratorPrompt}>
+              {promptSaving ? '保存中...' : '保存'}
+            </button>
+            <button onClick={onResetPrompt} disabled={promptSaving || promptEditing === orchestratorPrompt}>
+              リセット
+            </button>
+            {promptMessage && (
+              <span style={{
+                color: promptMessage.type === 'success' ? '#27ae60' : '#c0392b',
+                fontSize: 14,
+                marginLeft: 4
+              }}>
+                {promptMessage.text}
+              </span>
+            )}
+          </div>
         </div>
 
         <h3>文字起こし（擬似リアルタイム）</h3>
