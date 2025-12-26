@@ -44,14 +44,17 @@ type JudgeResult = {
 
 class WindowBuffer {
   private lines: string[] = [];
-  constructor(private maxLines: number) {}
   push(line: string) {
     if (!line) return;
     this.lines.push(line);
-    while (this.lines.length > this.maxLines) this.lines.shift();
   }
-  content(): string {
-    return this.lines.join('\n');
+  // lastN が指定されたら最後のN行、指定されなかったら全部
+  content(lastN?: number): string {
+    if (lastN === undefined) {
+      return this.lines.join('\n');
+    }
+    const start = Math.max(0, this.lines.length - lastN);
+    return this.lines.slice(start).join('\n');
   }
 }
 
@@ -80,15 +83,9 @@ class Metrics {
 
 class TriggerLLM {
   private bedrock = new BedrockRuntimeClient({ region: BEDROCK_REGION });
-  async judge(windowText: string): Promise<JudgeResult> {
-    const prompt =
-      `以下は会議の直近確定発話です。\n` +
-      CURRENT_PROMPT + `\n` +
-      `\n` +
-      '介入が必要かを判断し、次のJSON形式だけを厳密に返してください:\n' +
-      '{"should_intervene": boolean, "reason": string, "message": string}\n' +
-      '---\n' + windowText;
 
+  // 汎用的なLLM呼び出しメソッド
+  async invoke(prompt: string, nodeId: string): Promise<JudgeResult> {
     const payload: any = {
       messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
       max_tokens: 500,
@@ -126,9 +123,33 @@ class TriggerLLM {
     } catch (e) {
       console.warn('LLM parse failed', (e as any)?.message, txt);
     } finally {
-      metrics.putLatencyMetric('LLM.InvokeLatency', Date.now() - start);
+      metrics.putLatencyMetric(`LLM.${nodeId}.InvokeLatency`, Date.now() - start);
     }
     return { result, prompt, rawResponse: txt };
+  }
+
+  async judge(windowText: string): Promise<JudgeResult> {
+    const prompt =
+      `以下は会議の直近確定発話です。\n` +
+      CURRENT_PROMPT + `\n` +
+      `\n` +
+      '介入が必要かを判断し、次のJSON形式だけを厳密に返してください:\n' +
+      '{"should_intervene": boolean, "reason": string, "message": string}\n' +
+      '---\n' + windowText;
+
+    return this.invoke(prompt, 'judge');
+  }
+
+  async observeTone(windowText: string): Promise<JudgeResult> {
+    const prompt =
+      `以下は会議の確定発話です。\n` +
+      `ここまでの会議の流れを整理してください。` +
+      `\n` +
+      'コメントが必要かを判断し、次のJSON形式だけを厳密に返してください:\n' +
+      '{"should_intervene": boolean, "reason": string, "message": string}\n' +
+      '---\n' + windowText;
+
+    return this.invoke(prompt, 'tone-observer');
   }
 }
 
@@ -289,7 +310,7 @@ async function runLoop() {
   }));
   if (!CURRENT_MEETING_ID) console.warn('CURRENT_MEETING_ID is empty. All events will be processed; set via CONTROL_SQS_URL or MEETING_ID env to restrict.');
   let shardIterator = await getShardIterator(STREAM_NAME);
-  const window = new WindowBuffer(WINDOW_LINES);
+  const window = new WindowBuffer();
   let consecutiveErrors = 0;
   let loopCount = 0;
   let lastLLMCallTime = 0;
@@ -341,18 +362,52 @@ async function runLoop() {
         // トリガー判定 (Rate limiting: only call LLM if cooldown has passed)
         const now = Date.now();
         if (now - lastLLMCallTime >= LLM_COOLDOWN_MS) {
-          const winText = window.content();
           const judgeStart = Date.now();
-          const judgeResult = await trigger.judge(winText);
-          lastLLMCallTime = Date.now();
-          await metrics.putLatencyMetric('ASRToDecisionLatency', Date.now() - (ev.timestamp || judgeStart));
 
-          // Log LLM call (prompt and response)
-          await notifier.postLlmCallLog(ev.meetingId, judgeResult.prompt, judgeResult.rawResponse);
+          // 1つ目のLLM呼び出し: 介入判定（最新5行のみ）
+          try {
+            const judgeResult = await trigger.judge(window.content(WINDOW_LINES));
+            await metrics.putLatencyMetric('ASRToDecisionLatency', Date.now() - (ev.timestamp || judgeStart));
 
-          if (judgeResult.result && judgeResult.result.should_intervene) {
-            await notifier.postChat(ev.meetingId, judgeResult.result.message);
+            // Log LLM call (prompt and response)
+            await notifier.postLlmCallLog(ev.meetingId, judgeResult.prompt, judgeResult.rawResponse, 'judge');
+
+            if (judgeResult.result && judgeResult.result.should_intervene) {
+              await notifier.postChat(ev.meetingId, judgeResult.result.message);
+            }
+          } catch (e) {
+            console.error(JSON.stringify({
+              type: 'orchestrator.llm.error',
+              nodeId: 'judge',
+              error: (e as any)?.message || String(e),
+              errorName: (e as any)?.name,
+              ts: Date.now()
+            }));
+            await metrics.putCountMetric('LLM.judge.Errors', 1);
           }
+
+          // 2つ目のLLM呼び出し: トーン観察（全ログ）
+          try {
+            const toneResult = await trigger.observeTone(window.content());
+
+            // Log LLM call (prompt and response)
+            await notifier.postLlmCallLog(ev.meetingId, toneResult.prompt, toneResult.rawResponse, 'tone-observer');
+
+            if (toneResult.result && toneResult.result.should_intervene) {
+              await notifier.postChat(ev.meetingId, toneResult.result.message);
+            }
+          } catch (e) {
+            console.error(JSON.stringify({
+              type: 'orchestrator.llm.error',
+              nodeId: 'tone-observer',
+              error: (e as any)?.message || String(e),
+              errorName: (e as any)?.name,
+              ts: Date.now()
+            }));
+            await metrics.putCountMetric('LLM.tone-observer.Errors', 1);
+          }
+
+          lastLLMCallTime = Date.now();
         } else {
           console.log(JSON.stringify({
             type: 'orchestrator.llm.skipped',
