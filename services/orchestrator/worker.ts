@@ -314,7 +314,7 @@ const judgeGrasp = new Grasp(
       '{"should_intervene": boolean, "reason": string, "message": string}\n' +
       '---\n' + input,
     inputLength: WINDOW_LINES,
-    cooldownMs: 5000,
+    cooldownMs: 20000,
     outputHandler: 'chat',
   },
   triggerLlm
