@@ -261,8 +261,10 @@ export function App() {
     const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50;
 
     if (isAtBottom) {
-      // Auto-scroll to bottom
-      container.scrollTop = container.scrollHeight;
+      // Auto-scroll to bottom after DOM update
+      setTimeout(() => {
+        container.scrollTop = container.scrollHeight;
+      }, 0);
     }
   }, [aiMessages]);
 
