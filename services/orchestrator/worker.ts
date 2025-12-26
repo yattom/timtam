@@ -299,6 +299,75 @@ class Notifier {
   }
 }
 
+class GraspQueue {
+  private queue: Array<{ grasp: Grasp; timestamp: number }> = [];
+  private lastExecutionTime: number = 0;
+  private globalCooldownMs: number = 2000; // グローバルクールダウン: 2秒
+
+  enqueue(grasp: Grasp, timestamp: number): void {
+    // すでにキューに入っていなければ追加
+    if (!this.queue.find(item => item.grasp === grasp)) {
+      this.queue.push({ grasp, timestamp });
+      console.log(JSON.stringify({
+        type: 'grasp.queue.enqueued',
+        nodeId: grasp['config'].nodeId,
+        queueSize: this.queue.length,
+        ts: Date.now()
+      }));
+    }
+  }
+
+  async processNext(
+    window: WindowBuffer,
+    meetingId: string,
+    notifier: Notifier,
+    metrics: Metrics,
+    notebook: Notebook
+  ): Promise<boolean> {
+    const now = Date.now();
+
+    // グローバルクールダウンチェック
+    if (now - this.lastExecutionTime < this.globalCooldownMs) {
+      return false;
+    }
+
+    // キューから次の Grasp を取得
+    if (this.queue.length === 0) {
+      return false;
+    }
+
+    const { grasp, timestamp } = this.queue.shift()!;
+
+    // 古すぎる場合はスキップ（1分以上経過）
+    if (now - timestamp > 60000) {
+      console.log(JSON.stringify({
+        type: 'grasp.queue.skipped',
+        nodeId: grasp['config'].nodeId,
+        reason: 'too_old',
+        age: now - timestamp,
+        ts: now
+      }));
+      return false;
+    }
+
+    console.log(JSON.stringify({
+      type: 'grasp.queue.processing',
+      nodeId: grasp['config'].nodeId,
+      queueSize: this.queue.length,
+      age: now - timestamp,
+      ts: now
+    }));
+
+    await grasp.execute(window, meetingId, notifier, metrics, notebook, timestamp);
+    this.lastExecutionTime = now;
+    return true;
+  }
+
+  size(): number {
+    return this.queue.length;
+  }
+}
+
 class Grasp {
   private config: GraspConfig;
   private lastExecutionTime: number = 0;
@@ -386,6 +455,7 @@ const notifier = new Notifier();
 const metrics = new Metrics();
 const sqs = new SQSClient({});
 const notesStore = new NotesStore();
+const graspQueue = new GraspQueue();
 
 // Grasp インスタンス（各LLM呼び出しの設定）
 const judgeGrasp = new Grasp(
@@ -534,6 +604,9 @@ async function getShardIterator(streamName: string): Promise<string> {
   return it.ShardIterator;
 }
 
+// グローバル変数（タイマーからアクセスするため）
+const window = new WindowBuffer();
+
 async function runLoop() {
   console.log(JSON.stringify({
     type: 'orchestrator.loop.config',
@@ -544,7 +617,6 @@ async function runLoop() {
   }));
   if (!CURRENT_MEETING_ID) console.warn('CURRENT_MEETING_ID is empty. All events will be processed; set via CONTROL_SQS_URL or MEETING_ID env to restrict.');
   let shardIterator = await getShardIterator(STREAM_NAME);
-  const window = new WindowBuffer();
   let consecutiveErrors = 0;
   let loopCount = 0;
   for (;;) {
@@ -591,14 +663,17 @@ async function runLoop() {
           }));
         }
 
-        // 各 Grasp を実行（それぞれが独自のクールダウンを持つ）
+        // 各 Grasp をキューに追加（実行すべきものだけ）
         const now = Date.now();
-        const notebook = notesStore.getNotebook(ev.meetingId);
         for (const grasp of grasps) {
           if (grasp.shouldExecute(now)) {
-            await grasp.execute(window, ev.meetingId, notifier, metrics, notebook, ev.timestamp);
+            graspQueue.enqueue(grasp, ev.timestamp || now);
           }
         }
+
+        // キューから1つだけ実行（グローバルクールダウン付き）
+        const notebook = notesStore.getNotebook(ev.meetingId);
+        await graspQueue.processNext(window, ev.meetingId, notifier, metrics, notebook);
         consecutiveErrors = 0;
       }
       // ポーリング間隔とE2Eメトリクス
@@ -665,6 +740,21 @@ console.log(JSON.stringify({
   ts: Date.now(),
   env: { STREAM_NAME, BEDROCK_REGION, BEDROCK_MODEL_ID, CURRENT_MEETING_ID, CONTROL_SQS_URL, CONFIG_TABLE_NAME }
 }));
+
+// 定期的にキューを処理（完全な沈黙時でもキューに入った Grasp を実行）
+setInterval(async () => {
+  if (CURRENT_MEETING_ID && graspQueue.size() > 0) {
+    const notebook = notesStore.getNotebook(CURRENT_MEETING_ID);
+    const processed = await graspQueue.processNext(window, CURRENT_MEETING_ID, notifier, metrics, notebook);
+    if (processed) {
+      console.log(JSON.stringify({
+        type: 'orchestrator.timer.processed',
+        queueSize: graspQueue.size(),
+        ts: Date.now()
+      }));
+    }
+  }
+}, 3000); // 3秒ごと
 
 (async () => {
   await initializePrompt();
