@@ -9,6 +9,7 @@ import {
   DeviceChangeObserver,
 } from 'amazon-chime-sdk-js';
 import { addAttendee, createMeeting, getConfig, startTranscription, stopTranscription, getAiMessages, AiMessage, getOrchestratorPrompt, updateOrchestratorPrompt, sendTranscriptionEvent, upsertParticipantProfile, getParticipants, endMeeting } from './api';
+import { AiAssistantPanel } from './AiAssistantPanel';
 
 const ANIMAL_NAMES = [
   'ねこ', 'いぬ', 'うさぎ', 'ぞう', 'らいおん', 'きつね', 'たぬき', 'しか', 'さる', 'ごりら',
@@ -649,26 +650,6 @@ export function App() {
     }
   };
 
-  const onResizeStart = (e: React.MouseEvent) => {
-    e.preventDefault();
-    const startY = e.clientY;
-    const startHeight = aiOutputHeight;
-
-    const onMouseMove = (moveEvent: MouseEvent) => {
-      const deltaY = moveEvent.clientY - startY;
-      const newHeight = Math.max(100, Math.min(800, startHeight + deltaY));
-      setAiOutputHeight(newHeight);
-    };
-
-    const onMouseUp = () => {
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-    };
-
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
-  };
-
   const onSavePrompt = async () => {
     setPromptSaving(true);
     setPromptMessage(null);
@@ -785,50 +766,14 @@ export function App() {
         <audio ref={audioElRef} autoPlay />
       </section>
 
-      <section style={{ display: 'grid', gap: 8 }}>
-        <h3>AIアシスタント</h3>
-        <div style={{ position: 'relative' }}>
-          <div
-            ref={aiOutputRef}
-            style={{
-              border: '1px solid #ddd',
-              borderRadius: 6,
-              padding: 12,
-              height: aiOutputHeight,
-              background: '#f0f8ff',
-              overflowY: 'auto',
-              overflowX: 'hidden'
-            }}
-          >
-            <div style={{ display: 'grid', gap: 8 }}>
-              {aiMessages.map((msg, i) => (
-                <div key={msg.timestamp + '-' + i} style={{ padding: 8, background: '#e6f3ff', borderRadius: 4, borderLeft: '3px solid #2980b9' }}>
-                  <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>
-                    {new Date(msg.timestamp).toLocaleTimeString('ja-JP')}
-                  </div>
-                  <div style={{ lineHeight: 1.5 }}>{msg.message}</div>
-                </div>
-              ))}
-              {aiMessages.length === 0 && (
-                <div style={{ color: '#888' }}>AIアシスタントからのメッセージがここに表示される</div>
-              )}
-            </div>
-          </div>
-          <div
-            onMouseDown={onResizeStart}
-            style={{
-              position: 'absolute',
-              bottom: 0,
-              right: 0,
-              width: 20,
-              height: 20,
-              cursor: 'ns-resize',
-              background: 'linear-gradient(135deg, transparent 50%, #999 50%)',
-              borderBottomRightRadius: 6
-            }}
-          />
-        </div>
+      <AiAssistantPanel
+        aiMessages={aiMessages}
+        aiOutputRef={aiOutputRef}
+        aiOutputHeight={aiOutputHeight}
+        setAiOutputHeight={setAiOutputHeight}
+      />
 
+      <section style={{ display: 'grid', gap: 8 }}>
         <h3>オーケストレーター設定</h3>
         <div style={{ border: '1px solid #ddd', borderRadius: 6, padding: 12, background: '#fff9f0' }}>
           <div style={{ marginBottom: 8, color: '#666', fontSize: 14 }}>
