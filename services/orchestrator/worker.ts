@@ -36,8 +36,13 @@ type TriggerResult = {
   message: string;
 };
 
+type BufferLine = {
+  text: string;
+  timestamp: number;
+};
+
 class WindowBuffer {
-  private lines: { text: string; timestamp: number }[] = [];
+  private lines: BufferLine[] = [];
   constructor(private maxLines: number) {}
   push(line: string, timestamp?: number) {
     if (!line) return;
