@@ -58,19 +58,27 @@ type Note = {
   createdBy: string;  // 作成した Grasp の nodeId
 };
 
+type BufferLine = {
+  text: string;
+  timestamp: number;
+};
+
 class WindowBuffer {
-  private lines: string[] = [];
-  push(line: string) {
+  private lines: BufferLine[] = [];
+  constructor(private maxLines: number) {}
+  push(line: string, timestamp?: number) {
     if (!line) return;
-    this.lines.push(line);
+    this.lines.push({ text: line, timestamp: timestamp || Date.now() });
+    while (this.lines.length > this.maxLines) this.lines.shift();
   }
-  // lastN が指定されたら最後のN行、指定されなかったら全部
   content(lastN?: number): string {
-    if (lastN === undefined) {
-      return this.lines.join('\n');
-    }
-    const start = Math.max(0, this.lines.length - lastN);
-    return this.lines.slice(start).join('\n');
+    const linesToUse = lastN !== undefined
+      ? this.lines.slice(-lastN)
+      : this.lines;
+    return linesToUse.map(l => {
+      const time = new Date(l.timestamp).toLocaleTimeString('ja-JP');
+      return `[${time}] ${l.text}`;
+    }).join('\n');
   }
 }
 
@@ -605,7 +613,7 @@ async function getShardIterator(streamName: string): Promise<string> {
 }
 
 // グローバル変数（タイマーからアクセスするため）
-const window = new WindowBuffer();
+const window = new WindowBuffer(WINDOW_LINES);
 
 async function runLoop() {
   console.log(JSON.stringify({
@@ -650,7 +658,7 @@ async function runLoop() {
         // final文をウィンドウに追加
         // Include speaker information if available
         const speakerPrefix = ev.speakerId ? `[${ev.speakerId}] ` : '';
-        window.push(speakerPrefix + ev.text);
+        window.push(speakerPrefix + ev.text, ev.timestamp);
 
         // Log speaker information for debugging
         if (ev.speakerId) {
