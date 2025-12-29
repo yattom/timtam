@@ -876,6 +876,7 @@ export function App() {
             )}
             {[...finalSegments].reverse().map((seg, i) => (
               <div key={seg.at + '-' + i} style={{ lineHeight: 1.5 }}>
+                <span style={{ color: '#888', fontSize: 12, marginRight: 8 }}>{new Date(seg.at).toLocaleTimeString('ja-JP')}</span>
                 {resolveSpeakerLabel(seg) && <span style={{ color: '#2980b9', fontWeight: 600, marginRight: 8 }}>[{resolveSpeakerLabel(seg)}]</span>}
                 {seg.text}
               </div>

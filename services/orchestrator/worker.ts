@@ -36,16 +36,24 @@ type TriggerResult = {
   message: string;
 };
 
+type BufferLine = {
+  text: string;
+  timestamp: number;
+};
+
 class WindowBuffer {
-  private lines: string[] = [];
+  private lines: BufferLine[] = [];
   constructor(private maxLines: number) {}
-  push(line: string) {
+  push(line: string, timestamp?: number) {
     if (!line) return;
-    this.lines.push(line);
+    this.lines.push({ text: line, timestamp: timestamp || Date.now() });
     while (this.lines.length > this.maxLines) this.lines.shift();
   }
   content(): string {
-    return this.lines.join('\n');
+    return this.lines.map(l => {
+      const time = new Date(l.timestamp).toLocaleTimeString('ja-JP');
+      return `[${time}] ${l.text}`;
+    }).join('\n');
   }
 }
 
@@ -275,7 +283,7 @@ async function runLoop() {
         // final文をウィンドウに追加
         // Include speaker information if available
         const speakerPrefix = ev.speakerId ? `[${ev.speakerId}] ` : '';
-        window.push(speakerPrefix + ev.text);
+        window.push(speakerPrefix + ev.text, ev.timestamp);
 
         // Log speaker information for debugging
         if (ev.speakerId) {
