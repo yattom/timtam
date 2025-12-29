@@ -76,7 +76,7 @@ class WindowBuffer {
       ? this.lines.slice(-lastN)
       : this.lines;
     return linesToUse.map(l => {
-      const time = new Date(l.timestamp).toLocaleTimeString('ja-JP');
+      const time = new Date(l.timestamp).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo' });
       return `[${time}] ${l.text}`;
     }).join('\n');
   }
