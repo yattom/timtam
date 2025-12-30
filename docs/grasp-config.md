@@ -228,21 +228,21 @@ grasps:
     noteTag: "participant-mood"
 ```
 
-### 例4: ノートを参照して介入判断
+### 例4: NOTES と INPUT を組み合わせた介入判断
 
 ```yaml
 grasps:
   - nodeId: "mood-based-intervention"
     promptTemplate: |
-      以下は会議の直近確定発話です。
-      これまでの雰囲気観察を踏まえて、必要に応じて会議の進行をサポートしてください。
+      以下の情報をもとに、会議の進行をサポートする必要があるか判断してください。
 
       【これまでの雰囲気観察】
       {{NOTES:participant-mood:latest3}}
 
-      介入が必要かを判断してください。
-      ---
+      【直近の発話】
       {{INPUT:latest5}}
+
+      雰囲気の変化と現在の発話内容を総合的に見て、介入が必要かを判断してください。
     cooldownMs: 45000
     outputHandler: "chat"
 ```
@@ -262,10 +262,11 @@ grasps:
       {{NOTES:topic-summary:all}}
 
       会議のサマリーを返してください。
-      # 注: {{INPUT}} を使わない場合、入力発話は含まれません
     cooldownMs: 120000
     outputHandler: "chat"
 ```
+
+この例では `{{INPUT}}` を使用していないため、発話履歴は含まれず、ノートのみを参照して要約を生成します。
 
 ### 例6: グローバル設定を使った完全な設定
 
