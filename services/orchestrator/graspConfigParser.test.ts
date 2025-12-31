@@ -28,6 +28,33 @@ grasps:
     expect(result.grasps[0].outputHandler).toBe('chat');
   });
 
+  it('parses three grasps', () => {
+    const yaml = `
+grasps:
+  - nodeId: "grasp-1"
+    promptTemplate: "first prompt"
+    intervalSec: 5
+    outputHandler: "chat"
+  - nodeId: "grasp-2"
+    promptTemplate: "second prompt"
+    intervalSec: 10
+    outputHandler: "chat"
+  - nodeId: "grasp-3"
+    promptTemplate: "third prompt"
+    intervalSec: 15
+    outputHandler: "chat"
+`;
+    const result = parseGraspGroupDefinition(yaml);
+
+    expect(result.grasps).toHaveLength(3);
+    expect(result.grasps[0].nodeId).toBe('grasp-1');
+    expect(result.grasps[1].nodeId).toBe('grasp-2');
+    expect(result.grasps[2].nodeId).toBe('grasp-3');
+    // Spot check one property from different grasps
+    expect(result.grasps[1].intervalSec).toBe(10);
+    expect(result.grasps[2].promptTemplate).toBe('third prompt');
+  });
+
   describe('invalid input must throw error', () => {
     const expectInvalid = (yaml: string) =>
       expect(() => parseGraspGroupDefinition(yaml)).toThrow();
