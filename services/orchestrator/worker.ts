@@ -36,6 +36,28 @@ type TriggerResult = {
   message: string;
 };
 
+type JudgeResult = {
+  result: TriggerResult | null;
+  prompt: string;
+  rawResponse: string;
+};
+
+type GraspConfig = {
+  nodeId: string;
+  promptTemplate: string | ((input: string, notebook?: Notebook) => string);
+  inputLength?: number; // undefined = 全部、数値 = 最新N行
+  cooldownMs: number;
+  outputHandler: 'chat' | 'note' | 'both';
+  noteTag?: string;  // 'note' または 'both' の場合、このタグでメモを保存
+};
+
+type Note = {
+  tag: string;        // メモの種類（例: 'participant-mood', 'topic-summary'）
+  content: string;    // メモの内容
+  timestamp: number;  // 作成時刻
+  createdBy: string;  // 作成した Grasp の nodeId
+};
+
 type BufferLine = {
   text: string;
   timestamp: number;
@@ -49,11 +71,83 @@ class WindowBuffer {
     this.lines.push({ text: line, timestamp: timestamp || Date.now() });
     while (this.lines.length > this.maxLines) this.lines.shift();
   }
-  content(): string {
-    return this.lines.map(l => {
+  content(lastN?: number): string {
+    const linesToUse = lastN !== undefined
+      ? this.lines.slice(-lastN)
+      : this.lines;
+    return linesToUse.map(l => {
       const time = new Date(l.timestamp).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo' });
       return `[${time}] ${l.text}`;
     }).join('\n');
+  }
+}
+
+class Notebook {
+  private meetingId: string;
+  private notes: Note[] = [];
+
+  constructor(meetingId: string) {
+    this.meetingId = meetingId;
+  }
+
+  addNote(tag: string, content: string, createdBy: string): void {
+    this.notes.push({
+      tag,
+      content,
+      timestamp: Date.now(),
+      createdBy
+    });
+    console.log(JSON.stringify({
+      type: 'notebook.note.added',
+      meetingId: this.meetingId,
+      tag,
+      createdBy,
+      contentLength: content.length,
+      totalNotes: this.notes.length,
+      ts: Date.now()
+    }));
+  }
+
+  getNotesByTag(tag: string): Note[] {
+    return this.notes.filter(note => note.tag === tag);
+  }
+
+  getLatestNoteByTag(tag: string): Note | null {
+    const notes = this.getNotesByTag(tag);
+    return notes.length > 0 ? notes[notes.length - 1] : null;
+  }
+
+  getAllNotes(): Note[] {
+    return [...this.notes];
+  }
+
+  getMeetingId(): string {
+    return this.meetingId;
+  }
+}
+
+class NotesStore {
+  private notebooks: Map<string, Notebook> = new Map();
+
+  getNotebook(meetingId: string): Notebook {
+    if (!this.notebooks.has(meetingId)) {
+      this.notebooks.set(meetingId, new Notebook(meetingId));
+      console.log(JSON.stringify({
+        type: 'notebook.created',
+        meetingId,
+        ts: Date.now()
+      }));
+    }
+    return this.notebooks.get(meetingId)!;
+  }
+
+  clearNotebook(meetingId: string): void {
+    this.notebooks.delete(meetingId);
+    console.log(JSON.stringify({
+      type: 'notebook.cleared',
+      meetingId,
+      ts: Date.now()
+    }));
   }
 }
 
@@ -82,15 +176,9 @@ class Metrics {
 
 class TriggerLLM {
   private bedrock = new BedrockRuntimeClient({ region: BEDROCK_REGION });
-  async judge(windowText: string): Promise<TriggerResult | null> {
-    const prompt =
-      `以下は会議の直近確定発話です。\n` +
-      CURRENT_PROMPT + `\n` +
-      `\n` +
-      '介入が必要かを判断し、次のJSON形式だけを厳密に返してください:\n' +
-      '{"should_intervene": boolean, "reason": string, "message": string}\n' +
-      '---\n' + windowText;
 
+  // 汎用的なLLM呼び出しメソッド
+  async invoke(prompt: string, nodeId: string): Promise<JudgeResult> {
     const payload: any = {
       messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
       max_tokens: 500,
@@ -108,26 +196,29 @@ class TriggerLLM {
     const start = Date.now();
     const res = await this.bedrock.send(new InvokeModelCommand(req));
     const txt = new TextDecoder().decode(res.body as any);
+    let result: TriggerResult | null = null;
     try {
       const parsed = JSON.parse(txt);
       // Anthropic on Bedrock (messages API) は {content:[{type:'text',text:'...'}]} 形式のことが多い
       // ただし 本PoCではJSONそのものを返すように指示しているため、直接JSONとして解釈できる経路を優先
-      if (parsed && parsed.should_intervene !== undefined) return parsed as TriggerResult;
-      // モデルにより content に入る場合へのフォールバック
-      let embedded = parsed?.content?.[0]?.text;
-      if (typeof embedded === 'string') {
-        // Strip markdown code blocks if present (```json ... ```)
-        embedded = embedded.replace(/^```json\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
-        const e = JSON.parse(embedded);
-        return e as TriggerResult;
+      if (parsed && parsed.should_intervene !== undefined) {
+        result = parsed as TriggerResult;
+      } else {
+        // モデルにより content に入る場合へのフォールバック
+        let embedded = parsed?.content?.[0]?.text;
+        if (typeof embedded === 'string') {
+          // Strip markdown code blocks if present (```json ... ```)
+          embedded = embedded.replace(/^```json\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+          const e = JSON.parse(embedded);
+          result = e as TriggerResult;
+        }
       }
     } catch (e) {
       console.warn('LLM parse failed', (e as any)?.message, txt);
-      return null;
     } finally {
-      metrics.putLatencyMetric('LLM.InvokeLatency', Date.now() - start);
+      metrics.putLatencyMetric(`LLM.${nodeId}.InvokeLatency`, Date.now() - start);
     }
-    return null;
+    return { result, prompt, rawResponse: txt };
   }
 }
 
@@ -173,13 +264,297 @@ class Notifier {
       console.log(JSON.stringify({ type: 'chat.post', meetingId, message, ts: timestamp }));
     }
   }
+
+  async postLlmCallLog(meetingId: string, prompt: string, rawResponse: string, nodeId: string = 'default') {
+    const timestamp = Date.now();
+    const ttl = Math.floor(timestamp / 1000) + 86400; // Expire after 24 hours
+
+    const logData = {
+      nodeId,
+      prompt,
+      rawResponse,
+      timestamp,
+    };
+
+    try {
+      await this.ddb.send(
+        new PutCommand({
+          TableName: AI_MESSAGES_TABLE,
+          Item: {
+            meetingId,
+            timestamp,
+            message: JSON.stringify(logData),
+            ttl,
+            type: 'llm_call',
+          },
+        })
+      );
+      console.log(JSON.stringify({
+        type: 'llm_call.logged',
+        meetingId,
+        nodeId,
+        promptLength: prompt.length,
+        responseLength: rawResponse.length,
+        timestamp,
+      }));
+    } catch (err: any) {
+      console.error('Failed to store LLM call log', {
+        error: err?.message || err,
+        meetingId,
+        nodeId,
+      });
+    }
+  }
+}
+
+class GraspQueue {
+  private queue: Array<{ grasp: Grasp; timestamp: number }> = [];
+  private lastExecutionTime: number = 0;
+  private globalCooldownMs: number = 2000; // グローバルクールダウン: 2秒
+
+  enqueue(grasp: Grasp, timestamp: number): void {
+    // すでにキューに入っていなければ追加
+    if (!this.queue.find(item => item.grasp === grasp)) {
+      this.queue.push({ grasp, timestamp });
+      console.log(JSON.stringify({
+        type: 'grasp.queue.enqueued',
+        nodeId: grasp['config'].nodeId,
+        queueSize: this.queue.length,
+        ts: Date.now()
+      }));
+    }
+  }
+
+  async processNext(
+    window: WindowBuffer,
+    meetingId: string,
+    notifier: Notifier,
+    metrics: Metrics,
+    notebook: Notebook
+  ): Promise<boolean> {
+    const now = Date.now();
+
+    // グローバルクールダウンチェック
+    if (now - this.lastExecutionTime < this.globalCooldownMs) {
+      return false;
+    }
+
+    // キューから次の Grasp を取得
+    if (this.queue.length === 0) {
+      return false;
+    }
+
+    const { grasp, timestamp } = this.queue.shift()!;
+
+    // 古すぎる場合はスキップ（1分以上経過）
+    if (now - timestamp > 60000) {
+      console.log(JSON.stringify({
+        type: 'grasp.queue.skipped',
+        nodeId: grasp['config'].nodeId,
+        reason: 'too_old',
+        age: now - timestamp,
+        ts: now
+      }));
+      return false;
+    }
+
+    console.log(JSON.stringify({
+      type: 'grasp.queue.processing',
+      nodeId: grasp['config'].nodeId,
+      queueSize: this.queue.length,
+      age: now - timestamp,
+      ts: now
+    }));
+
+    await grasp.execute(window, meetingId, notifier, metrics, notebook, timestamp);
+    this.lastExecutionTime = now;
+    return true;
+  }
+
+  size(): number {
+    return this.queue.length;
+  }
+}
+
+class Grasp {
+  private config: GraspConfig;
+  private lastExecutionTime: number = 0;
+  private llm: TriggerLLM;
+
+  constructor(config: GraspConfig, llm: TriggerLLM) {
+    this.config = config;
+    this.llm = llm;
+  }
+
+  shouldExecute(now: number): boolean {
+    return now - this.lastExecutionTime >= this.config.cooldownMs;
+  }
+
+  async execute(
+    windowBuffer: WindowBuffer,
+    meetingId: string,
+    notifier: Notifier,
+    metrics: Metrics,
+    notebook: Notebook,
+    asrTimestamp?: number  // ASR イベントのタイムスタンプ（E2E レイテンシ測定用）
+  ): Promise<void> {
+    const startTime = Date.now();
+
+    try {
+      // 入力テキストを取得
+      const inputText = this.config.inputLength !== undefined
+        ? windowBuffer.content(this.config.inputLength)
+        : windowBuffer.content();
+
+      // プロンプトを生成（notebook を渡して、他の Grasp のメモにアクセス可能にする）
+      const prompt = typeof this.config.promptTemplate === 'function'
+        ? this.config.promptTemplate(inputText, notebook)
+        : this.config.promptTemplate + '\n---\n' + inputText;
+
+      // LLM呼び出し
+      const result = await this.llm.invoke(prompt, this.config.nodeId);
+
+      // ログを記録
+      await notifier.postLlmCallLog(meetingId, result.prompt, result.rawResponse, this.config.nodeId);
+
+      // 出力処理
+      if (result.result && result.result.should_intervene) {
+        // チャットへの投稿
+        if (this.config.outputHandler === 'chat' || this.config.outputHandler === 'both') {
+          await notifier.postChat(meetingId, result.result.message);
+        }
+
+        // ノートへの記録
+        if (this.config.outputHandler === 'note' || this.config.outputHandler === 'both') {
+          const tag = this.config.noteTag || this.config.nodeId;  // デフォルトは nodeId
+          notebook.addNote(tag, result.result.message, this.config.nodeId);
+        }
+      }
+
+      const now = Date.now();
+
+      // Grasp 実行レイテンシを記録（全 Grasp 共通）
+      await metrics.putLatencyMetric(`Grasp.${this.config.nodeId}.ExecutionLatency`, now - startTime);
+
+      // ASR → 判定の E2E レイテンシを記録（ASR タイムスタンプがある場合）
+      if (asrTimestamp) {
+        await metrics.putLatencyMetric(`Grasp.${this.config.nodeId}.E2ELatency`, now - asrTimestamp);
+      }
+
+      this.lastExecutionTime = now;
+    } catch (e) {
+      const now = Date.now();
+      console.error(JSON.stringify({
+        type: 'orchestrator.grasp.error',
+        nodeId: this.config.nodeId,
+        error: (e as any)?.message || String(e),
+        errorName: (e as any)?.name,
+        ts: now
+      }));
+      await metrics.putCountMetric(`Grasp.${this.config.nodeId}.Errors`, 1);
+      this.lastExecutionTime = now; // エラーでも時刻を更新してリトライループを防ぐ
+    }
+  }
 }
 
 const kinesis = new KinesisClient({});
-const trigger = new TriggerLLM();
+const triggerLlm = new TriggerLLM();
 const notifier = new Notifier();
 const metrics = new Metrics();
 const sqs = new SQSClient({});
+const notesStore = new NotesStore();
+const graspQueue = new GraspQueue();
+
+// Grasp インスタンス（各LLM呼び出しの設定）
+const judgeGrasp = new Grasp(
+  {
+    nodeId: 'judge',
+    promptTemplate: (input: string) =>
+      `以下は会議の直近確定発話です。\n` +
+      CURRENT_PROMPT + `\n` +
+      `\n` +
+      '介入が必要かを判断し、次のJSON形式だけを厳密に返してください:\n' +
+      '{"should_intervene": boolean, "reason": string, "message": string}\n' +
+      '---\n' + input,
+    inputLength: WINDOW_LINES,
+    cooldownMs: 20000,
+    outputHandler: 'chat',
+  },
+  triggerLlm
+);
+
+const toneObserverGrasp = new Grasp(
+  {
+    nodeId: 'tone-observer',
+    promptTemplate: (input: string) =>
+      `以下は会議の確定発話です。\n` +
+      `ここまでの会議の流れを整理してください。\n` +
+      `\n` +
+      'コメントが必要かを判断し、次のJSON形式だけを厳密に返してください:\n' +
+      '{"should_intervene": boolean, "reason": string, "message": string}\n' +
+      '---\n' + input,
+    cooldownMs: 60000, // 1分に1回
+    outputHandler: 'chat',
+  },
+  triggerLlm
+);
+
+// テスト用: 参加者の雰囲気を観察してノートに記録
+const moodGrasp = new Grasp(
+  {
+    nodeId: 'mood-observer',
+    promptTemplate: (input: string) =>
+      `以下は会議の直近確定発話です。\n` +
+      `参加者の雰囲気や感情を観察してください。\n` +
+      `例えば: 活発、落ち着いている、緊張している、議論が白熱している、など。\n` +
+      `\n` +
+      '観察結果を次のJSON形式だけを厳密に返してください:\n' +
+      '{"should_intervene": true, "reason": "観察理由", "message": "雰囲気の簡潔な説明"}\n' +
+      '---\n' + input,
+    inputLength: WINDOW_LINES,
+    cooldownMs: 30000, // 30秒に1回
+    outputHandler: 'note',
+    noteTag: 'participant-mood',
+  },
+  triggerLlm
+);
+
+// テスト用: 雰囲気メモを読み込んで、それに基づいて介入
+const moodBasedInterventionGrasp = new Grasp(
+  {
+    nodeId: 'mood-based-intervention',
+    promptTemplate: (input: string, notebook?: Notebook) => {
+      let moodContext = '';
+      if (notebook) {
+        const moodNotes = notebook.getNotesByTag('participant-mood');
+        if (moodNotes.length > 0) {
+          // 最新3件のメモを取得
+          const recentMoods = moodNotes.slice(-3).map(note =>
+            `[${new Date(note.timestamp).toLocaleTimeString()}] ${note.content}`
+          ).join('\n');
+          moodContext = `\n\n【これまでの雰囲気観察】\n${recentMoods}\n`;
+        }
+      }
+
+      return (
+        `以下は会議の直近確定発話です。\n` +
+        `これまでの雰囲気観察を踏まえて、必要に応じて会議の進行をサポートしてください。\n` +
+        moodContext +
+        `\n` +
+        '介入が必要かを判断し、次のJSON形式だけを厳密に返してください:\n' +
+        '{"should_intervene": boolean, "reason": string, "message": string}\n' +
+        '---\n' + input
+      );
+    },
+    inputLength: WINDOW_LINES,
+    cooldownMs: 45000, // 45秒に1回
+    outputHandler: 'chat',
+  },
+  triggerLlm
+);
+
+// すべての Grasp のリスト（新しい Grasp はここに追加するだけ）
+const grasps = [judgeGrasp, toneObserverGrasp, moodGrasp, moodBasedInterventionGrasp];
 
 async function pollControlOnce() {
   if (!CONTROL_SQS_URL) return;
@@ -237,6 +612,9 @@ async function getShardIterator(streamName: string): Promise<string> {
   return it.ShardIterator;
 }
 
+// グローバル変数（タイマーからアクセスするため）
+const window = new WindowBuffer(WINDOW_LINES);
+
 async function runLoop() {
   console.log(JSON.stringify({
     type: 'orchestrator.loop.config',
@@ -247,11 +625,8 @@ async function runLoop() {
   }));
   if (!CURRENT_MEETING_ID) console.warn('CURRENT_MEETING_ID is empty. All events will be processed; set via CONTROL_SQS_URL or MEETING_ID env to restrict.');
   let shardIterator = await getShardIterator(STREAM_NAME);
-  const window = new WindowBuffer(WINDOW_LINES);
   let consecutiveErrors = 0;
   let loopCount = 0;
-  let lastLLMCallTime = 0;
-  const LLM_COOLDOWN_MS = 5000; // Wait at least 5 seconds between LLM calls
   for (;;) {
     try {
       // control plane (non-blocking)
@@ -296,26 +671,17 @@ async function runLoop() {
           }));
         }
 
-        // トリガー判定 (Rate limiting: only call LLM if cooldown has passed)
+        // 各 Grasp をキューに追加（実行すべきものだけ）
         const now = Date.now();
-        if (now - lastLLMCallTime >= LLM_COOLDOWN_MS) {
-          const winText = window.content();
-          const judgeStart = Date.now();
-          const res = await trigger.judge(winText);
-          lastLLMCallTime = Date.now();
-          await metrics.putLatencyMetric('ASRToDecisionLatency', Date.now() - (ev.timestamp || judgeStart));
-
-          if (res && res.should_intervene) {
-            await notifier.postChat(ev.meetingId, res.message);
+        for (const grasp of grasps) {
+          if (grasp.shouldExecute(now)) {
+            graspQueue.enqueue(grasp, ev.timestamp || now);
           }
-        } else {
-          console.log(JSON.stringify({
-            type: 'orchestrator.llm.skipped',
-            reason: 'cooldown',
-            timeSinceLastCall: now - lastLLMCallTime,
-            ts: now
-          }));
         }
+
+        // キューから1つだけ実行（グローバルクールダウン付き）
+        const notebook = notesStore.getNotebook(ev.meetingId);
+        await graspQueue.processNext(window, ev.meetingId, notifier, metrics, notebook);
         consecutiveErrors = 0;
       }
       // ポーリング間隔とE2Eメトリクス
@@ -382,6 +748,21 @@ console.log(JSON.stringify({
   ts: Date.now(),
   env: { STREAM_NAME, BEDROCK_REGION, BEDROCK_MODEL_ID, CURRENT_MEETING_ID, CONTROL_SQS_URL, CONFIG_TABLE_NAME }
 }));
+
+// 定期的にキューを処理（完全な沈黙時でもキューに入った Grasp を実行）
+setInterval(async () => {
+  if (CURRENT_MEETING_ID && graspQueue.size() > 0) {
+    const notebook = notesStore.getNotebook(CURRENT_MEETING_ID);
+    const processed = await graspQueue.processNext(window, CURRENT_MEETING_ID, notifier, metrics, notebook);
+    if (processed) {
+      console.log(JSON.stringify({
+        type: 'orchestrator.timer.processed',
+        queueSize: graspQueue.size(),
+        ts: Date.now()
+      }));
+    }
+  }
+}, 3000); // 3秒ごと
 
 (async () => {
   await initializePrompt();

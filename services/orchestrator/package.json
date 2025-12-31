@@ -9,14 +9,21 @@
     "@aws-sdk/client-cloudwatch": "3.600.0",
     "@aws-sdk/client-sqs": "3.600.0",
     "@aws-sdk/client-dynamodb": "3.600.0",
-    "@aws-sdk/lib-dynamodb": "3.600.0"
+    "@aws-sdk/lib-dynamodb": "3.600.0",
+    "js-yaml": "^4.1.0"
   },
   "devDependencies": {
+    "@types/aws-lambda": "^8.10.159",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.11.30",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "^4.0.16"
   },
   "scripts": {
     "start:worker": "node ./dist/worker.js",
-    "build": "tsc -p ."
+    "build": "tsc -p .",
+    "test": "vitest",
+    "test:watch": "vitest --watch",
+    "test:ui": "vitest --ui"
   }
 }

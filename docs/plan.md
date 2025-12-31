@@ -31,6 +31,28 @@
 
 NOTICE: TODOリストはフラットな箇条書きで、着手順に上から並べること。新しい項目もフラットに、実施順になるよう途中に挿入する。セクションを分けたり階層化するのは禁止。
 
+- [x] worker.tsでLLM呼び出し時にプロンプトとレスポンスをDynamoDBに保存（type: 'llm_call'）
+- [x] App.tsxでLLM呼び出しログを表示するUI追加（折りたたみ可能）
+- [x] worker.tsに2つ目のLLM呼び出しを追加（ハードコード、異なるプロンプト）
+- [x] 2つのLLMが並列実行されるように実装
+- [x] 各LLMの結果をチャットに表示
+- [x] App.tsxでLLM呼び出しログを時系列で表示するUI改善
+- [x] どのLLMがいつ呼ばれたか区別できるようにする（ノードID表示）
+- [x] TemporalNotesStore実装（インメモリKVストア）
+- [x] 1つ目のLLMがメモに書き込む処理を追加
+- [x] 2つ目のLLMがメモを読んでプロンプトに埋め込む処理を追加
+- [x] Grasp設定YAMLファイルを設計
+- [x] YAMLパーサーとバリデーション実装（graspConfigParser）
+- [x] テンプレート変数フォーマット検証（{{INPUT}}, {{NOTES}}）
+- [x] noteTagハンドリングとクロスGraspバリデーション
+- [ ] worker.tsのGraspConfigなどを新しいものに移行
+- [ ] Graspのプロンプト生成などのテストを書く
+- [ ] YAMLからGraspオブジェクトを生成してオーケストレータに適用
+- [ ] INPUTのバリエーション処理を実装（latest5, past30m等の動作）
+- [ ] NOTESのバリエーション処理を実装（tag:all, tag:latest3等の動作）
+- [ ] Web UIからYAMLを投入してオーケストレータがGrasp構成を置き換えられるようにする
+- [ ] YAMLでワークフローを設定可能にする
+- [ ] メモの状態をUIで表示（NotesInspectorコンポーネント）
 - [ ] IAM リソース絞り込み（Bedrock 推論プロファイル ARN / Polly Voice）
 - [ ] ドキュメント更新（README/AGENTS/クライアント側）: `/config` と `/health` の利用方法を追記
 - [ ] フロントで音声ON/OFF切替と再生
