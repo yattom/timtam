@@ -52,6 +52,30 @@ Grasp の定義リスト。各 Grasp には以下のフィールドがありま�
   - `"both"`: 両方
 - **noteTag** (string, オプション): `note` または `both` の場合、このタグでメモを保存
 
+#### noteId と nodeTag の使い分け
+
+**なぜ nodeId ではなく noteTag を使うのか？**
+
+Grasp は単一の note しか書けないため、nodeId で参照すれば十分に見えますが、以下の理由で noteTag を使用します：
+
+- **nodeId** = 「誰」（役割・エージェント）: `mood-watcher`, `trend-analyzer`
+- **noteTag** = 「何」（データ・記録の種類）: `mood-record`, `topic-summary`
+
+この区別により、Grasp 間のデータフローが明確になります：
+
+```yaml
+# "mood-watcher" という役割が "mood-record" というデータを生成
+- nodeId: "mood-watcher"
+  outputHandler: "note"
+  noteTag: "mood-record"
+
+# "facilitator" という役割が "mood-record" というデータを読む
+- nodeId: "facilitator"
+  promptTemplate: "{{NOTES:mood-record}}"
+```
+
+nodeId だけで参照すると「mood-watcher を読む」となり、やや不自然です。noteTag を使うことで「mood-record を読む」という、より直感的な表現になります。
+
 ## テンプレート変数
 
 promptTemplate 内で使用できる変数:
