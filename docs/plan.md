@@ -41,7 +41,7 @@ NOTICE: TODOリストはフラットな箇条書きで、着手順に上から�
 - [x] TemporalNotesStore実装（インメモリKVストア）
 - [x] 1つ目のLLMがメモに書き込む処理を追加
 - [x] 2つ目のLLMがメモを読んでプロンプトに埋め込む処理を追加
-- [ ] Grasp設定YAMLファイルを設計
+- [x] Grasp設定YAMLファイルを設計
 - [ ] YAMLからGraspオブジェクトを生成する
 - [ ] INPUTのバリエーションに対応する
 - [ ] NOTESのバリエーションに対応する
