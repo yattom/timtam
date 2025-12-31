@@ -19,7 +19,17 @@ export function parseGraspGroupDefinition(yaml: string): GraspGroupDefinition {
       grasps: [],
     };
   }
+  const allowedKeys = new Set(['nodeId', 'promptTemplate', 'intervalSec', 'outputHandler', 'noteTag']);
+
   for(const grasp of parsed.grasps) {
+    // Check for undefined parameters
+    const graspKeys = Object.keys(grasp);
+    for(const key of graspKeys) {
+      if(!allowedKeys.has(key)) {
+        throw new Error(`Unknown parameter: ${key}`);
+      }
+    }
+
     if(!grasp.nodeId) {
       throw new Error('nodeId is required');
     }

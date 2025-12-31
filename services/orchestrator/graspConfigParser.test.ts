@@ -118,6 +118,14 @@ grasps:
     intervalSec: 0
     outputHandler: "chat"
 `));
+      it('undefined parameter', () => expectInvalid(`
+grasps:
+  - nodeId: "test-grasp"
+    promptTemplate: "test prompt"
+    intervalSec: 10
+    outputHandler: "chat"
+    aiPower: "super"
+`));
   })
 
 });
