@@ -27,4 +27,62 @@ grasps:
     expect(result.grasps[0].cooldownMs).toBe(1000);
     expect(result.grasps[0].outputHandler).toBe('chat');
   });
+
+  describe('invalid input must throw error', () => {
+      it('nodeId is missing', () => {
+          const yaml = `
+grasps:
+  - # nodeId: "test-grasp"
+    promptTemplate: "test prompt"
+    cooldownMs: 1000
+    outputHandler: "chat"
+`;
+          expect(() => parseGraspConfig(yaml)).toThrow();
+      });
+
+      it('promptTemplate is missing', () => {
+          const yaml = `
+grasps:
+  - nodeId: "test-grasp"
+    # promptTemplate: "test prompt"
+    cooldownMs: 1000
+    outputHandler: "chat"
+`;
+          expect(() => parseGraspConfig(yaml)).toThrow();
+      });
+
+      it('promptTemplate is empty', () => {
+          const yaml = `
+grasps:
+  - nodeId: "test-grasp"
+    promptTemplate: ""
+    cooldownMs: 1000
+    outputHandler: "chat"
+`;
+          expect(() => parseGraspConfig(yaml)).toThrow();
+      });
+
+      it('outputHandler is missing', () => {
+          const yaml = `
+grasps:
+  - nodeId: "test-grasp"
+    promptTemplate: "test prompt"
+    cooldownMs: 1000
+    # outputHandler: "chat"
+`;
+          expect(() => parseGraspConfig(yaml)).toThrow();
+      });
+
+      it('outputHandler is wrong', () => {
+          const yaml = `
+grasps:
+  - nodeId: "test-grasp"
+    promptTemplate: "test prompt"
+    cooldownMs: 1000
+    outputHandler: "WRONG"
+`;
+          expect(() => parseGraspConfig(yaml)).toThrow();
+      });
+  })
+
 });
