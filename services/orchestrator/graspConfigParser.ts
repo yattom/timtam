@@ -1,6 +1,6 @@
 import * as YAML from 'js-yaml';
 
-export interface Grasp {
+export interface GraspDefinition {
   nodeId: string;
   promptTemplate: string;
   intervalSec: number;
@@ -8,11 +8,11 @@ export interface Grasp {
   noteTag?: string;
 }
 
-export interface GraspConfig {
-  grasps: Grasp[];
+export interface GraspGroupDefinition {
+  grasps: GraspDefinition[];
 }
 
-export function parseGraspConfig(yaml: string): GraspConfig {
+export function parseGraspGroupDefinition(yaml: string): GraspGroupDefinition {
   const parsed = YAML.load(yaml) as any;
   if(!parsed.grasps) {
     return {

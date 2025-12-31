@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { parseGraspConfig } from './graspConfigParser';
+import { parseGraspGroupDefinition } from './graspConfigParser';
 
-describe('parseGraspConfig', () => {
+describe('parseGraspGroupDefinition', () => {
   it('parses empty grasps list', () => {
     const yaml = `
 grasps: []
 `;
-    const result = parseGraspConfig(yaml);
+    const result = parseGraspGroupDefinition(yaml);
 
     expect(result.grasps).toEqual([]);
   });
@@ -19,7 +19,7 @@ grasps:
     intervalSec: 1
     outputHandler: "chat"
 `;
-    const result = parseGraspConfig(yaml);
+    const result = parseGraspGroupDefinition(yaml);
 
     expect(result.grasps).toHaveLength(1);
     expect(result.grasps[0].nodeId).toBe('test-grasp');
@@ -37,7 +37,7 @@ grasps:
     intervalSec: 10
     outputHandler: "chat"
 `;
-          expect(() => parseGraspConfig(yaml)).toThrow();
+          expect(() => parseGraspGroupDefinition(yaml)).toThrow();
       });
 
       it('promptTemplate is missing', () => {
@@ -48,7 +48,7 @@ grasps:
     intervalSec: 10
     outputHandler: "chat"
 `;
-          expect(() => parseGraspConfig(yaml)).toThrow();
+          expect(() => parseGraspGroupDefinition(yaml)).toThrow();
       });
 
       it('promptTemplate is empty', () => {
@@ -59,7 +59,7 @@ grasps:
     intervalSec: 10
     outputHandler: "chat"
 `;
-          expect(() => parseGraspConfig(yaml)).toThrow();
+          expect(() => parseGraspGroupDefinition(yaml)).toThrow();
       });
 
       it('outputHandler is missing', () => {
@@ -70,7 +70,7 @@ grasps:
     intervalSec: 10
     # outputHandler: "chat"
 `;
-          expect(() => parseGraspConfig(yaml)).toThrow();
+          expect(() => parseGraspGroupDefinition(yaml)).toThrow();
       });
 
       it('outputHandler is wrong', () => {
@@ -81,7 +81,7 @@ grasps:
     intervalSec: 10
     outputHandler: "WRONG"
 `;
-          expect(() => parseGraspConfig(yaml)).toThrow();
+          expect(() => parseGraspGroupDefinition(yaml)).toThrow();
       });
 
       it('intervalSec is missing', () => {
@@ -92,7 +92,7 @@ grasps:
     # intervalSec: 10
     outputHandler: "chat"
 `;
-          expect(() => parseGraspConfig(yaml)).toThrow();
+          expect(() => parseGraspGroupDefinition(yaml)).toThrow();
       });
 
       it('intervalSec is negative', () => {
@@ -103,7 +103,7 @@ grasps:
     intervalSec: -5
     outputHandler: "chat"
 `;
-          expect(() => parseGraspConfig(yaml)).toThrow();
+          expect(() => parseGraspGroupDefinition(yaml)).toThrow();
       });
 
       it('intervalSec is zero', () => {
@@ -114,7 +114,7 @@ grasps:
     intervalSec: 0
     outputHandler: "chat"
 `;
-          expect(() => parseGraspConfig(yaml)).toThrow();
+          expect(() => parseGraspGroupDefinition(yaml)).toThrow();
       });
   })
 
