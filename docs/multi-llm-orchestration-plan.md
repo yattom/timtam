@@ -60,7 +60,7 @@
 ### リスク3: LLM APIレート制限
 - **影響**: 複数のGraspが同時実行されるとレート制限に達する
 - **対策**:
-  - Grasp毎のcooldownMs設定
+  - Grasp毎のintervalSec設定
   - グローバルクールダウン（2秒）ですべてのGrasp実行間に間隔を確保
   - CloudWatchメトリクスで監視（将来）
 - **理由**: Bedrock APIには控えめなレート制限があるため、間隔制御が必須

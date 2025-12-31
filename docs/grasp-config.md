@@ -15,7 +15,7 @@ global:
     modelId: "anthropic.claude-haiku-4.5"
     region: "us-east-1"
   defaults:
-    cooldownMs: 30000
+    intervalSec: 30
 
 # Grasp の定義
 grasps:
@@ -23,7 +23,7 @@ grasps:
     promptTemplate: |
       プロンプトのテンプレート
       {{INPUT:latest5}}
-    cooldownMs: 20000
+    intervalSec: 20
     outputHandler: "chat"
     noteTag: "optional-tag"
 ```
@@ -36,7 +36,7 @@ grasps:
 
 - `llm.modelId`: 使用する Bedrock モデルID
 - `llm.region`: Bedrock のリージョン
-- `defaults.cooldownMs`: デフォルトの実行間隔（ミリ秒）
+- `defaults.intervalSec`: デフォルトの実行間隔（秒）
 
 #### grasps (必須)
 
@@ -45,7 +45,7 @@ Grasp の定義リスト。各 Grasp には以下のフィールドがありま�
 - **nodeId** (string, 必須): Grasp の一意識別子
 - **promptTemplate** (string, 必須): LLM に送るプロンプトのテンプレート
   - `{{INPUT}}`, `{{INPUT:latest5}}`, `{{INPUT:past30m}}` などの修飾子で入力範囲を指定できます（詳細は「テンプレート変数」セクションを参照）
-- **cooldownMs** (number, 必須): 実行間隔（ミリ秒）
+- **intervalSec** (number, 必須): 実行間隔（秒）
 - **outputHandler** (string, 必須): 出力先
   - `"chat"`: チャットに投稿
   - `"note"`: ノートブックに記録
@@ -192,7 +192,7 @@ grasps:
       介入が必要かを判断してください。
       ---
       {{INPUT:latest5}}
-    cooldownMs: 20000
+    intervalSec: 20
     outputHandler: "chat"
 ```
 
@@ -206,7 +206,7 @@ grasps:
       ここまでの会議の流れを整理してください。
       ---
       {{INPUT:all}}
-    cooldownMs: 60000
+    intervalSec: 60
     outputHandler: "chat"
 ```
 
@@ -223,7 +223,7 @@ grasps:
       観察理由と雰囲気の簡潔な説明を返してください。
       ---
       {{INPUT:latest5}}
-    cooldownMs: 30000
+    intervalSec: 30
     outputHandler: "note"
     noteTag: "participant-mood"
 ```
@@ -243,7 +243,7 @@ grasps:
       {{INPUT:latest5}}
 
       雰囲気の変化と現在の発話内容を総合的に見て、介入が必要かを判断してください。
-    cooldownMs: 45000
+    intervalSec: 45
     outputHandler: "chat"
 ```
 
@@ -262,7 +262,7 @@ grasps:
       {{NOTES:topic-summary:all}}
 
       会議のサマリーを返してください。
-    cooldownMs: 120000
+    intervalSec: 120
     outputHandler: "chat"
 ```
 
@@ -276,7 +276,7 @@ global:
     modelId: "anthropic.claude-sonnet-4.5"
     region: "us-east-1"
   defaults:
-    cooldownMs: 30000
+    intervalSec: 30
 
 grasps:
   - nodeId: "judge"
@@ -287,7 +287,7 @@ grasps:
       介入が必要かを判断してください。
       ---
       {{INPUT:latest5}}
-    cooldownMs: 20000  # グローバルのデフォルトを上書き
+    intervalSec: 20  # グローバルのデフォルトを上書き
     outputHandler: "chat"
 
   - nodeId: "mood-observer"
@@ -296,16 +296,16 @@ grasps:
       参加者の雰囲気や感情を観察してください。
       ---
       {{INPUT:latest10}}
-    # cooldownMs はグローバルのデフォルトを使用
+    # intervalSec はグローバルのデフォルトを使用
     outputHandler: "note"
     noteTag: "participant-mood"
 ```
 
 ## 実装上の注意
 
-### クールダウンとキューイング
+### 実行間隔とキューイング
 
-- 各 Grasp は個別の `cooldownMs` を持ち、この間隔で実行されます
+- 各 Grasp は個別の `intervalSec` を持ち、この間隔で実行されます
 - グローバルクールダウン（2秒）も存在し、すべての Grasp 実行間に適用されます
 - 複数の Grasp が同時に実行可能になった場合、キューに追加され順次実行されます
 

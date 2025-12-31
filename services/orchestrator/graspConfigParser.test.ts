@@ -16,7 +16,7 @@ grasps: []
 grasps:
   - nodeId: "test-grasp"
     promptTemplate: "test prompt"
-    cooldownMs: 1000
+    intervalSec: 1
     outputHandler: "chat"
 `;
     const result = parseGraspConfig(yaml);
@@ -24,7 +24,7 @@ grasps:
     expect(result.grasps).toHaveLength(1);
     expect(result.grasps[0].nodeId).toBe('test-grasp');
     expect(result.grasps[0].promptTemplate).toBe('test prompt');
-    expect(result.grasps[0].cooldownMs).toBe(1000);
+    expect(result.grasps[0].intervalSec).toBe(1);
     expect(result.grasps[0].outputHandler).toBe('chat');
   });
 
@@ -34,7 +34,7 @@ grasps:
 grasps:
   - # nodeId: "test-grasp"
     promptTemplate: "test prompt"
-    cooldownMs: 1000
+    intervalSec: 10
     outputHandler: "chat"
 `;
           expect(() => parseGraspConfig(yaml)).toThrow();
@@ -45,7 +45,7 @@ grasps:
 grasps:
   - nodeId: "test-grasp"
     # promptTemplate: "test prompt"
-    cooldownMs: 1000
+    intervalSec: 10
     outputHandler: "chat"
 `;
           expect(() => parseGraspConfig(yaml)).toThrow();
@@ -56,7 +56,7 @@ grasps:
 grasps:
   - nodeId: "test-grasp"
     promptTemplate: ""
-    cooldownMs: 1000
+    intervalSec: 10
     outputHandler: "chat"
 `;
           expect(() => parseGraspConfig(yaml)).toThrow();
@@ -67,7 +67,7 @@ grasps:
 grasps:
   - nodeId: "test-grasp"
     promptTemplate: "test prompt"
-    cooldownMs: 1000
+    intervalSec: 10
     # outputHandler: "chat"
 `;
           expect(() => parseGraspConfig(yaml)).toThrow();
@@ -78,8 +78,41 @@ grasps:
 grasps:
   - nodeId: "test-grasp"
     promptTemplate: "test prompt"
-    cooldownMs: 1000
+    intervalSec: 10
     outputHandler: "WRONG"
+`;
+          expect(() => parseGraspConfig(yaml)).toThrow();
+      });
+
+      it('intervalSec is missing', () => {
+          const yaml = `
+grasps:
+  - nodeId: "test-grasp"
+    promptTemplate: "test prompt"
+    # intervalSec: 10
+    outputHandler: "chat"
+`;
+          expect(() => parseGraspConfig(yaml)).toThrow();
+      });
+
+      it('intervalSec is negative', () => {
+          const yaml = `
+grasps:
+  - nodeId: "test-grasp"
+    promptTemplate: "test prompt"
+    intervalSec: -5
+    outputHandler: "chat"
+`;
+          expect(() => parseGraspConfig(yaml)).toThrow();
+      });
+
+      it('intervalSec is zero', () => {
+          const yaml = `
+grasps:
+  - nodeId: "test-grasp"
+    promptTemplate: "test prompt"
+    intervalSec: 0
+    outputHandler: "chat"
 `;
           expect(() => parseGraspConfig(yaml)).toThrow();
       });

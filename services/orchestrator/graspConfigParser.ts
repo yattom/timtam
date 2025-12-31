@@ -3,7 +3,7 @@ import * as YAML from 'js-yaml';
 export interface Grasp {
   nodeId: string;
   promptTemplate: string;
-  cooldownMs: number;
+  intervalSec: number;
   outputHandler: string;
   noteTag?: string;
 }
@@ -28,6 +28,12 @@ export function parseGraspConfig(yaml: string): GraspConfig {
     }
     if(!grasp.outputHandler || !['chat', 'note', 'both'].includes(grasp.outputHandler)) {
       throw new Error('outputHandler must be "chat" or "note" or "both"');
+    }
+    if(grasp.intervalSec === undefined || grasp.intervalSec === null) {
+      throw new Error('intervalSec is required');
+    }
+    if(typeof grasp.intervalSec !== 'number' || grasp.intervalSec <= 0) {
+      throw new Error('intervalSec must be a positive number');
     }
   }
   return {
