@@ -42,9 +42,14 @@ NOTICE: TODOリストはフラットな箇条書きで、着手順に上から�
 - [x] 1つ目のLLMがメモに書き込む処理を追加
 - [x] 2つ目のLLMがメモを読んでプロンプトに埋め込む処理を追加
 - [x] Grasp設定YAMLファイルを設計
-- [ ] YAMLからGraspオブジェクトを生成する
-- [ ] INPUTのバリエーションに対応する
-- [ ] NOTESのバリエーションに対応する
+- [x] YAMLパーサーとバリデーション実装（graspConfigParser）
+- [x] テンプレート変数フォーマット検証（{{INPUT}}, {{NOTES}}）
+- [x] noteTagハンドリングとクロスGraspバリデーション
+- [ ] worker.tsのGraspConfigなどを新しいものに移行
+- [ ] Graspのプロンプト生成などのテストを書く
+- [ ] YAMLからGraspオブジェクトを生成してオーケストレータに適用
+- [ ] INPUTのバリエーション処理を実装（latest5, past30m等の動作）
+- [ ] NOTESのバリエーション処理を実装（tag:all, tag:latest3等の動作）
 - [ ] Web UIからYAMLを投入してオーケストレータがGrasp構成を置き換えられるようにする
 - [ ] YAMLでワークフローを設定可能にする
 - [ ] メモの状態をUIで表示（NotesInspectorコンポーネント）
