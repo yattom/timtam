@@ -71,6 +71,27 @@ export class TimtamInfraStack extends Stack {
       retentionPeriod: Duration.hours(24),
     });
 
+    // === SQS FIFO Queue for transcript streaming (ADR-0011) ===
+    // Dead Letter Queue for failed messages
+    const transcriptDlq = new sqs.Queue(this, 'TranscriptAsrDlq', {
+      queueName: 'transcript-asr-dlq.fifo',
+      fifo: true,
+      retentionPeriod: Duration.days(14),
+    });
+
+    // Main FIFO queue with content-based deduplication
+    const transcriptQueue = new sqs.Queue(this, 'TranscriptAsrQueue', {
+      queueName: 'transcript-asr.fifo',
+      fifo: true,
+      contentBasedDeduplication: true,  // Prevents duplicate transcripts
+      visibilityTimeout: Duration.seconds(30),
+      retentionPeriod: Duration.days(1),  // Same as Kinesis 24h retention
+      deadLetterQueue: {
+        queue: transcriptDlq,
+        maxReceiveCount: 3,
+      },
+    });
+
     // === S3 bucket for Media Capture Pipeline audio ===
     // REMOVED: No longer needed with TranscriptEvent migration
     // Audio is no longer captured server-side via Media Capture Pipeline
@@ -142,6 +163,7 @@ export class TimtamInfraStack extends Stack {
       runtime: lambda.Runtime.NODEJS_20_X,
       environment: {
         KINESIS_STREAM_NAME: transcriptStream.streamName,
+        TRANSCRIPT_QUEUE_URL: transcriptQueue.queueUrl,  // ADR-0011: Phase 1 parallel operation
       },
     });
 
@@ -165,6 +187,7 @@ export class TimtamInfraStack extends Stack {
 
     // Grant Kinesis write permission to transcriptionEvents Lambda
     transcriptStream.grantWrite(transcriptionEventsFn);
+    transcriptQueue.grantSendMessages(transcriptionEventsFn);  // ADR-0011: Grant SQS write permission
 
     // Ensure the Chime transcription service-linked role exists in this account
     // Required for Amazon Chime SDK live transcription with Amazon Transcribe
@@ -682,6 +705,7 @@ export class TimtamInfraStack extends Stack {
       resources: ['*'],
     }));
     controlQueue.grantConsumeMessages(taskRole);
+    transcriptQueue.grantConsumeMessages(taskRole);  // ADR-0011: Grant SQS consume permission
     aiMessagesTable.grantWriteData(taskRole);
     orchestratorConfigTable.grantReadData(taskRole);
 
@@ -701,6 +725,7 @@ export class TimtamInfraStack extends Stack {
       environment: {
         // Stream name: can be changed later; default here is a functional name
         KINESIS_STREAM_NAME: transcriptStream.streamName,
+        TRANSCRIPT_QUEUE_URL: transcriptQueue.queueUrl,  // ADR-0011: SQS FIFO queue
         BEDROCK_REGION: 'ap-northeast-1',
         BEDROCK_MODEL_ID: 'arn:aws:bedrock:ap-northeast-1:030046728177:inference-profile/global.anthropic.claude-haiku-4-5-20251001-v1:0',
         WINDOW_LINES: '5',
@@ -760,5 +785,6 @@ export class TimtamInfraStack extends Stack {
     new CfnOutput(this, 'OrchestratorControlQueueUrl', { value: controlQueue.queueUrl });
     new CfnOutput(this, 'OrchestratorServiceName', { value: service.serviceName });
     new CfnOutput(this, 'TranscriptStreamName', { value: transcriptStream.streamName });
+    new CfnOutput(this, 'TranscriptQueueUrl', { value: transcriptQueue.queueUrl });  // ADR-0011
   }
 }
