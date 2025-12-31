@@ -2,7 +2,6 @@
 name: generate-commit-message
 description: Generates clear, concise git commit messages in Japanese from staged changes. Use when the user asks to create a commit, write a commit message, or review staged changes for committing.
 allowed-tools: Bash(git diff:*), Bash(git status:*), Bash(git log:*)
-model: sonnet
 ---
 
 # Git コミットメッセージ生成
