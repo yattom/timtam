@@ -29,93 +29,68 @@ grasps:
   });
 
   describe('invalid input must throw error', () => {
-      it('nodeId is missing', () => {
-          const yaml = `
+    const expectInvalid = (yaml: string) =>
+      expect(() => parseGraspGroupDefinition(yaml)).toThrow();
+
+    it('nodeId is missing', () => expectInvalid(`
 grasps:
-  - # nodeId: "test-grasp"
-    promptTemplate: "test prompt"
+  - promptTemplate: "test prompt"
     intervalSec: 10
     outputHandler: "chat"
-`;
-          expect(() => parseGraspGroupDefinition(yaml)).toThrow();
-      });
+`));
 
-      it('promptTemplate is missing', () => {
-          const yaml = `
+    it('promptTemplate is missing', () => expectInvalid(`
 grasps:
   - nodeId: "test-grasp"
-    # promptTemplate: "test prompt"
     intervalSec: 10
     outputHandler: "chat"
-`;
-          expect(() => parseGraspGroupDefinition(yaml)).toThrow();
-      });
+`));
 
-      it('promptTemplate is empty', () => {
-          const yaml = `
+    it('promptTemplate is empty', () => expectInvalid(`
 grasps:
   - nodeId: "test-grasp"
     promptTemplate: ""
     intervalSec: 10
     outputHandler: "chat"
-`;
-          expect(() => parseGraspGroupDefinition(yaml)).toThrow();
-      });
+`));
 
-      it('outputHandler is missing', () => {
-          const yaml = `
+    it('outputHandler is missing', () => expectInvalid(`
 grasps:
   - nodeId: "test-grasp"
     promptTemplate: "test prompt"
     intervalSec: 10
-    # outputHandler: "chat"
-`;
-          expect(() => parseGraspGroupDefinition(yaml)).toThrow();
-      });
+`));
 
-      it('outputHandler is wrong', () => {
-          const yaml = `
+    it('outputHandler is wrong', () => expectInvalid(`
 grasps:
   - nodeId: "test-grasp"
     promptTemplate: "test prompt"
     intervalSec: 10
     outputHandler: "WRONG"
-`;
-          expect(() => parseGraspGroupDefinition(yaml)).toThrow();
-      });
+`));
 
-      it('intervalSec is missing', () => {
-          const yaml = `
+    it('intervalSec is missing', () => expectInvalid(`
 grasps:
   - nodeId: "test-grasp"
     promptTemplate: "test prompt"
-    # intervalSec: 10
     outputHandler: "chat"
-`;
-          expect(() => parseGraspGroupDefinition(yaml)).toThrow();
-      });
+`));
 
-      it('intervalSec is negative', () => {
-          const yaml = `
+    it('intervalSec is negative', () => expectInvalid(`
 grasps:
   - nodeId: "test-grasp"
     promptTemplate: "test prompt"
     intervalSec: -5
     outputHandler: "chat"
-`;
-          expect(() => parseGraspGroupDefinition(yaml)).toThrow();
-      });
+`));
 
-      it('intervalSec is zero', () => {
-          const yaml = `
+    it('intervalSec is zero', () => expectInvalid(`
 grasps:
   - nodeId: "test-grasp"
     promptTemplate: "test prompt"
     intervalSec: 0
     outputHandler: "chat"
-`;
-          expect(() => parseGraspGroupDefinition(yaml)).toThrow();
-      });
+`));
   })
 
 });
