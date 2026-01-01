@@ -90,31 +90,46 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
     // ADR-0011 Phase 1: Write to both Kinesis and SQS for parallel operation
     // Write to Kinesis (legacy)
-    await kinesis.send(
-      new PutRecordCommand({
-        StreamName: KINESIS_STREAM_NAME,
-        Data: Buffer.from(JSON.stringify(asrEvent)),
-        PartitionKey: pathMeetingId, // Partition by meetingId for ordering
-      })
-    );
+    try {
+      await kinesis.send(
+        new PutRecordCommand({
+          StreamName: KINESIS_STREAM_NAME,
+          Data: Buffer.from(JSON.stringify(asrEvent)),
+          PartitionKey: pathMeetingId, // Partition by meetingId for ordering
+        })
+      );
+      console.log('[TranscriptionEvents] Written to Kinesis', {
+        meetingId: pathMeetingId,
+        speakerId: asrEvent.speakerId,
+        textLength: text.length,
+        isFinal,
+      });
+    } catch (err) {
+      console.error('[TranscriptionEvents] Kinesis write failed', err);
+      throw err;  // Phase 1: fail entire request if either destination fails
+    }
 
     // Write to SQS FIFO (new)
     if (TRANSCRIPT_QUEUE_URL) {
-      await sqs.send(
-        new SendMessageCommand({
-          QueueUrl: TRANSCRIPT_QUEUE_URL,
-          MessageBody: JSON.stringify(asrEvent),
-          MessageGroupId: pathMeetingId,  // Ensures ordering per meeting
-        })
-      );
+      try {
+        await sqs.send(
+          new SendMessageCommand({
+            QueueUrl: TRANSCRIPT_QUEUE_URL,
+            MessageBody: JSON.stringify(asrEvent),
+            MessageGroupId: pathMeetingId,  // Ensures ordering per meeting
+          })
+        );
+        console.log('[TranscriptionEvents] Written to SQS', {
+          meetingId: pathMeetingId,
+          speakerId: asrEvent.speakerId,
+          textLength: text.length,
+          isFinal,
+        });
+      } catch (err) {
+        console.error('[TranscriptionEvents] SQS write failed', err);
+        throw err;  // Phase 1: fail entire request if either destination fails
+      }
     }
-
-    console.log('[TranscriptionEvents] Event written to Kinesis and SQS', {
-      meetingId: pathMeetingId,
-      speakerId: asrEvent.speakerId,
-      textLength: text.length,
-      isFinal,
-    });
 
     return {
       statusCode: 200,
