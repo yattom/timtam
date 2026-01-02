@@ -7,6 +7,7 @@ import { DynamoDBDocumentClient, PutCommand, GetCommand } from '@aws-sdk/lib-dyn
 
 // 環境変数
 const STREAM_NAME = process.env.KINESIS_STREAM_NAME || 'timtam-asr';
+const TRANSCRIPT_QUEUE_URL = process.env.TRANSCRIPT_QUEUE_URL || '';  // ADR-0011: SQS FIFO queue
 const BEDROCK_REGION = process.env.BEDROCK_REGION || 'us-east-1';
 const BEDROCK_MODEL_ID = process.env.BEDROCK_MODEL_ID || 'anthropic.claude-haiku-4.5';
 const AI_MESSAGES_TABLE = process.env.AI_MESSAGES_TABLE || 'timtam-ai-messages';
@@ -620,11 +621,11 @@ async function runLoop() {
     type: 'orchestrator.loop.config',
     POLL_INTERVAL_MS,
     WINDOW_LINES,
-    STREAM_NAME,
+    TRANSCRIPT_QUEUE_URL,
     ts: Date.now()
   }));
   if (!CURRENT_MEETING_ID) console.warn('CURRENT_MEETING_ID is empty. All events will be processed; set via CONTROL_SQS_URL or MEETING_ID env to restrict.');
-  let shardIterator = await getShardIterator(STREAM_NAME);
+
   let consecutiveErrors = 0;
   let loopCount = 0;
   for (;;) {
@@ -633,27 +634,61 @@ async function runLoop() {
       await pollControlOnce();
       const t0 = Date.now();
       loopCount++;
-      const recs = await kinesis.send(new GetRecordsCommand({ ShardIterator: shardIterator, Limit: 100 }));
-      shardIterator = recs.NextShardIterator!;
-      const list = recs.Records || [];
 
-      // Log periodically (heartbeat) or when we receive records
-      if (loopCount % 1000 === 0 || list.length > 0) {
+      // ADR-0011: Use SQS long polling instead of Kinesis
+      const result = await sqs.send(
+        new ReceiveMessageCommand({
+          QueueUrl: TRANSCRIPT_QUEUE_URL,
+          MaxNumberOfMessages: 10,
+          WaitTimeSeconds: 20,  // Long polling
+        })
+      );
+      const messages = result.Messages || [];
+
+      // Log periodically (heartbeat) or when we receive messages
+      if (loopCount % 50 === 0 || messages.length > 0) {
         console.log(JSON.stringify({
           type: 'orchestrator.loop.poll',
           loopCount,
-          recordCount: list.length,
+          messageCount: messages.length,
           consecutiveErrors,
           ts: Date.now()
         }));
       }
-      for (const r of list) {
-        const dataStr = r.Data ? new TextDecoder().decode(r.Data as any) : '';
+
+      for (const message of messages) {
         let ev: AsrEvent | null = null;
-        try { ev = JSON.parse(dataStr); } catch {}
-        if (!ev) continue;
-        if (CURRENT_MEETING_ID && ev.meetingId !== CURRENT_MEETING_ID) continue;
-        if (!ev.isFinal) continue; // finalのみ
+        try { ev = JSON.parse(message.Body || ''); } catch {}
+        if (!ev) {
+          // Delete malformed message
+          await sqs.send(
+            new DeleteMessageCommand({
+              QueueUrl: TRANSCRIPT_QUEUE_URL,
+              ReceiptHandle: message.ReceiptHandle!,
+            })
+          );
+          continue;
+        }
+        if (CURRENT_MEETING_ID && ev.meetingId !== CURRENT_MEETING_ID) {
+          // Skip but delete message (not for this orchestrator)
+          await sqs.send(
+            new DeleteMessageCommand({
+              QueueUrl: TRANSCRIPT_QUEUE_URL,
+              ReceiptHandle: message.ReceiptHandle!,
+            })
+          );
+          continue;
+        }
+        if (!ev.isFinal) {
+          // Delete non-final message
+          await sqs.send(
+            new DeleteMessageCommand({
+              QueueUrl: TRANSCRIPT_QUEUE_URL,
+              ReceiptHandle: message.ReceiptHandle!,
+            })
+          );
+          continue;
+        }
 
         // final文をウィンドウに追加
         // Include speaker information if available
@@ -682,11 +717,20 @@ async function runLoop() {
         // キューから1つだけ実行（グローバルクールダウン付き）
         const notebook = notesStore.getNotebook(ev.meetingId);
         await graspQueue.processNext(window, ev.meetingId, notifier, metrics, notebook);
+
+        // 処理完了後にメッセージを削除
+        await sqs.send(
+          new DeleteMessageCommand({
+            QueueUrl: TRANSCRIPT_QUEUE_URL,
+            ReceiptHandle: message.ReceiptHandle!,
+          })
+        );
         consecutiveErrors = 0;
       }
-      // ポーリング間隔とE2Eメトリクス
+
+      // SQS long polling handles waiting, but add minimal interval for control plane
       const dt = Date.now() - t0;
-      const sleepTime = Math.max(0, POLL_INTERVAL_MS - dt);
+      const sleepTime = Math.max(0, 100 - dt);  // Minimal sleep since SQS handles long polling
       if (sleepTime > 0) await new Promise((s) => setTimeout(s, sleepTime));
     } catch (e) {
       consecutiveErrors++;
