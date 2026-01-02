@@ -48,6 +48,20 @@ export interface Metrics {
   putCountMetric(name: string, val?: number): Promise<void>;
 }
 
+export class Interval {
+  private lastExecutionTime: number = 0;
+
+  constructor(private cooldownMs: number) {}
+
+  shouldExecute(now: number): boolean {
+    return now - this.lastExecutionTime >= this.cooldownMs;
+  }
+
+  markExecuted(now: number): void {
+    this.lastExecutionTime = now;
+  }
+}
+
 export class WindowBuffer {
   private lines: BufferLine[] = [];
   constructor(private maxLines: number) {}
@@ -138,8 +152,11 @@ export class NotesStore {
 
 export class GraspQueue {
   private queue: Array<{ grasp: Grasp; timestamp: number }> = [];
-  private lastExecutionTime: number = 0;
-  private globalCooldownMs: number = 2000; // グローバルクールダウン: 2秒
+  private interval: Interval;
+
+  constructor(globalCooldownMs: number = 2000) {
+    this.interval = new Interval(globalCooldownMs);
+  }
 
   enqueue(grasp: Grasp, timestamp: number): void {
     // すでにキューに入っていなければ追加
@@ -164,7 +181,7 @@ export class GraspQueue {
     const now = Date.now();
 
     // グローバルクールダウンチェック
-    if (now - this.lastExecutionTime < this.globalCooldownMs) {
+    if (!this.interval.shouldExecute(now)) {
       return false;
     }
 
@@ -196,7 +213,7 @@ export class GraspQueue {
     }));
 
     await grasp.execute(window, meetingId, notifier, metrics, notebook, timestamp);
-    this.lastExecutionTime = now;
+    this.interval.markExecuted(now);
     return true;
   }
 
@@ -207,16 +224,44 @@ export class GraspQueue {
 
 export class Grasp {
   private config: GraspConfig;
-  private lastExecutionTime: number = 0;
+  private interval: Interval;
   private llm: LLMClient;
 
   constructor(config: GraspConfig, llm: LLMClient) {
     this.config = config;
     this.llm = llm;
+    this.interval = new Interval(config.cooldownMs);
   }
 
   shouldExecute(now: number): boolean {
-    return now - this.lastExecutionTime >= this.config.cooldownMs;
+    return this.interval.shouldExecute(now);
+  }
+
+  buildPrompt(
+    windowBuffer: WindowBuffer,
+    notebook: Notebook,
+  ) : string {
+    // 入力テキストを取得
+    const inputText = this.config.inputLength !== undefined
+      ? windowBuffer.content(this.config.inputLength)
+      : windowBuffer.content();
+
+    // プロンプトを生成（notebook を渡して、他の Grasp のメモにアクセス可能にする）
+    const prompt = typeof this.config.promptTemplate === 'function'
+      ? this.config.promptTemplate(inputText, notebook)
+      : this.config.promptTemplate + '\n---\n' + inputText;
+
+    return prompt;
+  }
+
+  async invokeLLM(prompt: string, meetingId: string, notifier: Notifier) {
+    // LLM呼び出し
+    const result = await this.llm.invoke(prompt, this.config.nodeId);
+
+    // ログを記録
+    await notifier.postLlmCallLog(meetingId, result.prompt, result.rawResponse, this.config.nodeId);
+
+    return result;
   }
 
   async execute(
@@ -230,21 +275,8 @@ export class Grasp {
     const startTime = Date.now();
 
     try {
-      // 入力テキストを取得
-      const inputText = this.config.inputLength !== undefined
-        ? windowBuffer.content(this.config.inputLength)
-        : windowBuffer.content();
-
-      // プロンプトを生成（notebook を渡して、他の Grasp のメモにアクセス可能にする）
-      const prompt = typeof this.config.promptTemplate === 'function'
-        ? this.config.promptTemplate(inputText, notebook)
-        : this.config.promptTemplate + '\n---\n' + inputText;
-
-      // LLM呼び出し
-      const result = await this.llm.invoke(prompt, this.config.nodeId);
-
-      // ログを記録
-      await notifier.postLlmCallLog(meetingId, result.prompt, result.rawResponse, this.config.nodeId);
+      const prompt = this.buildPrompt(windowBuffer, notebook);
+      const result = await this.invokeLLM(prompt, meetingId, notifier);
 
       // 出力処理
       if (result.result && result.result.should_intervene) {
@@ -270,7 +302,7 @@ export class Grasp {
         await metrics.putLatencyMetric(`Grasp.${this.config.nodeId}.E2ELatency`, now - asrTimestamp);
       }
 
-      this.lastExecutionTime = now;
+      this.interval.markExecuted(now);
     } catch (e) {
       const now = Date.now();
       console.error(JSON.stringify({
@@ -281,7 +313,7 @@ export class Grasp {
         ts: now
       }));
       await metrics.putCountMetric(`Grasp.${this.config.nodeId}.Errors`, 1);
-      this.lastExecutionTime = now; // エラーでも時刻を更新してリトライループを防ぐ
+      this.interval.markExecuted(now); // エラーでも時刻を更新してリトライループを防ぐ
     }
   }
 }
