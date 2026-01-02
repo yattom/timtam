@@ -251,7 +251,7 @@ export class TimtamInfraStack extends Stack {
 
     const adminCloseFn = new NodejsFunction(this, 'AdminCloseFn', {
       entry: '../../services/admin-api/close.ts',
-      timeout: Duration.seconds(30),
+      timeout: Duration.seconds(60),
       runtime: lambda.Runtime.NODEJS_20_X,
       environment: {
         ADMIN_PASSWORD: adminPassword,
@@ -271,7 +271,7 @@ export class TimtamInfraStack extends Stack {
 
     const adminOpenFn = new NodejsFunction(this, 'AdminOpenFn', {
       entry: '../../services/admin-api/open.ts',
-      timeout: Duration.seconds(30),
+      timeout: Duration.seconds(60),
       runtime: lambda.Runtime.NODEJS_20_X,
       environment: {
         ADMIN_PASSWORD: adminPassword,
@@ -290,62 +290,40 @@ export class TimtamInfraStack extends Stack {
     });
 
     // Grant permissions to admin Lambdas
+    // Note: ListFunctionsはリソース制限できないため*を使用
     adminCloseFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: [
-        'lambda:ListFunctions',
-        'lambda:PutFunctionConcurrency',
-      ],
+      actions: ['lambda:ListFunctions'],
       resources: ['*'],
     }));
     adminCloseFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: [
-        'ecs:ListServices',
-        'ecs:UpdateService',
-      ],
+      actions: ['lambda:PutFunctionConcurrency'],
+      resources: [`arn:aws:lambda:${this.region}:${this.account}:function:TimtamInfraStack-*`],
+    }));
+    // Note: ListServicesはクラスターレベルのアクションのため*を使用
+    adminCloseFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ecs:ListServices'],
       resources: ['*'],
     }));
     adminCloseFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: [
-        'cloudfront:ListDistributions',
-        'cloudfront:GetDistributionConfig',
-        'cloudfront:UpdateDistribution',
-      ],
-      resources: ['*'],
-    }));
-    adminCloseFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: [
-        'cloudformation:DescribeStackResources',
-      ],
-      resources: ['*'],
+      actions: ['cloudformation:DescribeStackResources'],
+      resources: [`arn:aws:cloudformation:${this.region}:${this.account}:stack/TimtamInfraStack/*`],
     }));
 
     adminOpenFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: [
-        'lambda:ListFunctions',
-        'lambda:DeleteFunctionConcurrency',
-      ],
+      actions: ['lambda:ListFunctions'],
       resources: ['*'],
     }));
     adminOpenFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: [
-        'ecs:ListServices',
-        'ecs:UpdateService',
-      ],
+      actions: ['lambda:DeleteFunctionConcurrency'],
+      resources: [`arn:aws:lambda:${this.region}:${this.account}:function:TimtamInfraStack-*`],
+    }));
+    adminOpenFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ecs:ListServices'],
       resources: ['*'],
     }));
     adminOpenFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: [
-        'cloudfront:ListDistributions',
-        'cloudfront:GetDistributionConfig',
-        'cloudfront:UpdateDistribution',
-      ],
-      resources: ['*'],
-    }));
-    adminOpenFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: [
-        'cloudformation:DescribeStackResources',
-      ],
-      resources: ['*'],
+      actions: ['cloudformation:DescribeStackResources'],
+      resources: [`arn:aws:cloudformation:${this.region}:${this.account}:stack/TimtamInfraStack/*`],
     }));
 
     // === Orchestrator Control (SQS + Lambda trigger from UI) ===
@@ -892,6 +870,38 @@ export class TimtamInfraStack extends Stack {
       distribution: webDistribution,
       distributionPaths: ['/*'],
     });
+
+    // Grant ECS and CloudFront permissions to admin Lambdas
+    // (These are added here because the resources need to be defined first)
+    adminCloseFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ecs:UpdateService'],
+      resources: [service.serviceArn],
+    }));
+    adminCloseFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: [
+        'cloudfront:ListDistributions',
+        'cloudfront:GetDistributionConfig',
+        'cloudfront:UpdateDistribution',
+      ],
+      resources: [
+        `arn:aws:cloudfront::${this.account}:distribution/${webDistribution.distributionId}`,
+      ],
+    }));
+
+    adminOpenFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ecs:UpdateService'],
+      resources: [service.serviceArn],
+    }));
+    adminOpenFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: [
+        'cloudfront:ListDistributions',
+        'cloudfront:GetDistributionConfig',
+        'cloudfront:UpdateDistribution',
+      ],
+      resources: [
+        `arn:aws:cloudfront::${this.account}:distribution/${webDistribution.distributionId}`,
+      ],
+    }));
 
     // === CloudFormation Outputs ===
     new CfnOutput(this, 'ApiEndpoint', { value: apiBaseUrl });

@@ -15,19 +15,14 @@ import {
   GetDistributionConfigCommand,
   UpdateDistributionCommand,
 } from '@aws-sdk/client-cloudfront';
-import {
-  CloudFormationClient,
-  DescribeStackResourcesCommand,
-} from '@aws-sdk/client-cloudformation';
+import { getAdminLambdaNames, getStackResourceArns } from './common';
 
 const REGION = process.env.AWS_REGION || 'ap-northeast-1';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
-const ADMIN_FUNCTION_NAME = process.env.AWS_LAMBDA_FUNCTION_NAME || '';
 
 const lambdaClient = new LambdaClient({ region: REGION });
 const ecsClient = new ECSClient({ region: REGION });
 const cloudFrontClient = new CloudFrontClient({ region: REGION });
-const cloudFormationClient = new CloudFormationClient({ region: REGION });
 
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   try {
@@ -41,15 +36,19 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       };
     }
 
-    // 1. すべてのLambda関数を無効化(ただし、このLambda自体は除く)
+    // 1. すべてのLambda関数を無効化(ただし、管理用Lambda関数は除く)
+    const adminLambdaNames = await getAdminLambdaNames();
     const listFunctionsResp = await lambdaClient.send(new ListFunctionsCommand({}));
     const functions = listFunctionsResp.Functions || [];
 
     for (const func of functions) {
       const functionName = func.FunctionName || '';
       // TimtamInfraStackで始まる関数のみが対象
-      // このLambda自体は除外する
-      if (functionName.startsWith('TimtamInfraStack-') && functionName !== ADMIN_FUNCTION_NAME) {
+      // 管理用Lambda(AdminCloseFn, AdminOpenFn)は除外する
+      if (
+        functionName.startsWith('TimtamInfraStack-') &&
+        !adminLambdaNames.includes(functionName)
+      ) {
         await lambdaClient.send(
           new PutFunctionConcurrencyCommand({
             FunctionName: functionName,
@@ -60,30 +59,24 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     }
 
     // 2. ECSサービスのdesired countを0に設定
-    const stackResourcesResp = await cloudFormationClient.send(
-      new DescribeStackResourcesCommand({
-        StackName: 'TimtamInfraStack',
-      })
-    );
-    const clusterResource = stackResourcesResp.StackResources?.find(
-      (r) => r.ResourceType === 'AWS::ECS::Cluster'
-    );
+    const clusterArns = await getStackResourceArns('TimtamInfraStack', 'AWS::ECS::Cluster');
 
-    if (clusterResource?.PhysicalResourceId) {
-      const clusterArn = clusterResource.PhysicalResourceId;
+    for (const clusterArn of clusterArns) {
       const listServicesResp = await ecsClient.send(
         new ListServicesCommand({ cluster: clusterArn })
       );
 
       if (listServicesResp.serviceArns && listServicesResp.serviceArns.length > 0) {
-        const serviceArn = listServicesResp.serviceArns[0];
-        await ecsClient.send(
-          new UpdateServiceCommand({
-            cluster: clusterArn,
-            service: serviceArn,
-            desiredCount: 0,
-          })
-        );
+        // すべてのサービスを処理する
+        for (const serviceArn of listServicesResp.serviceArns) {
+          await ecsClient.send(
+            new UpdateServiceCommand({
+              cluster: clusterArn,
+              service: serviceArn,
+              desiredCount: 0,
+            })
+          );
+        }
       }
     }
 
