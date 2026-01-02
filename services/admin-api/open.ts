@@ -10,7 +10,6 @@ import {
 } from '@aws-sdk/client-ecs';
 import {
   CloudFrontClient,
-  ListDistributionsCommand,
   GetDistributionConfigCommand,
   UpdateDistributionCommand,
 } from '@aws-sdk/client-cloudfront';
@@ -75,31 +74,28 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     }
 
     // 3. CloudFrontディストリビューションを有効化
-    const listDistributionsResp = await cloudFrontClient.send(
-      new ListDistributionsCommand({})
+    const distributionIds = await getStackResourceArns(
+      'TimtamInfraStack',
+      'AWS::CloudFront::Distribution'
     );
 
-    if (listDistributionsResp.DistributionList?.Items?.[0]) {
-      const distribution = listDistributionsResp.DistributionList.Items[0];
-      const distId = distribution.Id;
+    if (distributionIds.length > 0) {
+      const distId = distributionIds[0];
+      const getConfigResp = await cloudFrontClient.send(
+        new GetDistributionConfigCommand({ Id: distId })
+      );
 
-      if (distId) {
-        const getConfigResp = await cloudFrontClient.send(
-          new GetDistributionConfigCommand({ Id: distId })
+      if (getConfigResp.DistributionConfig && getConfigResp.ETag) {
+        const config = getConfigResp.DistributionConfig;
+        config.Enabled = true;
+
+        await cloudFrontClient.send(
+          new UpdateDistributionCommand({
+            Id: distId,
+            DistributionConfig: config,
+            IfMatch: getConfigResp.ETag,
+          })
         );
-
-        if (getConfigResp.DistributionConfig && getConfigResp.ETag) {
-          const config = getConfigResp.DistributionConfig;
-          config.Enabled = true;
-
-          await cloudFrontClient.send(
-            new UpdateDistributionCommand({
-              Id: distId,
-              DistributionConfig: config,
-              IfMatch: getConfigResp.ETag,
-            })
-          );
-        }
       }
     }
 

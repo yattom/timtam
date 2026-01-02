@@ -871,7 +871,6 @@ export class TimtamInfraStack extends Stack {
     }));
     adminCloseFn.addToRolePolicy(new iam.PolicyStatement({
       actions: [
-        'cloudfront:ListDistributions',
         'cloudfront:GetDistributionConfig',
         'cloudfront:UpdateDistribution',
       ],
@@ -886,7 +885,6 @@ export class TimtamInfraStack extends Stack {
     }));
     adminOpenFn.addToRolePolicy(new iam.PolicyStatement({
       actions: [
-        'cloudfront:ListDistributions',
         'cloudfront:GetDistributionConfig',
         'cloudfront:UpdateDistribution',
       ],
