@@ -1,7 +1,6 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import {
   LambdaClient,
-  ListFunctionsCommand,
   PutFunctionConcurrencyCommand,
 } from '@aws-sdk/client-lambda';
 import {
@@ -15,10 +14,9 @@ import {
   GetDistributionConfigCommand,
   UpdateDistributionCommand,
 } from '@aws-sdk/client-cloudfront';
-import { getAdminLambdaNames, getStackResourceArns } from './common';
+import { authenticatePassword, getTargetLambdaNames, getStackResourceArns } from './common';
 
 const REGION = process.env.AWS_REGION || 'ap-northeast-1';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 
 const lambdaClient = new LambdaClient({ region: REGION });
 const ecsClient = new ECSClient({ region: REGION });
@@ -27,8 +25,7 @@ const cloudFrontClient = new CloudFrontClient({ region: REGION });
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   try {
     // パスワード認証
-    const password = event.pathParameters?.password;
-    if (!password || password !== ADMIN_PASSWORD) {
+    if (!authenticatePassword(event)) {
       return {
         statusCode: 403,
         headers: { 'Content-Type': 'application/json' },
@@ -37,25 +34,15 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     }
 
     // 1. すべてのLambda関数を無効化(ただし、管理用Lambda関数は除く)
-    const adminLambdaNames = await getAdminLambdaNames();
-    const listFunctionsResp = await lambdaClient.send(new ListFunctionsCommand({}));
-    const functions = listFunctionsResp.Functions || [];
+    const targetLambdaNames = await getTargetLambdaNames();
 
-    for (const func of functions) {
-      const functionName = func.FunctionName || '';
-      // TimtamInfraStackで始まる関数のみが対象
-      // 管理用Lambda(AdminCloseFn, AdminOpenFn)は除外する
-      if (
-        functionName.startsWith('TimtamInfraStack-') &&
-        !adminLambdaNames.includes(functionName)
-      ) {
-        await lambdaClient.send(
-          new PutFunctionConcurrencyCommand({
-            FunctionName: functionName,
-            ReservedConcurrentExecutions: 0,
-          })
-        );
-      }
+    for (const functionName of targetLambdaNames) {
+      await lambdaClient.send(
+        new PutFunctionConcurrencyCommand({
+          FunctionName: functionName,
+          ReservedConcurrentExecutions: 0,
+        })
+      );
     }
 
     // 2. ECSサービスのdesired countを0に設定
@@ -112,7 +99,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ result: 'OK' }),
+      body: JSON.stringify({
+        result: 'OK',
+        message: 'インフラをクローズしました。CloudFrontの反映には1分ほどかかる場合があります。',
+      }),
     };
   } catch (err: any) {
     console.error('Error in close handler:', err);

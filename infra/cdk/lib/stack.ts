@@ -290,11 +290,7 @@ export class TimtamInfraStack extends Stack {
     });
 
     // Grant permissions to admin Lambdas
-    // Note: ListFunctionsはリソース制限できないため*を使用
-    adminCloseFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['lambda:ListFunctions'],
-      resources: ['*'],
-    }));
+    // CloudFormationを使ってリソース情報を取得するため、ListFunctionsは不要
     adminCloseFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['lambda:PutFunctionConcurrency'],
       resources: [`arn:aws:lambda:${this.region}:${this.account}:function:TimtamInfraStack-*`],
@@ -309,10 +305,6 @@ export class TimtamInfraStack extends Stack {
       resources: [`arn:aws:cloudformation:${this.region}:${this.account}:stack/TimtamInfraStack/*`],
     }));
 
-    adminOpenFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['lambda:ListFunctions'],
-      resources: ['*'],
-    }));
     adminOpenFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['lambda:DeleteFunctionConcurrency'],
       resources: [`arn:aws:lambda:${this.region}:${this.account}:function:TimtamInfraStack-*`],
