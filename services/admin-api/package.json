@@ -1,0 +1,12 @@
+{
+  "name": "admin-api",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@aws-sdk/client-lambda": "^3.948.0",
+    "@aws-sdk/client-ecs": "^3.948.0",
+    "@aws-sdk/client-cloudfront": "^3.948.0",
+    "@aws-sdk/client-cloudformation": "^3.948.0"
+  }
+}

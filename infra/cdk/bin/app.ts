@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { App } from 'aws-cdk-lib';
 import { TimtamInfraStack } from '../lib/stack';
 
