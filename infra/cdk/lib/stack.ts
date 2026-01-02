@@ -265,6 +265,82 @@ export class TimtamInfraStack extends Stack {
     });
     orchestratorConfigTable.grantWriteData(updatePromptFn);
 
+    // === Admin API Lambdas ===
+    // Read ADMIN_PASSWORD from context (passed via --context or cdk.json)
+    const adminPassword = this.node.tryGetContext('adminPassword') || process.env.ADMIN_PASSWORD || '';
+    if (!adminPassword) {
+      console.warn('WARNING: ADMIN_PASSWORD not set. Admin API will not work properly.');
+    }
+
+    const adminCloseFn = new NodejsFunction(this, 'AdminCloseFn', {
+      entry: '../../services/admin-api/close.ts',
+      timeout: Duration.seconds(60),
+      runtime: lambda.Runtime.NODEJS_20_X,
+      environment: {
+        ADMIN_PASSWORD: adminPassword,
+      },
+      bundling: {
+        nodeModules: [
+          '@aws-sdk/client-lambda',
+          '@aws-sdk/client-ecs',
+          '@aws-sdk/client-cloudfront',
+          '@aws-sdk/client-cloudformation',
+        ],
+        externalModules: ['aws-sdk'],
+        target: 'node20',
+        platform: 'node',
+      },
+    });
+
+    const adminOpenFn = new NodejsFunction(this, 'AdminOpenFn', {
+      entry: '../../services/admin-api/open.ts',
+      timeout: Duration.seconds(60),
+      runtime: lambda.Runtime.NODEJS_20_X,
+      environment: {
+        ADMIN_PASSWORD: adminPassword,
+      },
+      bundling: {
+        nodeModules: [
+          '@aws-sdk/client-lambda',
+          '@aws-sdk/client-ecs',
+          '@aws-sdk/client-cloudfront',
+          '@aws-sdk/client-cloudformation',
+        ],
+        externalModules: ['aws-sdk'],
+        target: 'node20',
+        platform: 'node',
+      },
+    });
+
+    // Grant permissions to admin Lambdas
+    // CloudFormationを使ってリソース情報を取得するため、ListFunctionsは不要
+    adminCloseFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['lambda:PutFunctionConcurrency'],
+      resources: [`arn:aws:lambda:${this.region}:${this.account}:function:TimtamInfraStack-*`],
+    }));
+    // Note: ListServicesはクラスターレベルのアクションのため*を使用
+    adminCloseFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ecs:ListServices'],
+      resources: ['*'],
+    }));
+    adminCloseFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['cloudformation:DescribeStackResources'],
+      resources: [`arn:aws:cloudformation:${this.region}:${this.account}:stack/TimtamInfraStack/*`],
+    }));
+
+    adminOpenFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['lambda:DeleteFunctionConcurrency'],
+      resources: [`arn:aws:lambda:${this.region}:${this.account}:function:TimtamInfraStack-*`],
+    }));
+    adminOpenFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ecs:ListServices'],
+      resources: ['*'],
+    }));
+    adminOpenFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['cloudformation:DescribeStackResources'],
+      resources: [`arn:aws:cloudformation:${this.region}:${this.account}:stack/TimtamInfraStack/*`],
+    }));
+
     // === Orchestrator Control (SQS + Lambda trigger from UI) ===
     const controlQueue = new sqs.Queue(this, 'OrchestratorControlQueue', {
       visibilityTimeout: Duration.seconds(10),
@@ -679,6 +755,45 @@ export class TimtamInfraStack extends Stack {
       action: 'lambda:InvokeFunction',
     });
 
+    // Admin API routes
+    const adminCloseInt = new CfnIntegration(this, 'AdminCloseIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(adminCloseFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const adminCloseRoute = new CfnRoute(this, 'AdminCloseRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'GET /admin/close/{password}',
+      target: `integrations/${adminCloseInt.ref}`,
+    });
+    adminCloseRoute.addDependency(adminCloseInt);
+    adminCloseFn.addPermission('InvokeByHttpApiAdminClose', {
+      principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+      sourceArn,
+      action: 'lambda:InvokeFunction',
+    });
+
+    const adminOpenInt = new CfnIntegration(this, 'AdminOpenIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(adminOpenFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const adminOpenRoute = new CfnRoute(this, 'AdminOpenRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'GET /admin/open/{password}',
+      target: `integrations/${adminOpenInt.ref}`,
+    });
+    adminOpenRoute.addDependency(adminOpenInt);
+    adminOpenFn.addPermission('InvokeByHttpApiAdminOpen', {
+      principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+      sourceArn,
+      action: 'lambda:InvokeFunction',
+    });
+
     // === ECS Fargate Orchestrator (always-on service) ===
     // Use default VPC lookup (original design); relies on CDK env/account/region being set
     const vpc = ec2.Vpc.fromLookup(this, 'DefaultVpc', { isDefault: true });
@@ -772,6 +887,36 @@ export class TimtamInfraStack extends Stack {
       distribution: webDistribution,
       distributionPaths: ['/*'],
     });
+
+    // Grant ECS and CloudFront permissions to admin Lambdas
+    // (These are added here because the resources need to be defined first)
+    adminCloseFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ecs:UpdateService'],
+      resources: [service.serviceArn],
+    }));
+    adminCloseFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: [
+        'cloudfront:GetDistributionConfig',
+        'cloudfront:UpdateDistribution',
+      ],
+      resources: [
+        `arn:aws:cloudfront::${this.account}:distribution/${webDistribution.distributionId}`,
+      ],
+    }));
+
+    adminOpenFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ecs:UpdateService'],
+      resources: [service.serviceArn],
+    }));
+    adminOpenFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: [
+        'cloudfront:GetDistributionConfig',
+        'cloudfront:UpdateDistribution',
+      ],
+      resources: [
+        `arn:aws:cloudfront::${this.account}:distribution/${webDistribution.distributionId}`,
+      ],
+    }));
 
     // === CloudFormation Outputs ===
     new CfnOutput(this, 'ApiEndpoint', { value: apiBaseUrl });
