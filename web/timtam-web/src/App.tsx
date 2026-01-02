@@ -35,6 +35,7 @@ export function App() {
   const [displayName, setDisplayName] = useState<string>('');
   const [nameMessage, setNameMessage] = useState<string>('');
   const [meetingEndedAt, setMeetingEndedAt] = useState<number | null>(null);
+  const [audioOutputMuted, setAudioOutputMuted] = useState<boolean>(true);
 
   const [audioInputs, setAudioInputs] = useState<MediaDeviceInfo[]>([]);
   const [audioOutputs, setAudioOutputs] = useState<MediaDeviceInfo[]>([]);
@@ -79,6 +80,17 @@ export function App() {
     }
   }, []);
 
+  // Check for meetingId in URL and auto-join
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const path = window.location.pathname;
+    const match = path.match(/\/([a-f0-9\-]{36})$/i);
+    if (match && match[1]) {
+      const urlMeetingId = match[1];
+      setJoinMeetingId(urlMeetingId);
+    }
+  }, []);
+
   useEffect(() => {
     participantNamesRef.current = participantNames;
   }, [participantNames]);
@@ -113,6 +125,17 @@ export function App() {
       }
     })();
   }, [apiBaseUrl]);
+
+  // Auto-join if URL contains meetingId
+  useEffect(() => {
+    if (!apiBaseUrl || joined || !joinMeetingId) return;
+    const path = window.location.pathname;
+    const match = path.match(/\/([a-f0-9\-]{36})$/i);
+    if (match && match[1] === joinMeetingId) {
+      // Auto-join from URL
+      onJoinExisting();
+    }
+  }, [apiBaseUrl, joinMeetingId]);
 
   const persistDisplayName = (name: string) => {
     const trimmed = (name || '').trim();
@@ -533,6 +556,19 @@ export function App() {
       await registerParticipantProfile(createdMeetingId, attendeeResp.attendee);
       await refreshParticipantDirectory(createdMeetingId);
       await configureAndStart(meetingResp.meeting, attendeeResp.attendee);
+
+      // Update URL with meetingId
+      if (typeof window !== 'undefined' && window.history) {
+        window.history.pushState({}, '', `/${createdMeetingId}`);
+      }
+
+      // Auto-start transcription
+      try {
+        await startTranscription(createdMeetingId);
+        setTranscribing(true);
+      } catch (e: any) {
+        console.error('Failed to auto-start transcription:', e?.message || e);
+      }
     } catch (e: any) {
       setError(e?.message || String(e));
     }
@@ -556,6 +592,19 @@ export function App() {
       await registerParticipantProfile(meetingObj.MeetingId, attendeeObj);
       await refreshParticipantDirectory(meetingObj.MeetingId);
       await configureAndStart(meetingObj, attendeeObj);
+
+      // Update URL with meetingId
+      if (typeof window !== 'undefined' && window.history) {
+        window.history.pushState({}, '', `/${meetingObj.MeetingId}`);
+      }
+
+      // Auto-start transcription
+      try {
+        await startTranscription(meetingObj.MeetingId);
+        setTranscribing(true);
+      } catch (e: any) {
+        console.error('Failed to auto-start transcription:', e?.message || e);
+      }
     } catch (e: any) {
       setError(e?.message || String(e));
     }
@@ -754,16 +803,11 @@ export function App() {
             <>
               <button onClick={onLeave}>退室</button>
               <button onClick={onToggleMute}>{muted ? 'ミュート解除' : 'ミュート'}</button>
-              {!transcribing ? (
-                <button onClick={onStartTranscription}>文字起こし開始</button>
-              ) : (
-                <button onClick={onStopTranscription}>停止</button>
-              )}
               <button onClick={onEndMeeting} disabled={!!meetingEndedAt}>会議終了を記録</button>
             </>
           )}
         </div>
-        <audio ref={audioElRef} autoPlay />
+        <audio ref={audioElRef} autoPlay muted={audioOutputMuted} />
       </section>
 
       <AiAssistantPanel
