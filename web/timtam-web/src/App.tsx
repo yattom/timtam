@@ -35,12 +35,9 @@ export function App() {
   const [displayName, setDisplayName] = useState<string>('');
   const [nameMessage, setNameMessage] = useState<string>('');
   const [meetingEndedAt, setMeetingEndedAt] = useState<number | null>(null);
-  const [audioOutputMuted, setAudioOutputMuted] = useState<boolean>(true);
 
   const [audioInputs, setAudioInputs] = useState<MediaDeviceInfo[]>([]);
-  const [audioOutputs, setAudioOutputs] = useState<MediaDeviceInfo[]>([]);
   const [selectedMic, setSelectedMic] = useState<string>('');
-  const [selectedSpeaker, setSelectedSpeaker] = useState<string>('');
   const [joined, setJoined] = useState(false);
   const [muted, setMuted] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
@@ -61,7 +58,6 @@ export function App() {
   const [promptMessage, setPromptMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   // (debug states removed)
 
-  const audioElRef = useRef<HTMLAudioElement | null>(null);
   const meetingRef = useRef<DefaultMeetingSession | null>(null);
   const audioVideoRef = useRef<AudioVideoFacade | null>(null);
   const transcriptHandlerRef = useRef<((event: any) => void) | null>(null);
@@ -308,16 +304,12 @@ export function App() {
 
     const observer: DeviceChangeObserver = {
       audioInputsChanged: (devices) => setAudioInputs(devices ?? []),
-      audioOutputsChanged: (devices) => setAudioOutputs(devices ?? []),
     };
     deviceController.addDeviceChangeObserver(observer);
     (async () => {
       const inputs = await deviceController.listAudioInputDevices();
-      const outputs = await deviceController.listAudioOutputDevices();
       setAudioInputs(inputs);
-      setAudioOutputs(outputs);
       if (inputs[0]) setSelectedMic(inputs[0].deviceId ?? '');
-      if (outputs[0]) setSelectedSpeaker(outputs[0].deviceId ?? '');
     })();
     return () => {
       if (permStatus) permStatus.onchange = null as any;
@@ -342,11 +334,8 @@ export function App() {
       stream.getTracks().forEach(t => t.stop());
       // refresh devices after permission
       const inputs = await deviceController.listAudioInputDevices();
-      const outputs = await deviceController.listAudioOutputDevices();
       setAudioInputs(inputs);
-      setAudioOutputs(outputs);
       if (inputs[0]) setSelectedMic(inputs[0].deviceId ?? '');
-      if (outputs[0]) setSelectedSpeaker(outputs[0].deviceId ?? '');
       setMicPermission('granted');
     } catch (e: any) {
       setMicPermission('denied');
@@ -358,11 +347,8 @@ export function App() {
   const refreshDevices = async () => {
     try {
       const inputs = await deviceController.listAudioInputDevices();
-      const outputs = await deviceController.listAudioOutputDevices();
       setAudioInputs(inputs);
-      setAudioOutputs(outputs);
       if (!selectedMic && inputs[0]) setSelectedMic(inputs[0].deviceId ?? '');
-      if (!selectedSpeaker && outputs[0]) setSelectedSpeaker(outputs[0].deviceId ?? '');
     } catch (e: any) {
       setError(e?.message || String(e));
     }
@@ -378,21 +364,6 @@ export function App() {
 
     // Extract meetingId from meeting object to avoid closure capturing empty state
     const currentMeetingId = meeting.MeetingId;
-
-    // Bind speaker output first so remote audio can play even without mic
-    if (audioElRef.current) {
-      await av.bindAudioElement(audioElRef.current);
-      // Try to direct output to selected speaker if supported
-      try {
-        if (selectedSpeaker && 'setSinkId' in (audioElRef.current as any)) {
-          await (audioElRef.current as any).setSinkId(selectedSpeaker);
-        } else if ('setSinkId' in (audioElRef.current as any)) {
-          await (audioElRef.current as any).setSinkId('default');
-        }
-      } catch {
-        // Ignore setSinkId failures (e.g., HTTP or unsupported)
-      }
-    }
 
     // Start mic if available; otherwise join receive-only
     try {
@@ -689,16 +660,6 @@ export function App() {
     }
   };
 
-  const onChangeSpeaker = async (id: string) => {
-    setSelectedSpeaker(id);
-    // amazon-chime-sdk-js uses setSinkId on the bound audio element
-    if (audioElRef.current && 'setSinkId' in (audioElRef.current as any)) {
-      try { await (audioElRef.current as any).setSinkId(id); } catch (e) {
-        // Some browsers require HTTPS for setSinkId; ignore failure
-      }
-    }
-  };
-
   const onSavePrompt = async () => {
     setPromptSaving(true);
     setPromptMessage(null);
@@ -772,17 +733,6 @@ export function App() {
           </select>
           <button style={{ marginLeft: 8 }} onClick={refreshDevices}>デバイス更新</button>
         </div>
-        <div>
-          <label>スピーカー: </label>
-          <select value={selectedSpeaker} onChange={(e) => onChangeSpeaker(e.target.value)}>
-            {audioOutputs.map(d => (
-              <option key={d.deviceId} value={d.deviceId}>{d.label || d.deviceId}</option>
-            ))}
-          </select>
-          {audioOutputs.length === 0 && (
-            <span style={{ marginLeft: 8, color: '#666' }}>出力デバイスが見つからない場合も再生は既定デバイスで行われます。</span>
-          )}
-        </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {!joined ? (
             <>
@@ -807,7 +757,6 @@ export function App() {
             </>
           )}
         </div>
-        <audio ref={audioElRef} autoPlay muted={audioOutputMuted} />
       </section>
 
       <AiAssistantPanel
