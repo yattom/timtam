@@ -619,27 +619,6 @@ export function App() {
     }
   };
 
-  const onStartTranscription = async () => {
-    if (!meetingId) return;
-    try {
-      await startTranscription(meetingId);
-      setTranscribing(true);
-    } catch (e: any) {
-      setError(e?.message || String(e));
-    }
-  };
-
-  const onStopTranscription = async () => {
-    if (!meetingId) return;
-    try {
-      await stopTranscription(meetingId);
-      setTranscribing(false);
-      setPartialText('');
-    } catch (e: any) {
-      setError(e?.message || String(e));
-    }
-  };
-
   const onEndMeeting = async () => {
     if (!meetingId) return;
     try {
