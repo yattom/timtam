@@ -357,7 +357,7 @@ async function getShardIterator(streamName: string): Promise<string> {
 }
 
 // グローバル変数（タイマーからアクセスするため）
-const window = new WindowBuffer(WINDOW_LINES);
+const window = new WindowBuffer();
 
 async function runLoop() {
   console.log(JSON.stringify({

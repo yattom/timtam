@@ -49,7 +49,7 @@ describe('Grasp', () => {
     };
 
     // Setup: Create WindowBuffer with test data
-    const windowBuffer = new WindowBuffer(5);
+    const windowBuffer = new WindowBuffer();
     windowBuffer.push('最初の発言です', 1000);
     windowBuffer.push('次の発言です', 2000);
     windowBuffer.push('最後の発言です', 3000);
@@ -91,6 +91,83 @@ describe('Grasp', () => {
     expect(mockMetrics.putLatencyMetric).toHaveBeenCalledWith(
       expect.stringContaining('test-grasp'),
       expect.any(Number)
+    );
+  });
+
+  it('should build correct prompt', async () => {
+    // arrange
+    // Setup: Create a simple Grasp configuration
+    const config: GraspConfig = {
+      nodeId: 'test-grasp',
+      promptTemplate: '以下の会議内容を確認してください:\n',
+      inputLength: 3, // 最新3行のみ
+      cooldownMs: 1000,
+      outputHandler: 'chat',
+    };
+
+    // Setup: Create WindowBuffer with test data
+    const windowBuffer = new WindowBuffer();
+    windowBuffer.push('対象外の発言です', 1000);
+    windowBuffer.push('最初の発言です', 2000);
+    windowBuffer.push('次の発言です', 3000);
+    windowBuffer.push('最後の発言です', 4000);
+
+    // Setup: Create Notebook
+    const notebook = new Notebook('test-meeting-001');
+    const grasp = new Grasp(config, null);
+
+    // act - buildPrompt()
+    const prompt = grasp.buildPrompt(windowBuffer, notebook);
+
+    // Assert: Verify the prompt was generated correctly
+    expect(prompt).toContain('以下の会議内容を確認してください:');
+    expect(prompt).toContain('最初の発言です');
+    expect(prompt).toContain('次の発言です');
+    expect(prompt).toContain('最後の発言です');
+    expect(prompt).not.toContain('対象外の発言です');
+  });
+
+  it('should pass prompt to LLM', async () => {
+    // Setup: Create a simple Grasp configuration
+    const config: GraspConfig = {
+      nodeId: 'test-grasp',
+      promptTemplate: '以下の会議内容を確認してください:\n',
+      inputLength: 3, // 最新3行のみ
+      cooldownMs: 1000,
+      outputHandler: 'chat',
+    };
+
+    // Setup: Create mock dependencies
+    const mockLLMClient: LLMClient = {
+      invoke: vi.fn(async (prompt: string, nodeId: string): Promise<JudgeResult> => {
+        return {
+          result: {
+            should_intervene: false,
+            reason: 'test',
+            message: 'test message',
+          },
+          prompt,
+          rawResponse: '{}',
+        };
+      }),
+    };
+
+    const mockNotifier: Notifier = {
+      postChat: vi.fn(),
+      postLlmCallLog: vi.fn(),
+    };
+
+    // Setup: Create Notebook
+    const notebook = new Notebook('test-meeting-001');
+
+    // Execute: Create Grasp instance and execute
+    const grasp = new Grasp(config, mockLLMClient);
+    const result = await grasp.invokeLLM('prompt', 'test-meeting-001', mockNotifier);
+
+    // Assert: Verify LLM was called with correct nodeId
+    expect(mockLLMClient.invoke).toHaveBeenCalledWith(
+      'prompt',
+      'test-grasp'
     );
   });
 });

@@ -64,11 +64,10 @@ export class Interval {
 
 export class WindowBuffer {
   private lines: BufferLine[] = [];
-  constructor(private maxLines: number) {}
+  constructor() {}
   push(line: string, timestamp?: number) {
     if (!line) return;
     this.lines.push({ text: line, timestamp: timestamp || Date.now() });
-    while (this.lines.length > this.maxLines) this.lines.shift();
   }
   content(lastN?: number): string {
     const linesToUse = lastN !== undefined
