@@ -73,7 +73,17 @@ export class WindowBuffer {
     const linesToUse = lastN !== undefined
       ? this.lines.slice(-lastN)
       : this.lines;
-    return linesToUse.map(l => {
+    return this.format(linesToUse);
+  }
+  contentSince(durationMs: number): string {
+    if (this.lines.length === 0) return '';
+    const now = Date.now();
+    const since = now - durationMs;
+    const filtered = this.lines.filter(l => l.timestamp > since);
+    return this.format(filtered);
+  }
+  format(lines: BufferLine[]): string {
+    return lines.map(l => {
       const time = new Date(l.timestamp).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo' });
       return `[${time}] ${l.text}`;
     }).join('\n');
@@ -240,17 +250,31 @@ export class Grasp {
     windowBuffer: WindowBuffer,
     notebook: Notebook,
   ) : string {
-    // 入力テキストを取得
-    const inputText = this.config.inputLength !== undefined
-      ? windowBuffer.content(this.config.inputLength)
-      : windowBuffer.content();
+    if (typeof this.config.promptTemplate === 'string') {
+      // {{INPUT:latestN}} のパターンをマッチ
+      const latestMatch = this.config.promptTemplate.match(/\{\{INPUT:latest(\d+)\}\}/);
+      if (latestMatch) {
+        const n = parseInt(latestMatch[1], 10);
+        const latestN = windowBuffer.content(n);
+        return this.config.promptTemplate.replace(latestMatch[0], latestN);
+      }
 
-    // プロンプトを生成（notebook を渡して、他の Grasp のメモにアクセス可能にする）
-    const prompt = typeof this.config.promptTemplate === 'function'
-      ? this.config.promptTemplate(inputText, notebook)
-      : this.config.promptTemplate + '\n---\n' + inputText;
+      // {{INPUT:past5m}} のパターンをマッチ
+      if (this.config.promptTemplate.includes('{{INPUT:past5m}}')) {
+        const fiveMinutesInMs = 5 * 60 * 1000;
+        const past5m = windowBuffer.contentSince(fiveMinutesInMs);
+        return this.config.promptTemplate.replace('{{INPUT:past5m}}', past5m);
+      }
 
-    return prompt;
+      // マッチしない場合はそのまま返す
+      return this.config.promptTemplate;
+    } else {
+      // 関数の場合
+      const inputText = this.config.inputLength !== undefined
+        ? windowBuffer.content(this.config.inputLength)
+        : windowBuffer.content();
+      return this.config.promptTemplate(inputText, notebook);
+    }
   }
 
   async invokeLLM(prompt: string, meetingId: string, notifier: Notifier) {

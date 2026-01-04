@@ -37,8 +37,7 @@ describe('Grasp', () => {
 
   const createTestConfig = (overrides?: Partial<GraspConfig>): GraspConfig => ({
     nodeId: 'test-grasp',
-    promptTemplate: '以下の会議内容を確認してください:\n',
-    inputLength: 3,
+    promptTemplate: '以下の会議内容を確認してください:\n{{INPUT:latest3}}',
     cooldownMs: 1000,
     outputHandler: 'chat',
     ...overrides,
@@ -76,6 +75,54 @@ describe('Grasp', () => {
     expect(prompt).toContain('次の発言です');
     expect(prompt).toContain('最後の発言です');
     expect(prompt).not.toContain('対象外の発言です');
+  });
+
+  describe('prompteTemplate and buildTemplate', () => {
+    it('INPUT and latest lines', async () => {
+      // Setup
+      const config = createTestConfig({promptTemplate: '入力を読む\n{{INPUT:latest2}}'});
+      const windowBuffer = new WindowBuffer();
+      windowBuffer.push('対象外の発言です', 1000);
+      windowBuffer.push('最初の発言です', 2000);
+      windowBuffer.push('最後の発言です', 4000);
+
+      const notebook = new Notebook('test-meeting-001');
+      const grasp = new Grasp(config, null);
+
+      // Execute
+      const prompt = grasp.buildPrompt(windowBuffer, notebook);
+
+      // Assert
+      expect(prompt).toContain('入力を読む');
+      expect(prompt).toContain('最初の発言です');
+      expect(prompt).toContain('最後の発言です');
+      expect(prompt).not.toContain('対象外の発言です');
+      expect(prompt).not.toContain('{{INPUT:');
+    });
+    it('INPUT and past 5 minutes', async () => {
+      // Setup
+      const now = 10 * 60 * 1000;
+      vi.spyOn(Date, 'now').mockReturnValue(now);
+
+      const config = createTestConfig({promptTemplate: '入力を読む\n{{INPUT:past5m}}'});
+      const windowBuffer = new WindowBuffer();
+      windowBuffer.push('6分前の発言です', now - 6 * 60 * 1000);
+      windowBuffer.push('4分前の発言です', now - 4 * 60 * 1000);
+      windowBuffer.push('1分前の発言です', now - 1 * 60 * 1000);
+
+      const notebook = new Notebook('test-meeting-001');
+      const grasp = new Grasp(config, null);
+
+      // Execute
+      const prompt = grasp.buildPrompt(windowBuffer, notebook);
+
+      // Assert
+      expect(prompt).toContain('入力を読む');
+      expect(prompt).toContain('4分前の発言です');
+      expect(prompt).toContain('1分前の発言です');
+      expect(prompt).not.toContain('6分前の発言です');
+      expect(prompt).not.toContain('{{INPUT:');
+    });
   });
 
   it('should pass prompt to LLM', async () => {
