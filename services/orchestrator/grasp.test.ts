@@ -157,9 +157,6 @@ describe('Grasp', () => {
       postLlmCallLog: vi.fn(),
     };
 
-    // Setup: Create Notebook
-    const notebook = new Notebook('test-meeting-001');
-
     // Execute: Create Grasp instance and execute
     const grasp = new Grasp(config, mockLLMClient);
     const result = await grasp.invokeLLM('prompt', 'test-meeting-001', mockNotifier);
@@ -169,5 +166,74 @@ describe('Grasp', () => {
       'prompt',
       'test-grasp'
     );
+  });
+  it('should output the response from LLM', async () => {
+    // Setup: Create a simple Grasp configuration
+    const config: GraspConfig = {
+      nodeId: 'test-grasp',
+      promptTemplate: '以下の会議内容を確認してください:\n',
+      inputLength: 3, // 最新3行のみ
+      cooldownMs: 1000,
+      outputHandler: 'chat',
+    };
+
+    const mockNotifier: Notifier = {
+      postChat: vi.fn(),
+      postLlmCallLog: vi.fn(),
+    };
+
+    // Setup: Create Notebook
+    const notebook = new Notebook('test-meeting-001');
+
+    // Execute: Create Grasp instance and execute
+    const grasp = new Grasp(config, null);
+    await grasp.reflectResponse(
+      {
+        result: {
+          should_intervene: true,
+          message: 'response from LLM',
+        }
+      },
+      'test-meeting-001',
+      mockNotifier,
+      null
+    );
+
+    // Assert: Verify LLM call was logged
+    expect(mockNotifier.postChat).toHaveBeenCalledWith(
+      'test-meeting-001',
+      'response from LLM'
+    );
+  });
+  it('should record the response from LLM', async () => {
+    // Setup: Create a simple Grasp configuration
+    const config: GraspConfig = {
+      nodeId: 'test-grasp',
+      promptTemplate: '以下の会議内容を確認してください:\n',
+      inputLength: 3, // 最新3行のみ
+      cooldownMs: 1000,
+      outputHandler: 'note',
+      noteTag: 'test-note-tag',
+    };
+
+    // Setup: Create Notebook
+    const notebook = new Notebook('test-meeting-001');
+
+    // Execute: Create Grasp instance and execute
+    const grasp = new Grasp(config, null);
+    await grasp.reflectResponse(
+      {
+        result: {
+          should_intervene: true,
+          message: 'response from LLM',
+        }
+      },
+      'test-meeting-001',
+      null,
+      notebook
+    );
+
+    const writtenNote = notebook.getNotesByTag('test-note-tag')[0];
+    expect(writtenNote.content).toEqual('response from LLM');
   });
 });

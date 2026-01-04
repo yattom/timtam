@@ -263,6 +263,28 @@ export class Grasp {
     return result;
   }
 
+  async reflectResponse(
+      response,
+      meetingId: string,
+      notifier: Notifier,
+      notebook: Notebook
+  ) {
+    if (!response.result || !response.result.should_intervene) {
+      return;
+    }
+
+    // チャットへの投稿
+    if (this.config.outputHandler === 'chat' || this.config.outputHandler === 'both') {
+      await notifier.postChat(meetingId, response.result.message);
+    }
+
+    // ノートへの記録
+    if (this.config.outputHandler === 'note' || this.config.outputHandler === 'both') {
+      const tag = this.config.noteTag || this.config.nodeId;  // デフォルトは nodeId
+      notebook.addNote(tag, response.result.message, this.config.nodeId);
+    }
+  }
+
   async execute(
     windowBuffer: WindowBuffer,
     meetingId: string,
@@ -275,21 +297,8 @@ export class Grasp {
 
     try {
       const prompt = this.buildPrompt(windowBuffer, notebook);
-      const result = await this.invokeLLM(prompt, meetingId, notifier);
-
-      // 出力処理
-      if (result.result && result.result.should_intervene) {
-        // チャットへの投稿
-        if (this.config.outputHandler === 'chat' || this.config.outputHandler === 'both') {
-          await notifier.postChat(meetingId, result.result.message);
-        }
-
-        // ノートへの記録
-        if (this.config.outputHandler === 'note' || this.config.outputHandler === 'both') {
-          const tag = this.config.noteTag || this.config.nodeId;  // デフォルトは nodeId
-          notebook.addNote(tag, result.result.message, this.config.nodeId);
-        }
-      }
+      const response = await this.invokeLLM(prompt, meetingId, notifier);
+      await this.reflectResponse(response, meetingId, notifier);
 
       const now = Date.now();
 
