@@ -264,7 +264,7 @@ export class Grasp {
   }
 
   async reflectResponse(
-      response,
+      response: JudgeResult,
       meetingId: string,
       notifier: Notifier,
       notebook: Notebook
@@ -285,6 +285,22 @@ export class Grasp {
     }
   }
 
+  async recordMetrics(
+    metrics: Metrics,
+    startTime: number,
+    asrTimestamp?: number
+  ): Promise<void> {
+    const now = Date.now();
+
+    // Grasp 実行レイテンシを記録（全 Grasp 共通）
+    await metrics.putLatencyMetric(`Grasp.${this.config.nodeId}.ExecutionLatency`, now - startTime);
+
+    // ASR → 判定の E2E レイテンシを記録（ASR タイムスタンプがある場合）
+    if (asrTimestamp) {
+      await metrics.putLatencyMetric(`Grasp.${this.config.nodeId}.E2ELatency`, now - asrTimestamp);
+    }
+  }
+
   async execute(
     windowBuffer: WindowBuffer,
     meetingId: string,
@@ -298,19 +314,10 @@ export class Grasp {
     try {
       const prompt = this.buildPrompt(windowBuffer, notebook);
       const response = await this.invokeLLM(prompt, meetingId, notifier);
-      await this.reflectResponse(response, meetingId, notifier);
+      await this.reflectResponse(response, meetingId, notifier, notebook);
+      await this.recordMetrics(metrics, startTime, asrTimestamp);
 
-      const now = Date.now();
-
-      // Grasp 実行レイテンシを記録（全 Grasp 共通）
-      await metrics.putLatencyMetric(`Grasp.${this.config.nodeId}.ExecutionLatency`, now - startTime);
-
-      // ASR → 判定の E2E レイテンシを記録（ASR タイムスタンプがある場合）
-      if (asrTimestamp) {
-        await metrics.putLatencyMetric(`Grasp.${this.config.nodeId}.E2ELatency`, now - asrTimestamp);
-      }
-
-      this.interval.markExecuted(now);
+      this.interval.markExecuted(Date.now());
     } catch (e) {
       const now = Date.now();
       console.error(JSON.stringify({
