@@ -5,6 +5,7 @@ WORKDIR /app
 COPY package.json ./package.json
 COPY tsconfig.json ./tsconfig.json
 COPY worker.ts ./worker.ts
+COPY grasp.ts ./grasp.ts
 
 # Install deps and build (use npm inside container for simplicity)
 RUN npm install --omit=dev=false \
