@@ -14,8 +14,6 @@ import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
-import * as fs from 'fs';
-import * as path from 'path';
 
 export class TimtamInfraStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
@@ -985,16 +983,6 @@ export class TimtamInfraStack extends Stack {
     });
 
     // === Web assets deployment ===
-    // Deploy web assets and runtime config.js together to avoid S3 bucket conflicts
-    const webDistPath = path.join(__dirname, '../../../web/timtam-web/dist');
-
-    // Build check: fail fast if web build is missing
-    if (!fs.existsSync(webDistPath)) {
-      throw new Error(
-        `Web build not found at ${webDistPath}! Run "pnpm build" in web/timtam-web first.`
-      );
-    }
-
     // Note: Web assets are deployed separately via `pnpm run web:deploy`
     // This avoids the slow and unreliable BucketDeployment custom resource
 
