@@ -139,18 +139,6 @@ promptTemplate: |
   {{INPUT:all}}
 ```
 
-### `{{SYSTEM_PROMPT}}`
-
-動的に設定されるシステムプロンプト（CURRENT_PROMPT）。API または SQS 経由で変更可能。
-
-```yaml
-promptTemplate: |
-  以下は会議の直近発話です。
-  {{SYSTEM_PROMPT}}
-  ---
-  {{INPUT}}
-```
-
 ### `{{NOTES:tag}}`
 
 指定したタグのすべてのノートを取得。
