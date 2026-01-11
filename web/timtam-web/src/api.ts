@@ -149,3 +149,42 @@ export async function updateOrchestratorPrompt(prompt: string): Promise<void> {
     throw new Error(errorData.error || `update orchestrator prompt failed: ${res.status}`);
   }
 }
+
+export type GraspPreset = {
+  configId: string;
+  name: string;
+  yaml: string;
+  isDefault: boolean;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type GraspConfig = {
+  yaml: string;
+  updatedAt: number;
+};
+
+export async function getGraspPresets(): Promise<GraspPreset[]> {
+  const res = await fetch(u('/grasp/configs'));
+  if (!res.ok) throw new Error(`get grasp presets failed: ${res.status}`);
+  const data = await res.json();
+  return data.configs || [];
+}
+
+export async function getCurrentGraspConfig(): Promise<GraspConfig> {
+  const res = await fetch(u('/grasp/config/current'));
+  if (!res.ok) throw new Error(`get current grasp config failed: ${res.status}`);
+  return res.json();
+}
+
+export async function updateGraspConfig(yaml: string): Promise<void> {
+  const res = await fetch(u('/grasp/config'), {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ yaml }),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || `update grasp config failed: ${res.status}`);
+  }
+}

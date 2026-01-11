@@ -18,6 +18,7 @@ import {
   Notifier as INotifier,
   Metrics as IMetrics
 } from './grasp';
+import { parseGraspGroupDefinition, GraspGroupDefinition } from './graspConfigParser';
 
 // 環境変数
 const STREAM_NAME = process.env.KINESIS_STREAM_NAME || 'timtam-asr';
@@ -300,6 +301,32 @@ const moodBasedInterventionGrasp = new Grasp(
 // すべての Grasp のリスト（新しい Grasp はここに追加するだけ）
 const grasps = [judgeGrasp, toneObserverGrasp, moodGrasp, moodBasedInterventionGrasp];
 
+// Grasp グループを動的に再構築
+function rebuildGrasps(graspGroupDef: GraspGroupDefinition): void {
+  // 既存 Grasp をクリア
+  grasps.length = 0;
+
+  // YAML から新しい Grasp インスタンスを生成
+  for (const graspDef of graspGroupDef.grasps) {
+    const config: GraspConfig = {
+      nodeId: graspDef.nodeId,
+      promptTemplate: graspDef.promptTemplate,
+      cooldownMs: graspDef.intervalSec * 1000,
+      outputHandler: graspDef.outputHandler as 'chat' | 'note' | 'both',
+      noteTag: graspDef.noteTag,
+    };
+    const grasp = new Grasp(config, triggerLlm);
+    grasps.push(grasp);
+  }
+
+  graspQueue.clear();
+  console.log(JSON.stringify({
+    type: 'orchestrator.grasps.rebuilt',
+    graspCount: grasps.length,
+    ts: Date.now()
+  }));
+}
+
 async function pollControlOnce() {
   if (!CONTROL_SQS_URL) return;
   try {
@@ -330,6 +357,25 @@ async function pollControlOnce() {
         if (parsed.type === 'meetingId' || (parsed.meetingId && !parsed.type)) {
           CURRENT_MEETING_ID = parsed.meetingId;
           console.log(JSON.stringify({ type: 'orchestrator.control.meeting.set', meetingId: CURRENT_MEETING_ID, ts: Date.now() }));
+        }
+
+        // Handle grasp_config update messages
+        if (parsed.type === 'grasp_config' && typeof parsed.yaml === 'string') {
+          try {
+            const graspGroupDef = parseGraspGroupDefinition(parsed.yaml);
+            rebuildGrasps(graspGroupDef);
+            console.log(JSON.stringify({
+              type: 'orchestrator.control.grasp_config.applied',
+              graspCount: graspGroupDef.grasps.length,
+              ts: Date.now()
+            }));
+          } catch (error) {
+            console.error(JSON.stringify({
+              type: 'orchestrator.control.grasp_config.error',
+              error: (error as Error).message,
+              ts: Date.now()
+            }));
+          }
         }
       } catch {
         // ignore
@@ -529,6 +575,36 @@ async function initializePrompt() {
   }
 }
 
+// Initialize Grasp configuration from DynamoDB
+async function initializeGraspConfig() {
+  try {
+    const ddbClient = new DynamoDBClient({ region: BEDROCK_REGION });
+    const ddb = DynamoDBDocumentClient.from(ddbClient);
+    const result = await ddb.send(new GetCommand({
+      TableName: CONFIG_TABLE_NAME,
+      Key: { configKey: 'current_grasp_config' }
+    }));
+
+    if (result.Item?.yaml) {
+      const graspGroupDef = parseGraspGroupDefinition(result.Item.yaml);
+      rebuildGrasps(graspGroupDef);
+      console.log(JSON.stringify({
+        type: 'orchestrator.config.grasp.loaded',
+        graspCount: graspGroupDef.grasps.length,
+        ts: Date.now()
+      }));
+    } else {
+      console.log(JSON.stringify({
+        type: 'orchestrator.config.grasp.default',
+        graspCount: grasps.length,
+        ts: Date.now()
+      }));
+    }
+  } catch (e) {
+    console.warn('Failed to load grasp config from DynamoDB, using default', (e as any)?.message);
+  }
+}
+
 // エントリ
 console.log(JSON.stringify({
   type: 'orchestrator.worker.start',
@@ -553,6 +629,7 @@ setInterval(async () => {
 
 (async () => {
   await initializePrompt();
+  await initializeGraspConfig();
   await runLoop();
 })().catch((e) => {
   console.error('worker fatal', e);

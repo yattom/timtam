@@ -313,6 +313,14 @@ export class GraspQueue {
   size(): number {
     return this.queue.length;
   }
+
+  clear(): void {
+    this.queue.length = 0;
+    console.log(JSON.stringify({
+      type: 'grasp.queue.cleared',
+      ts: Date.now()
+    }));
+  }
 }
 
 export class Grasp {

@@ -10,6 +10,7 @@ import {
 } from 'amazon-chime-sdk-js';
 import { addAttendee, createMeeting, getConfig, startTranscription, stopTranscription, getAiMessages, AiMessage, getOrchestratorPrompt, updateOrchestratorPrompt, sendTranscriptionEvent, upsertParticipantProfile, getParticipants, endMeeting } from './api';
 import { AiAssistantPanel } from './AiAssistantPanel';
+import { GraspConfigPanel } from './GraspConfigPanel';
 
 const ANIMAL_NAMES = [
   'ねこ', 'いぬ', 'うさぎ', 'ぞう', 'らいおん', 'きつね', 'たぬき', 'しか', 'さる', 'ごりら',
@@ -737,6 +738,8 @@ export function App() {
           )}
         </div>
       </section>
+
+      <GraspConfigPanel />
 
       <AiAssistantPanel
         aiMessages={aiMessages}

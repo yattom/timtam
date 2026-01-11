@@ -61,6 +61,14 @@ export class TimtamInfraStack extends Stack {
       removalPolicy: this.node.tryGetContext('keepTables') ? undefined : RemovalPolicy.DESTROY,
     });
 
+    // === DynamoDB table for Grasp Configuration Presets ===
+    const graspConfigsTable = new dynamodb.Table(this, 'GraspConfigsTable', {
+      tableName: 'timtam-grasp-configs',
+      partitionKey: { name: 'configId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: this.node.tryGetContext('keepTables') ? undefined : RemovalPolicy.DESTROY,
+    });
+
     // === Kinesis stream (created early so we can reference it in Lambda env) ===
     // Use PROVISIONED with 1 shard since orchestrator reads from single shard only
     // and filters by CURRENT_MEETING_ID (non-standard consumer pattern)
@@ -265,6 +273,60 @@ export class TimtamInfraStack extends Stack {
     });
     orchestratorConfigTable.grantWriteData(updatePromptFn);
 
+    // === Grasp Config API Lambdas ===
+    const getGraspConfigsFn = new NodejsFunction(this, 'GetGraspConfigsFn', {
+      entry: '../../services/grasp-config/getConfigs.ts',
+      timeout: Duration.seconds(10),
+      runtime: lambda.Runtime.NODEJS_20_X,
+      environment: {
+        GRASP_CONFIGS_TABLE: graspConfigsTable.tableName,
+      },
+    });
+    graspConfigsTable.grantReadData(getGraspConfigsFn);
+
+    const getCurrentGraspConfigFn = new NodejsFunction(this, 'GetCurrentGraspConfigFn', {
+      entry: '../../services/grasp-config/getCurrentConfig.ts',
+      timeout: Duration.seconds(10),
+      runtime: lambda.Runtime.NODEJS_20_X,
+      environment: {
+        CONFIG_TABLE_NAME: orchestratorConfigTable.tableName,
+      },
+    });
+    orchestratorConfigTable.grantReadData(getCurrentGraspConfigFn);
+
+    const updateGraspConfigFn = new NodejsFunction(this, 'UpdateGraspConfigFn', {
+      entry: '../../services/grasp-config/updateConfig.ts',
+      timeout: Duration.seconds(10),
+      runtime: lambda.Runtime.NODEJS_20_X,
+      environment: {
+        CONFIG_TABLE_NAME: orchestratorConfigTable.tableName,
+        CONTROL_SQS_URL: '', // Will be set after controlQueue is created
+      },
+      bundling: {
+        nodeModules: ['@aws-sdk/client-sqs', 'js-yaml'],
+        externalModules: ['aws-sdk'],
+        target: 'node20',
+        platform: 'node',
+      },
+    });
+    orchestratorConfigTable.grantWriteData(updateGraspConfigFn);
+
+    const saveGraspPresetFn = new NodejsFunction(this, 'SaveGraspPresetFn', {
+      entry: '../../services/grasp-config/savePreset.ts',
+      timeout: Duration.seconds(10),
+      runtime: lambda.Runtime.NODEJS_20_X,
+      environment: {
+        GRASP_CONFIGS_TABLE: graspConfigsTable.tableName,
+      },
+      bundling: {
+        nodeModules: ['js-yaml'],
+        externalModules: ['aws-sdk'],
+        target: 'node20',
+        platform: 'node',
+      },
+    });
+    graspConfigsTable.grantWriteData(saveGraspPresetFn);
+
     // === Admin API Lambdas ===
     // Read ADMIN_PASSWORD from context (passed via --context or cdk.json)
     const adminPassword = this.node.tryGetContext('adminPassword') || process.env.ADMIN_PASSWORD || '';
@@ -350,6 +412,10 @@ export class TimtamInfraStack extends Stack {
     // Update updatePromptFn with SQS URL and grant permissions
     updatePromptFn.addEnvironment('CONTROL_SQS_URL', controlQueue.queueUrl);
     controlQueue.grantSendMessages(updatePromptFn);
+
+    // Update updateGraspConfigFn with SQS URL and grant permissions
+    updateGraspConfigFn.addEnvironment('CONTROL_SQS_URL', controlQueue.queueUrl);
+    controlQueue.grantSendMessages(updateGraspConfigFn);
 
     const startMeetingFn = new NodejsFunction(this, 'StartMeetingOrchestratorFn', {
       entry: '../../services/orchestrator/startMeeting.ts',
@@ -750,6 +816,88 @@ export class TimtamInfraStack extends Stack {
     });
     updatePromptRoute.addDependency(updatePromptInt);
     updatePromptFn.addPermission('InvokeByHttpApiUpdatePrompt', {
+      principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+      sourceArn,
+      action: 'lambda:InvokeFunction',
+    });
+
+    // === Grasp Config API Routes ===
+
+    // Get Grasp Configs (GET /grasp/configs)
+    const getGraspConfigsInt = new CfnIntegration(this, 'GetGraspConfigsIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(getGraspConfigsFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const getGraspConfigsRoute = new CfnRoute(this, 'GetGraspConfigsRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'GET /grasp/configs',
+      target: `integrations/${getGraspConfigsInt.ref}`,
+    });
+    getGraspConfigsRoute.addDependency(getGraspConfigsInt);
+    getGraspConfigsFn.addPermission('InvokeByHttpApiGetGraspConfigs', {
+      principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+      sourceArn,
+      action: 'lambda:InvokeFunction',
+    });
+
+    // Get Current Grasp Config (GET /grasp/config/current)
+    const getCurrentGraspConfigInt = new CfnIntegration(this, 'GetCurrentGraspConfigIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(getCurrentGraspConfigFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const getCurrentGraspConfigRoute = new CfnRoute(this, 'GetCurrentGraspConfigRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'GET /grasp/config/current',
+      target: `integrations/${getCurrentGraspConfigInt.ref}`,
+    });
+    getCurrentGraspConfigRoute.addDependency(getCurrentGraspConfigInt);
+    getCurrentGraspConfigFn.addPermission('InvokeByHttpApiGetCurrentGraspConfig', {
+      principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+      sourceArn,
+      action: 'lambda:InvokeFunction',
+    });
+
+    // Update Grasp Config (PUT /grasp/config)
+    const updateGraspConfigInt = new CfnIntegration(this, 'UpdateGraspConfigIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(updateGraspConfigFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const updateGraspConfigRoute = new CfnRoute(this, 'UpdateGraspConfigRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'PUT /grasp/config',
+      target: `integrations/${updateGraspConfigInt.ref}`,
+    });
+    updateGraspConfigRoute.addDependency(updateGraspConfigInt);
+    updateGraspConfigFn.addPermission('InvokeByHttpApiUpdateGraspConfig', {
+      principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+      sourceArn,
+      action: 'lambda:InvokeFunction',
+    });
+
+    // Save Grasp Preset (POST /grasp/presets)
+    const saveGraspPresetInt = new CfnIntegration(this, 'SaveGraspPresetIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(saveGraspPresetFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const saveGraspPresetRoute = new CfnRoute(this, 'SaveGraspPresetRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'POST /grasp/presets',
+      target: `integrations/${saveGraspPresetInt.ref}`,
+    });
+    saveGraspPresetRoute.addDependency(saveGraspPresetInt);
+    saveGraspPresetFn.addPermission('InvokeByHttpApiSaveGraspPreset', {
       principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
       sourceArn,
       action: 'lambda:InvokeFunction',
