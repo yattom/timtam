@@ -1,4 +1,5 @@
 import * as YAML from 'js-yaml';
+import { resolveInputVariable, resolveNotesVariable, WindowBuffer, Notebook } from './grasp';
 
 export interface GraspDefinition {
   nodeId: string;
@@ -12,43 +13,33 @@ export interface GraspGroupDefinition {
   grasps: GraspDefinition[];
 }
 
-function validateInputFormat(modifier: string): boolean {
-  if (!modifier || modifier === 'all') return true;
-  if (/^latest\d+$/.test(modifier)) return true;
-  if (/^past\d+[mh]$/.test(modifier)) return true;
-  return false;
-}
-
-function validateNotesFormat(parts: string[]): boolean {
-  if (parts.length < 2) return false; // {{NOTES}} without tag
-  if (!parts[1] || parts[1].trim() === '') return false; // {{NOTES:}} with empty tag
-  if (parts.length === 2) return true; // {{NOTES:tag}}
-  if (parts.length === 3) {
-    const modifier = parts[2];
-    if (modifier === 'all') return true;
-    if (/^latest\d+$/.test(modifier)) return true;
-    return false;
-  }
-  return false;
-}
-
 function validateTemplateVariables(promptTemplate: string): void {
+  // Create mock objects for validation
+  const emptyBuffer = new WindowBuffer();
+  const emptyNotebook = new Notebook('validation');
+
   // Validate {{INPUT:...}} format
   const inputMatches = promptTemplate.matchAll(/\{\{INPUT(?::([^}]+))?\}\}/g);
   for (const match of inputMatches) {
-    const modifier = match[1];
-    if (!validateInputFormat(modifier)) {
-      throw new Error(`Invalid INPUT format: {{INPUT${modifier ? ':' + modifier : ''}}}`);
+    const modifier = match[1] || '';
+    try {
+      resolveInputVariable(modifier, emptyBuffer);
+    } catch (error) {
+      throw new Error(`Invalid INPUT format: {{INPUT${modifier ? ':' + modifier : ''}}} - ${(error as Error).message}`);
     }
   }
 
-  // Validate {{NOTES:...}} format - allow empty captures
+  // Validate {{NOTES:...}} format
   const notesMatches = promptTemplate.matchAll(/\{\{NOTES(?::([^}]*))?\}\}/g);
   for (const match of notesMatches) {
-    const fullMatch = match[1];
-    const parts = ['NOTES', ...(fullMatch !== undefined ? fullMatch.split(':') : [])];
-    if (!validateNotesFormat(parts)) {
-      throw new Error(`Invalid NOTES format: {{NOTES${fullMatch !== undefined ? ':' + fullMatch : ''}}}`);
+    const modifier = match[1];
+    if (modifier === undefined || modifier.trim() === '') {
+      throw new Error(`Invalid NOTES format: {{NOTES}} - tag is required`);
+    }
+    try {
+      resolveNotesVariable(modifier, emptyNotebook);
+    } catch (error) {
+      throw new Error(`Invalid NOTES format: {{NOTES:${modifier}}} - ${(error as Error).message}`);
     }
   }
 }
