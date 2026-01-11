@@ -159,6 +159,90 @@ export class NotesStore {
   }
 }
 
+// ヘルパー関数: テンプレート変数の処理用
+export function parseDuration(timeSpec: string): number {
+  const match = timeSpec.match(/^(\d+)([mh])$/);
+  if (!match) {
+    throw new Error(`Invalid time specification: ${timeSpec}`);
+  }
+  const value = parseInt(match[1], 10);
+  const unit = match[2];
+  return unit === 'm' ? value * 60 * 1000 : value * 60 * 60 * 1000;
+}
+
+export function parseLatestCount(modifier: string): number {
+  const match = modifier.match(/^latest(\d+)$/);
+  if (!match) {
+    throw new Error(`Invalid latest modifier: ${modifier}`);
+  }
+  return parseInt(match[1], 10);
+}
+
+export function formatNotes(notes: Note[]): string {
+  if (notes.length === 0) return '';
+  return notes.map(note => {
+    const time = new Date(note.timestamp).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo' });
+    return `[${time}] ${note.content}`;
+  }).join('\n\n');
+}
+
+// 変数解決メソッド: テンプレート内の{{INPUT:*}}を解決
+export function resolveInputVariable(modifier: string, windowBuffer: WindowBuffer): string {
+  if (modifier === '' || modifier === 'all') {
+    return windowBuffer.content();
+  }
+  if (modifier.startsWith('latest')) {
+    const count = parseLatestCount(modifier);
+    return windowBuffer.content(count);
+  }
+  if (modifier.startsWith('past')) {
+    const timeSpec = modifier.substring(4); // "past30m" → "30m"
+    const durationMs = parseDuration(timeSpec);
+    return windowBuffer.contentSince(durationMs);
+  }
+  throw new Error(`Invalid INPUT modifier: ${modifier}`);
+}
+
+// 変数解決メソッド: テンプレート内の{{NOTES:*}}を解決
+export function resolveNotesVariable(modifier: string, notebook: Notebook): string {
+  const parts = modifier.split(':');
+  const tag = parts[0];
+  const spec = parts[1] || 'all';
+
+  const allNotes = notebook.getNotesByTag(tag);
+
+  if (spec === 'all') {
+    return formatNotes(allNotes);
+  }
+  if (spec.startsWith('latest')) {
+    const count = parseLatestCount(spec);
+    const selectedNotes = allNotes.slice(-count);
+    return formatNotes(selectedNotes);
+  }
+  throw new Error(`Invalid NOTES modifier: ${modifier}`);
+}
+
+// テンプレート内の全ての変数を置換
+export function replaceTemplateVariables(
+  template: string,
+  windowBuffer: WindowBuffer,
+  notebook: Notebook
+): string {
+  let result = template;
+
+  // {{INPUT:*}} の置換
+  result = result.replace(/\{\{INPUT(?::([^}]+))?\}\}/g, (match, modifier) => {
+    return resolveInputVariable(modifier || '', windowBuffer);
+  });
+
+  // {{NOTES:*}} の置換
+  result = result.replace(/\{\{NOTES:([^}]+)\}\}/g, (match, modifier) => {
+    return resolveNotesVariable(modifier, notebook);
+  });
+
+  return result;
+}
+
 export class GraspQueue {
   private queue: Array<{ grasp: Grasp; timestamp: number }> = [];
   private interval: Interval;
@@ -251,23 +335,11 @@ export class Grasp {
     notebook: Notebook,
   ) : string {
     if (typeof this.config.promptTemplate === 'string') {
-      // {{INPUT:latestN}} のパターンをマッチ
-      const latestMatch = this.config.promptTemplate.match(/\{\{INPUT:latest(\d+)\}\}/);
-      if (latestMatch) {
-        const n = parseInt(latestMatch[1], 10);
-        const latestN = windowBuffer.content(n);
-        return this.config.promptTemplate.replace(latestMatch[0], latestN);
-      }
-
-      // {{INPUT:past5m}} のパターンをマッチ
-      if (this.config.promptTemplate.includes('{{INPUT:past5m}}')) {
-        const fiveMinutesInMs = 5 * 60 * 1000;
-        const past5m = windowBuffer.contentSince(fiveMinutesInMs);
-        return this.config.promptTemplate.replace('{{INPUT:past5m}}', past5m);
-      }
-
-      // マッチしない場合はそのまま返す
-      return this.config.promptTemplate;
+      return replaceTemplateVariables(
+        this.config.promptTemplate,
+        windowBuffer,
+        notebook
+      );
     } else {
       // 関数の場合
       const inputText = this.config.inputLength !== undefined
