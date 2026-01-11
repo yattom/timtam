@@ -5,7 +5,6 @@
   "license": "UNLICENSED",
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "3.600.0",
-    "@aws-sdk/client-kinesis": "3.600.0",
     "@aws-sdk/client-cloudwatch": "3.600.0",
     "@aws-sdk/client-sqs": "3.600.0",
     "@aws-sdk/client-dynamodb": "3.600.0",
