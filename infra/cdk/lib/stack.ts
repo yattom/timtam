@@ -7,7 +7,6 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3n from 'aws-cdk-lib/aws-s3-notifications';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
-import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
@@ -1019,22 +1018,8 @@ export class TimtamInfraStack extends Stack {
       );
     }
 
-    // Generate runtime config.js using Source.data() to properly resolve CDK tokens at deploy time
-    const configSource = s3deploy.Source.data(
-      'config.js',
-      `window.API_BASE_URL='${apiBaseUrl}';`
-    );
-
-    // Deploy web assets and config.js together
-    new s3deploy.BucketDeployment(this, 'DeployWebsite', {
-      sources: [
-        s3deploy.Source.asset(webDistPath),
-        configSource,
-      ],
-      destinationBucket: siteBucket,
-      distribution: webDistribution,
-      distributionPaths: ['/*'],
-    });
+    // Note: Web assets are deployed separately via `pnpm run web:deploy`
+    // This avoids the slow and unreliable BucketDeployment custom resource
 
     // Grant ECS and CloudFront permissions to admin Lambdas
     // (These are added here because the resources need to be defined first)
@@ -1075,6 +1060,8 @@ export class TimtamInfraStack extends Stack {
     });
     new CfnOutput(this, 'TtsDefaultVoice', { value: 'Mizuki' });
     new CfnOutput(this, 'WebUrl', { value: `https://${webDistribution.distributionDomainName}` });
+    new CfnOutput(this, 'WebBucketName', { value: siteBucket.bucketName });
+    new CfnOutput(this, 'WebDistributionId', { value: webDistribution.distributionId });
     new CfnOutput(this, 'OrchestratorControlQueueUrl', { value: controlQueue.queueUrl });
     new CfnOutput(this, 'OrchestratorServiceName', { value: service.serviceName });
     new CfnOutput(this, 'TranscriptStreamName', { value: transcriptStream.streamName });
