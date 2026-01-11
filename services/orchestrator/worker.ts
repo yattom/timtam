@@ -1,4 +1,3 @@
-import { KinesisClient, GetShardIteratorCommand, GetRecordsCommand, DescribeStreamCommand } from '@aws-sdk/client-kinesis';
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
 import { CloudWatchClient, PutMetricDataCommand } from '@aws-sdk/client-cloudwatch';
 import { SQSClient, ReceiveMessageCommand, DeleteMessageCommand } from '@aws-sdk/client-sqs';
@@ -21,7 +20,6 @@ import {
 import { parseGraspGroupDefinition, GraspGroupDefinition } from './graspConfigParser';
 
 // 環境変数
-const STREAM_NAME = process.env.KINESIS_STREAM_NAME || 'timtam-asr';
 const TRANSCRIPT_QUEUE_URL = process.env.TRANSCRIPT_QUEUE_URL || '';  // ADR-0011: SQS FIFO queue
 const BEDROCK_REGION = process.env.BEDROCK_REGION || 'us-east-1';
 const BEDROCK_MODEL_ID = process.env.BEDROCK_MODEL_ID || 'anthropic.claude-haiku-4.5';
@@ -202,7 +200,6 @@ class Notifier implements INotifier {
   }
 }
 
-const kinesis = new KinesisClient({});
 const triggerLlm = new TriggerLLM();
 const notifier = new Notifier();
 const metrics = new Metrics();
@@ -387,19 +384,6 @@ async function pollControlOnce() {
   } catch (e) {
     console.warn('control poll failed', (e as any)?.message);
   }
-}
-
-async function getShardIterator(streamName: string): Promise<string> {
-  const desc = await kinesis.send(new DescribeStreamCommand({ StreamName: streamName }));
-  const shardId = desc.StreamDescription?.Shards?.[0]?.ShardId;
-  if (!shardId) throw new Error('No shard found in stream');
-  const it = await kinesis.send(new GetShardIteratorCommand({
-    StreamName: streamName,
-    ShardId: shardId,
-    ShardIteratorType: 'LATEST',
-  }));
-  if (!it.ShardIterator) throw new Error('Failed to get shard iterator');
-  return it.ShardIterator;
 }
 
 // グローバル変数（タイマーからアクセスするため）
@@ -609,7 +593,7 @@ async function initializeGraspConfig() {
 console.log(JSON.stringify({
   type: 'orchestrator.worker.start',
   ts: Date.now(),
-  env: { STREAM_NAME, BEDROCK_REGION, BEDROCK_MODEL_ID, CURRENT_MEETING_ID, CONTROL_SQS_URL, CONFIG_TABLE_NAME }
+  env: { BEDROCK_REGION, BEDROCK_MODEL_ID, CURRENT_MEETING_ID, CONTROL_SQS_URL, CONFIG_TABLE_NAME }
 }));
 
 // 定期的にキューを処理（完全な沈黙時でもキューに入った Grasp を実行）

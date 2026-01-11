@@ -13,7 +13,6 @@ import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as logs from 'aws-cdk-lib/aws-logs';
-import * as kinesis from 'aws-cdk-lib/aws-kinesis';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -66,16 +65,6 @@ export class TimtamInfraStack extends Stack {
       partitionKey: { name: 'configId', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: this.node.tryGetContext('keepTables') ? undefined : RemovalPolicy.DESTROY,
-    });
-
-    // === Kinesis stream (created early so we can reference it in Lambda env) ===
-    // Use PROVISIONED with 1 shard since orchestrator reads from single shard only
-    // and filters by CURRENT_MEETING_ID (non-standard consumer pattern)
-    const transcriptStream = new kinesis.Stream(this, 'TranscriptAsrStream', {
-      streamName: 'transcript-asr',
-      streamMode: kinesis.StreamMode.PROVISIONED,
-      shardCount: 1,
-      retentionPeriod: Duration.hours(24),
     });
 
     // === SQS FIFO Queue for transcript streaming (ADR-0011) ===
@@ -169,8 +158,7 @@ export class TimtamInfraStack extends Stack {
       timeout: Duration.seconds(10),
       runtime: lambda.Runtime.NODEJS_20_X,
       environment: {
-        KINESIS_STREAM_NAME: transcriptStream.streamName,
-        TRANSCRIPT_QUEUE_URL: transcriptQueue.queueUrl,  // ADR-0011: Phase 1 parallel operation
+        TRANSCRIPT_QUEUE_URL: transcriptQueue.queueUrl,  // ADR-0011
       },
     });
 
@@ -192,9 +180,8 @@ export class TimtamInfraStack extends Stack {
     transcriptionStartFn.addToRolePolicy(meetingPolicies);
     transcriptionStopFn.addToRolePolicy(meetingPolicies);
 
-    // Grant Kinesis write permission to transcriptionEvents Lambda
-    transcriptStream.grantWrite(transcriptionEventsFn);
-    transcriptQueue.grantSendMessages(transcriptionEventsFn);  // ADR-0011: Grant SQS write permission
+    // Grant SQS write permission to transcriptionEvents Lambda (ADR-0011)
+    transcriptQueue.grantSendMessages(transcriptionEventsFn);
 
     // Ensure the Chime transcription service-linked role exists in this account
     // Required for Amazon Chime SDK live transcription with Amazon Transcribe
@@ -949,15 +936,7 @@ export class TimtamInfraStack extends Stack {
     const taskRole = new iam.Role(this, 'OrchestratorTaskRole', {
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
     });
-    // Permissions: Kinesis read, Bedrock invoke, CloudWatch metrics, SQS consume, DynamoDB write
-    taskRole.addToPolicy(new iam.PolicyStatement({
-      actions: [
-        'kinesis:DescribeStream',
-        'kinesis:GetShardIterator',
-        'kinesis:GetRecords'
-      ],
-      resources: [transcriptStream.streamArn],
-    }));
+    // Permissions: Bedrock invoke, CloudWatch metrics, SQS consume, DynamoDB write
     taskRole.addToPolicy(new iam.PolicyStatement({
       actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
       resources: ['*'],
@@ -985,13 +964,11 @@ export class TimtamInfraStack extends Stack {
       }),
       logging: ecs.LogDriver.awsLogs({ logGroup, streamPrefix: 'orchestrator' }),
       environment: {
-        // Stream name: can be changed later; default here is a functional name
-        KINESIS_STREAM_NAME: transcriptStream.streamName,
         TRANSCRIPT_QUEUE_URL: transcriptQueue.queueUrl,  // ADR-0011: SQS FIFO queue
         BEDROCK_REGION: 'ap-northeast-1',
         BEDROCK_MODEL_ID: 'arn:aws:bedrock:ap-northeast-1:030046728177:inference-profile/global.anthropic.claude-haiku-4-5-20251001-v1:0',
         WINDOW_LINES: '5',
-        POLL_INTERVAL_MS: '1000', // 1 second to avoid Kinesis rate limits (5 req/sec max)
+        POLL_INTERVAL_MS: '1000', // 1 second polling interval
         CONTROL_SQS_URL: controlQueue.queueUrl,
         AI_MESSAGES_TABLE: aiMessagesTable.tableName,
         CONFIG_TABLE_NAME: orchestratorConfigTable.tableName,
@@ -1064,7 +1041,6 @@ export class TimtamInfraStack extends Stack {
     new CfnOutput(this, 'WebDistributionId', { value: webDistribution.distributionId });
     new CfnOutput(this, 'OrchestratorControlQueueUrl', { value: controlQueue.queueUrl });
     new CfnOutput(this, 'OrchestratorServiceName', { value: service.serviceName });
-    new CfnOutput(this, 'TranscriptStreamName', { value: transcriptStream.streamName });
     new CfnOutput(this, 'TranscriptQueueUrl', { value: transcriptQueue.queueUrl });  // ADR-0011
   }
 }
