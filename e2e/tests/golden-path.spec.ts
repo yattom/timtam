@@ -29,6 +29,11 @@ const DEFAULT_GRASP_YAML = `grasps:
     outputHandler: "chat"
 `;
 
+// テスト設定定数
+const MIN_TRANSCRIPTION_LENGTH = 50; // 文字起こしの最小文字数
+const MIN_AI_MESSAGE_LENGTH = 30; // AIメッセージの最小文字数
+const AUDIO_INPUT_DURATION_MS = 30000; // 音声入力のシミュレーション時間（30秒）
+
 /**
  * ページで名前を設定する
  */
@@ -124,14 +129,15 @@ async function waitForTranscription(page: Page, timeoutMs: number = 60000) {
   
   // 文字起こしのテキストが表示されるまで待つ
   await page.waitForFunction(
-    () => {
+    (minLength) => {
       const container = document.querySelector('h3:has-text("文字起こし")') 
         ?.parentElement
         ?.querySelector('div[style*="border"]');
       const text = container?.textContent || '';
       // 初期メッセージではなく、実際の文字起こしが含まれているか確認
-      return text.length > 50 && !text.includes('ここに文字起こしが表示される');
+      return text.length > minLength && !text.includes('ここに文字起こしが表示される');
     },
+    MIN_TRANSCRIPTION_LENGTH,
     { timeout: timeoutMs }
   );
 }
@@ -146,14 +152,15 @@ async function waitForAiResponse(page: Page, timeoutMs: number = 90000) {
   
   // AIメッセージが表示されるのを待つ
   await page.waitForFunction(
-    () => {
+    (minLength) => {
       const container = document.querySelector('h3:has-text("AI Assistant")')
         ?.parentElement
         ?.querySelector('div[style*="border"]');
       const text = container?.textContent || '';
       // AIメッセージが含まれているか確認（初期メッセージではない）
-      return text.length > 30 && !text.includes('AI Assistantのメッセージがここに表示される');
+      return text.length > minLength && !text.includes('AI Assistantのメッセージがここに表示される');
     },
+    MIN_AI_MESSAGE_LENGTH,
     { timeout: timeoutMs }
   );
 }
@@ -212,8 +219,9 @@ test.describe('E2E: 会議のゴールデンパス', () => {
 
       console.log('Step 6: 音声入力のシミュレーション（フェイクメディアストリーム使用）');
       // Playwrightのフェイクメディアストリームは自動的に音声を生成する
-      // 30秒待機して、システムが文字起こしを処理する時間を与える
-      await page1.waitForTimeout(30000);
+      // システムが文字起こしを処理する時間を与えるために待機
+      // 注: 実際のシステムの応答速度に依存するため、文字起こしが表示されるまで待つのが理想的
+      await page1.waitForTimeout(AUDIO_INPUT_DURATION_MS);
 
       console.log('Step 7: 文字起こしの確認');
       // 文字起こしが両方のページで表示されることを確認
