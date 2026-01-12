@@ -65,8 +65,9 @@ export async function getStackOutput(
   const output = stack.Outputs?.find((o) => o.OutputKey === outputKey);
   if (!output) {
     console.error(`Stack output not found: ${outputKey} in stack ${stackName}`);
+    return undefined;
   }
-  return output?.OutputValue;
+  return output.OutputValue;
 }
 
 /**
