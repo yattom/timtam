@@ -1,6 +1,6 @@
 # ADR 0010: オーケストレーター時系列メモのインメモリストレージ採用
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2025-12-23
 - Owners: timtam PoC チーム
 
