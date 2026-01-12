@@ -1,5 +1,6 @@
 // Meeting: 各ミーティング専用のオーケストレーターインスタンス
 import {
+  MeetingId,
   WindowBuffer,
   Notebook,
   NotesStore,
@@ -10,9 +11,6 @@ import {
   Metrics,
 } from './grasp';
 import { Message } from '@aws-sdk/client-sqs';
-
-// MeetingId type for type safety
-export type MeetingId = string & { readonly __brand: unique symbol };
 
 export type AsrEvent = {
   meetingId: MeetingId;
@@ -49,7 +47,7 @@ export class Meeting {
   ) {
     this.meetingId = config.meetingId;
     this.window = new WindowBuffer();
-    this.notebook = new Notebook(config.meetingId as string);
+    this.notebook = new Notebook(config.meetingId);
     this.graspQueue = new GraspQueue();
     this.grasps = grasps;
     this.lastActivityTime = Date.now();
@@ -131,7 +129,7 @@ export class Meeting {
 
     const processed = await this.graspQueue.processNext(
       this.window,
-      this.meetingId as string,
+      this.meetingId,
       notifier,
       metrics,
       this.notebook

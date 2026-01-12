@@ -1,6 +1,6 @@
 // OrchestratorManager: 複数ミーティングのオーケストレーターを管理
-import { Meeting, MeetingId, AsrEvent } from './meetingOrchestrator';
-import { Grasp, LLMClient, Notifier, Metrics } from './grasp';
+import { Meeting, AsrEvent } from './meetingOrchestrator';
+import { Grasp, MeetingId, Notifier, Metrics } from './grasp';
 
 export interface OrchestratorManagerConfig {
   maxMeetings?: number; // 最大同時ミーティング数

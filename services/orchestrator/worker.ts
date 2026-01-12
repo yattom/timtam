@@ -16,7 +16,8 @@ import { parseGraspGroupDefinition, GraspGroupDefinition } from './graspConfigPa
 import { ensureDefaultGraspConfig } from './selfSetup';
 import { Message } from '@aws-sdk/client-sqs';
 import { OrchestratorManager } from './orchestratorManager';
-import { AsrEvent, MeetingId } from './meetingOrchestrator';
+import { AsrEvent } from './meetingOrchestrator';
+import { MeetingId } from './grasp';
 
 // 環境変数
 const TRANSCRIPT_QUEUE_URL = process.env.TRANSCRIPT_QUEUE_URL || '';
@@ -107,7 +108,7 @@ class Notifier implements INotifier {
     this.ddb = DynamoDBDocumentClient.from(ddbClient);
   }
 
-  async postChat(meetingId: string, message: string) {
+  async postChat(meetingId: MeetingId, message: string) {
     const timestamp = Date.now();
     const ttl = Math.floor(timestamp / 1000) + 86400; // Expire after 24 hours
 
@@ -142,7 +143,7 @@ class Notifier implements INotifier {
     }
   }
 
-  async postLlmCallLog(meetingId: string, prompt: string, rawResponse: string, nodeId: string = 'default') {
+  async postLlmCallLog(meetingId: MeetingId, prompt: string, rawResponse: string, nodeId: string = 'default') {
     const timestamp = Date.now();
     const ttl = Math.floor(timestamp / 1000) + 86400; // Expire after 24 hours
 

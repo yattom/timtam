@@ -6,9 +6,10 @@ import {
   Notifier,
   Metrics,
   JudgeResult,
+  MeetingId,
 } from './grasp';
 import { OrchestratorManager } from './orchestratorManager';
-import { Meeting, MeetingId, AsrEvent } from './meetingOrchestrator';
+import { Meeting, AsrEvent } from './meetingOrchestrator';
 
 describe('Multi-Meeting Orchestrator', () => {
   // Helper functions for creating test objects

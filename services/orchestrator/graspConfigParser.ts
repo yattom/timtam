@@ -1,5 +1,5 @@
 import * as YAML from 'js-yaml';
-import { resolveInputVariable, resolveNotesVariable, WindowBuffer, Notebook } from './grasp';
+import { resolveInputVariable, resolveNotesVariable, WindowBuffer, Notebook, MeetingId } from './grasp';
 
 export interface GraspDefinition {
   nodeId: string;
@@ -16,7 +16,7 @@ export interface GraspGroupDefinition {
 function validateTemplateVariables(promptTemplate: string): void {
   // Create mock objects for validation
   const emptyBuffer = new WindowBuffer();
-  const emptyNotebook = new Notebook('validation');
+  const emptyNotebook = new Notebook('validation' as MeetingId);
 
   // Validate {{INPUT:...}} format
   const inputMatches = Array.from(promptTemplate.matchAll(/\{\{INPUT(?::([^}]+))?\}\}/g));
