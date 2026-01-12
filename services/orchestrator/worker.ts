@@ -19,6 +19,7 @@ import {
 } from './grasp';
 import { parseGraspGroupDefinition, GraspGroupDefinition } from './graspConfigParser';
 import { ensureDefaultGraspConfig } from './selfSetup';
+import { Message } from '@aws-sdk/client-sqs';
 
 // 環境変数
 const TRANSCRIPT_QUEUE_URL = process.env.TRANSCRIPT_QUEUE_URL || '';
@@ -287,6 +288,79 @@ async function pollControlOnce() {
 // グローバル変数（タイマーからアクセスするため）
 const window = new WindowBuffer();
 
+async function processMessages(messages: Message[]) {
+  for (const message of messages) {
+    let ev: AsrEvent | null = null;
+    try { ev = JSON.parse(message.Body || ''); } catch {}
+    if (!ev) {
+      // Delete malformed message
+      await sqs.send(
+          new DeleteMessageCommand({
+            QueueUrl: TRANSCRIPT_QUEUE_URL,
+            ReceiptHandle: message.ReceiptHandle!,
+          })
+      );
+      continue;
+    }
+    if (CURRENT_MEETING_ID && ev.meetingId !== CURRENT_MEETING_ID) {
+      // Skip but delete message (not for this orchestrator)
+      await sqs.send(
+          new DeleteMessageCommand({
+            QueueUrl: TRANSCRIPT_QUEUE_URL,
+            ReceiptHandle: message.ReceiptHandle!,
+          })
+      );
+      continue;
+    }
+    if (!ev.isFinal) {
+      // Delete non-final message
+      await sqs.send(
+          new DeleteMessageCommand({
+            QueueUrl: TRANSCRIPT_QUEUE_URL,
+            ReceiptHandle: message.ReceiptHandle!,
+          })
+      );
+      continue;
+    }
+
+    // final文をウィンドウに追加
+    // Include speaker information if available
+    const speakerPrefix = ev.speakerId ? `[${ev.speakerId}] ` : '';
+    window.push(speakerPrefix + ev.text, ev.timestamp);
+
+    // Log speaker information for debugging
+    if (ev.speakerId) {
+      console.log(JSON.stringify({
+        type: 'orchestrator.transcript.speaker',
+        meetingId: ev.meetingId,
+        speakerId: ev.speakerId,
+        textLength: ev.text.length,
+        ts: Date.now()
+      }));
+    }
+
+    // 各 Grasp をキューに追加（実行すべきものだけ）
+    const now = Date.now();
+    for (const grasp of grasps) {
+      if (grasp.shouldExecute(now)) {
+        graspQueue.enqueue(grasp, ev.timestamp || now);
+      }
+    }
+
+    // キューから1つだけ実行（グローバルクールダウン付き）
+    const notebook = notesStore.getNotebook(ev.meetingId);
+    await graspQueue.processNext(window, ev.meetingId, notifier, metrics, notebook);
+
+    // 処理完了後にメッセージを削除
+    await sqs.send(
+        new DeleteMessageCommand({
+          QueueUrl: TRANSCRIPT_QUEUE_URL,
+          ReceiptHandle: message.ReceiptHandle!,
+        })
+    );
+  }
+}
+
 async function runLoop() {
   console.log(JSON.stringify({
     type: 'orchestrator.loop.config',
@@ -327,77 +401,8 @@ async function runLoop() {
         }));
       }
 
-      for (const message of messages) {
-        let ev: AsrEvent | null = null;
-        try { ev = JSON.parse(message.Body || ''); } catch {}
-        if (!ev) {
-          // Delete malformed message
-          await sqs.send(
-            new DeleteMessageCommand({
-              QueueUrl: TRANSCRIPT_QUEUE_URL,
-              ReceiptHandle: message.ReceiptHandle!,
-            })
-          );
-          continue;
-        }
-        if (CURRENT_MEETING_ID && ev.meetingId !== CURRENT_MEETING_ID) {
-          // Skip but delete message (not for this orchestrator)
-          await sqs.send(
-            new DeleteMessageCommand({
-              QueueUrl: TRANSCRIPT_QUEUE_URL,
-              ReceiptHandle: message.ReceiptHandle!,
-            })
-          );
-          continue;
-        }
-        if (!ev.isFinal) {
-          // Delete non-final message
-          await sqs.send(
-            new DeleteMessageCommand({
-              QueueUrl: TRANSCRIPT_QUEUE_URL,
-              ReceiptHandle: message.ReceiptHandle!,
-            })
-          );
-          continue;
-        }
-
-        // final文をウィンドウに追加
-        // Include speaker information if available
-        const speakerPrefix = ev.speakerId ? `[${ev.speakerId}] ` : '';
-        window.push(speakerPrefix + ev.text, ev.timestamp);
-
-        // Log speaker information for debugging
-        if (ev.speakerId) {
-          console.log(JSON.stringify({
-            type: 'orchestrator.transcript.speaker',
-            meetingId: ev.meetingId,
-            speakerId: ev.speakerId,
-            textLength: ev.text.length,
-            ts: Date.now()
-          }));
-        }
-
-        // 各 Grasp をキューに追加（実行すべきものだけ）
-        const now = Date.now();
-        for (const grasp of grasps) {
-          if (grasp.shouldExecute(now)) {
-            graspQueue.enqueue(grasp, ev.timestamp || now);
-          }
-        }
-
-        // キューから1つだけ実行（グローバルクールダウン付き）
-        const notebook = notesStore.getNotebook(ev.meetingId);
-        await graspQueue.processNext(window, ev.meetingId, notifier, metrics, notebook);
-
-        // 処理完了後にメッセージを削除
-        await sqs.send(
-          new DeleteMessageCommand({
-            QueueUrl: TRANSCRIPT_QUEUE_URL,
-            ReceiptHandle: message.ReceiptHandle!,
-          })
-        );
-        consecutiveErrors = 0;
-      }
+      await processMessages(messages);
+      consecutiveErrors = 0;
 
       // SQS long polling handles waiting, but add minimal interval for control plane
       const dt = Date.now() - t0;
