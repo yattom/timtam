@@ -9,14 +9,6 @@ Grasp は、会議の発話ストリームを監視し、LLMを使って判断�
 ### 基本構造
 
 ```yaml
-# グローバル設定（オプション）
-global:
-  llm:
-    modelId: "anthropic.claude-haiku-4.5"
-    region: "us-east-1"
-  defaults:
-    intervalSec: 30
-
 # Grasp の定義
 grasps:
   - nodeId: "grasp-id"
@@ -28,15 +20,9 @@ grasps:
     noteTag: "optional-tag"
 ```
 
+**注意**: LLMのモデルIDやリージョンは、Orchestratorの環境変数（`BEDROCK_MODEL_ID`, `BEDROCK_REGION`）で管理されます。YAML設定ではプロンプトと実行間隔のみを制御します。
+
 ### フィールド説明
-
-#### global (オプション)
-
-グローバル設定セクション。すべての Grasp に共通する設定を定義します。
-
-- `llm.modelId`: 使用する Bedrock モデルID
-- `llm.region`: Bedrock のリージョン
-- `defaults.intervalSec`: デフォルトの実行間隔（秒）
 
 #### grasps (必須)
 
@@ -199,7 +185,7 @@ grasps:
   - nodeId: "judge"
     promptTemplate: |
       以下は会議の直近確定発話です。
-      {{SYSTEM_PROMPT}}
+      会話の内容が具体的に寄りすぎていたり、抽象的になりすぎていたら指摘してください。
 
       介入が必要かを判断してください。
       ---
@@ -280,39 +266,6 @@ grasps:
 
 この例では `{{INPUT}}` を使用していないため、発話履歴は含まれず、ノートのみを参照して要約を生成します。
 
-### 例6: グローバル設定を使った完全な設定
-
-```yaml
-global:
-  llm:
-    modelId: "anthropic.claude-sonnet-4.5"
-    region: "us-east-1"
-  defaults:
-    intervalSec: 30
-
-grasps:
-  - nodeId: "judge"
-    promptTemplate: |
-      以下は会議の直近確定発話です。
-      {{SYSTEM_PROMPT}}
-
-      介入が必要かを判断してください。
-      ---
-      {{INPUT:latest5}}
-    intervalSec: 20  # グローバルのデフォルトを上書き
-    outputHandler: "chat"
-
-  - nodeId: "mood-observer"
-    promptTemplate: |
-      以下は会議の直近確定発話です。
-      参加者の雰囲気や感情を観察してください。
-      ---
-      {{INPUT:latest10}}
-    # intervalSec はグローバルのデフォルトを使用
-    outputHandler: "note"
-    noteTag: "participant-mood"
-```
-
 ## 実装上の注意
 
 ### 実行間隔とキューイング
@@ -343,6 +296,9 @@ grasps:
 
 将来的に以下の機能が追加される可能性があります:
 
+- グローバル設定（`global` セクション）による共通設定の管理
+  - LLMモデルIDやリージョンのYAML制御
+  - デフォルト実行間隔の設定
 - カスタムレスポンス形式のサポート（`responseFormat` フィールド）
 - 条件付き実行（特定の条件下でのみ Grasp を実行）
 - Grasp 間の依存関係管理
