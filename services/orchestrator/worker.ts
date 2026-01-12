@@ -21,7 +21,7 @@ import { parseGraspGroupDefinition, GraspGroupDefinition } from './graspConfigPa
 import { ensureDefaultGraspConfig } from './selfSetup';
 
 // 環境変数
-const TRANSCRIPT_QUEUE_URL = process.env.TRANSCRIPT_QUEUE_URL || '';  // ADR-0011: SQS FIFO queue
+const TRANSCRIPT_QUEUE_URL = process.env.TRANSCRIPT_QUEUE_URL || '';
 const BEDROCK_REGION = process.env.BEDROCK_REGION || 'us-east-1';
 const BEDROCK_MODEL_ID = process.env.BEDROCK_MODEL_ID || 'anthropic.claude-haiku-4.5';
 const AI_MESSAGES_TABLE = process.env.AI_MESSAGES_TABLE || 'timtam-ai-messages';
@@ -306,7 +306,7 @@ async function runLoop() {
       const t0 = Date.now();
       loopCount++;
 
-      // ADR-0011: Use SQS long polling instead of Kinesis
+      // Use SQS long polling
       const result = await sqs.send(
         new ReceiveMessageCommand({
           QueueUrl: TRANSCRIPT_QUEUE_URL,

@@ -79,7 +79,7 @@ export class TimtamInfraStack extends Stack {
       fifo: true,
       contentBasedDeduplication: true,  // Prevents duplicate transcripts
       visibilityTimeout: Duration.seconds(30),
-      retentionPeriod: Duration.days(1),  // Same as Kinesis 24h retention
+      retentionPeriod: Duration.days(1),
       deadLetterQueue: {
         queue: transcriptDlq,
         maxReceiveCount: 3,

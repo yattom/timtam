@@ -85,7 +85,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       sequenceNumber: undefined, // Not applicable for client-side events
     };
 
-    // ADR-0011 Phase 2: Write to SQS only (Kinesis removed)
+    // ADR-0011: Write to SQS
     try {
       await sqs.send(
         new SendMessageCommand({
