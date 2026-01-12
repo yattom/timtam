@@ -8,6 +8,8 @@ COPY worker.ts ./worker.ts
 COPY grasp.ts ./grasp.ts
 COPY graspConfigParser.ts ./graspConfigParser.ts
 COPY selfSetup.ts ./selfSetup.ts
+COPY orchestratorManager.ts ./orchestratorManager.ts
+COPY meetingOrchestrator.ts ./meetingOrchestrator.ts
 
 # Install deps and build (use npm inside container for simplicity)
 RUN npm install --omit=dev=false \
