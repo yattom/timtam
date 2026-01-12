@@ -417,7 +417,10 @@ export class Grasp {
 
     try {
       const prompt = this.buildPrompt(windowBuffer, notebook);
-      const response = await this.invokeLLM(prompt, meetingId, notifier);
+      const promptWithFormat = '以下の指示に対して、会議への介入が必要か判断して、次のJSON形式だけを厳密に返してください:\n' +
+        '{"should_intervene": true, "reason": "判断理由", "message": "介入のメッセージ"}\n' +
+        '----------\n\n' + prompt;
+      const response = await this.invokeLLM(promptWithFormat, meetingId, notifier);
       await this.reflectResponse(response, meetingId, notifier, notebook);
       await this.recordMetrics(metrics, startTime, asrTimestamp);
 
