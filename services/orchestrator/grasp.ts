@@ -1,5 +1,8 @@
 // Grasp-related types and classes
 
+// MeetingId type for type safety
+export type MeetingId = string & { readonly __brand: unique symbol };
+
 export type TriggerResult = {
   should_intervene: boolean;
   reason: string;
@@ -14,8 +17,7 @@ export type JudgeResult = {
 
 export type GraspConfig = {
   nodeId: string;
-  promptTemplate: string | ((input: string, notebook?: Notebook) => string);
-  inputLength?: number; // undefined = 全部、数値 = 最新N行
+  promptTemplate: string;
   cooldownMs: number;
   outputHandler: 'chat' | 'note' | 'both';
   noteTag?: string;  // 'note' または 'both' の場合、このタグでメモを保存
@@ -39,8 +41,8 @@ export interface LLMClient {
 }
 
 export interface Notifier {
-  postChat(meetingId: string, message: string): Promise<void>;
-  postLlmCallLog(meetingId: string, prompt: string, rawResponse: string, nodeId?: string): Promise<void>;
+  postChat(meetingId: MeetingId, message: string): Promise<void>;
+  postLlmCallLog(meetingId: MeetingId, prompt: string, rawResponse: string, nodeId?: string): Promise<void>;
 }
 
 export interface Metrics {
@@ -91,10 +93,10 @@ export class WindowBuffer {
 }
 
 export class Notebook {
-  private meetingId: string;
+  private meetingId: MeetingId;
   private notes: Note[] = [];
 
-  constructor(meetingId: string) {
+  constructor(meetingId: MeetingId) {
     this.meetingId = meetingId;
   }
 
@@ -129,15 +131,15 @@ export class Notebook {
     return [...this.notes];
   }
 
-  getMeetingId(): string {
+  getMeetingId(): MeetingId {
     return this.meetingId;
   }
 }
 
 export class NotesStore {
-  private notebooks: Map<string, Notebook> = new Map();
+  private notebooks: Map<MeetingId, Notebook> = new Map();
 
-  getNotebook(meetingId: string): Notebook {
+  getNotebook(meetingId: MeetingId): Notebook {
     if (!this.notebooks.has(meetingId)) {
       this.notebooks.set(meetingId, new Notebook(meetingId));
       console.log(JSON.stringify({
@@ -149,7 +151,7 @@ export class NotesStore {
     return this.notebooks.get(meetingId)!;
   }
 
-  clearNotebook(meetingId: string): void {
+  clearNotebook(meetingId: MeetingId): void {
     this.notebooks.delete(meetingId);
     console.log(JSON.stringify({
       type: 'notebook.cleared',
@@ -266,7 +268,7 @@ export class GraspQueue {
 
   async processNext(
     window: WindowBuffer,
-    meetingId: string,
+    meetingId: MeetingId,
     notifier: Notifier,
     metrics: Metrics,
     notebook: Notebook
@@ -342,22 +344,14 @@ export class Grasp {
     windowBuffer: WindowBuffer,
     notebook: Notebook,
   ) : string {
-    if (typeof this.config.promptTemplate === 'string') {
-      return replaceTemplateVariables(
-        this.config.promptTemplate,
-        windowBuffer,
-        notebook
-      );
-    } else {
-      // 関数の場合
-      const inputText = this.config.inputLength !== undefined
-        ? windowBuffer.content(this.config.inputLength)
-        : windowBuffer.content();
-      return this.config.promptTemplate(inputText, notebook);
-    }
+    return replaceTemplateVariables(
+      this.config.promptTemplate,
+      windowBuffer,
+      notebook
+    );
   }
 
-  async invokeLLM(prompt: string, meetingId: string, notifier: Notifier) {
+  async invokeLLM(prompt: string, meetingId: MeetingId, notifier: Notifier) {
     // LLM呼び出し
     const result = await this.llm.invoke(prompt, this.config.nodeId);
 
@@ -369,7 +363,7 @@ export class Grasp {
 
   async reflectResponse(
       response: JudgeResult,
-      meetingId: string,
+      meetingId: MeetingId,
       notifier: Notifier,
       notebook: Notebook
   ) {
@@ -407,7 +401,7 @@ export class Grasp {
 
   async execute(
     windowBuffer: WindowBuffer,
-    meetingId: string,
+    meetingId: MeetingId,
     notifier: Notifier,
     metrics: Metrics,
     notebook: Notebook,

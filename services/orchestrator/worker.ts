@@ -4,13 +4,8 @@ import { SQSClient, ReceiveMessageCommand, DeleteMessageCommand } from '@aws-sdk
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
 import {
-  WindowBuffer,
-  Notebook,
-  NotesStore,
-  GraspQueue,
   Grasp,
   GraspConfig,
-  Note,
   TriggerResult,
   JudgeResult,
   LLMClient,
@@ -20,6 +15,9 @@ import {
 import { parseGraspGroupDefinition, GraspGroupDefinition } from './graspConfigParser';
 import { ensureDefaultGraspConfig } from './selfSetup';
 import { Message } from '@aws-sdk/client-sqs';
+import { OrchestratorManager } from './orchestratorManager';
+import { AsrEvent } from './meetingOrchestrator';
+import { MeetingId } from './grasp';
 
 // 環境変数
 const TRANSCRIPT_QUEUE_URL = process.env.TRANSCRIPT_QUEUE_URL || '';
@@ -27,20 +25,9 @@ const BEDROCK_REGION = process.env.BEDROCK_REGION || 'us-east-1';
 const BEDROCK_MODEL_ID = process.env.BEDROCK_MODEL_ID || 'anthropic.claude-haiku-4.5';
 const AI_MESSAGES_TABLE = process.env.AI_MESSAGES_TABLE || 'timtam-ai-messages';
 const CONFIG_TABLE_NAME = process.env.CONFIG_TABLE_NAME || 'timtam-orchestrator-config';
-// MEETING_ID は SQS からの指示で動的変更する。初期値があればそれを使う。
-let CURRENT_MEETING_ID = process.env.MEETING_ID || '';
-const WINDOW_LINES = Number(process.env.WINDOW_LINES || '5');
-const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS || '500');
 const CONTROL_SQS_URL = process.env.CONTROL_SQS_URL || '';
-
-type AsrEvent = {
-  meetingId: string;
-  speakerId?: string;
-  text: string;
-  isFinal: boolean;
-  timestamp?: number; // epoch ms
-  sequenceNumber?: string;
-};
+const MAX_MEETINGS = Number(process.env.MAX_MEETINGS || '100');
+const MEETING_TIMEOUT_MS = Number(process.env.MEETING_TIMEOUT_MS || '43200000'); // 12時間
 
 class Metrics implements IMetrics {
   private cw = new CloudWatchClient({});
@@ -121,7 +108,7 @@ class Notifier implements INotifier {
     this.ddb = DynamoDBDocumentClient.from(ddbClient);
   }
 
-  async postChat(meetingId: string, message: string) {
+  async postChat(meetingId: MeetingId, message: string) {
     const timestamp = Date.now();
     const ttl = Math.floor(timestamp / 1000) + 86400; // Expire after 24 hours
 
@@ -156,7 +143,7 @@ class Notifier implements INotifier {
     }
   }
 
-  async postLlmCallLog(meetingId: string, prompt: string, rawResponse: string, nodeId: string = 'default') {
+  async postLlmCallLog(meetingId: MeetingId, prompt: string, rawResponse: string, nodeId: string = 'default') {
     const timestamp = Date.now();
     const ttl = Math.floor(timestamp / 1000) + 86400; // Expire after 24 hours
 
@@ -202,16 +189,17 @@ const triggerLlm = new TriggerLLM();
 const notifier = new Notifier();
 const metrics = new Metrics();
 const sqs = new SQSClient({});
-const notesStore = new NotesStore();
-const graspQueue = new GraspQueue();
 
-// すべての Grasp のリスト（YAML設定から動的に構築される）
-const grasps: Grasp[] = [];
+// OrchestratorManager: 複数ミーティングを管理
+let orchestratorManager: OrchestratorManager;
+
+// Grasp テンプレートのリスト（YAML設定から動的に構築される）
+const graspTemplates: Grasp[] = [];
 
 // Grasp グループを動的に再構築
 function rebuildGrasps(graspGroupDef: GraspGroupDefinition): void {
-  // 既存 Grasp をクリア
-  grasps.length = 0;
+  // 既存 Grasp テンプレートをクリア
+  graspTemplates.length = 0;
 
   // YAML から新しい Grasp インスタンスを生成
   for (const graspDef of graspGroupDef.grasps) {
@@ -223,13 +211,18 @@ function rebuildGrasps(graspGroupDef: GraspGroupDefinition): void {
       noteTag: graspDef.noteTag,
     };
     const grasp = new Grasp(config, triggerLlm);
-    grasps.push(grasp);
+    graspTemplates.push(grasp);
   }
 
-  graspQueue.clear();
+  // すべての新規ミーティングのためのGraspテンプレートを更新
+  // 既存のミーティングには影響しない
+  if (orchestratorManager) {
+    orchestratorManager.updateGraspsTemplate(graspTemplates);
+  }
+
   console.log(JSON.stringify({
-    type: 'orchestrator.grasps.rebuilt',
-    graspCount: grasps.length,
+    type: 'orchestrator.grasps.template.rebuilt',
+    graspCount: graspTemplates.length,
     ts: Date.now()
   }));
 }
@@ -248,12 +241,6 @@ async function pollControlOnce() {
       const body = m.Body || '';
       try {
         const parsed = JSON.parse(body);
-
-        // Handle meetingId messages (both new and legacy format)
-        if (parsed.type === 'meetingId' || (parsed.meetingId && !parsed.type)) {
-          CURRENT_MEETING_ID = parsed.meetingId;
-          console.log(JSON.stringify({ type: 'orchestrator.control.meeting.set', meetingId: CURRENT_MEETING_ID, ts: Date.now() }));
-        }
 
         // Handle grasp_config update messages
         if (parsed.type === 'grasp_config' && typeof parsed.yaml === 'string') {
@@ -285,13 +272,18 @@ async function pollControlOnce() {
   }
 }
 
-// グローバル変数（タイマーからアクセスするため）
-const window = new WindowBuffer();
-
 async function processMessages(messages: Message[]) {
-  for (const message of messages) {
+  // Process messages in parallel for better throughput
+  await Promise.all(messages.map(async (message) => {
     let ev: AsrEvent | null = null;
-    try { ev = JSON.parse(message.Body || ''); } catch {}
+    try { 
+      const parsed = JSON.parse(message.Body || '');
+      // Cast string to MeetingId
+      ev = {
+        ...parsed,
+        meetingId: parsed.meetingId as MeetingId
+      };
+    } catch {}
     if (!ev) {
       // Delete malformed message
       await sqs.send(
@@ -300,18 +292,9 @@ async function processMessages(messages: Message[]) {
             ReceiptHandle: message.ReceiptHandle!,
           })
       );
-      continue;
+      return;
     }
-    if (CURRENT_MEETING_ID && ev.meetingId !== CURRENT_MEETING_ID) {
-      // Skip but delete message (not for this orchestrator)
-      await sqs.send(
-          new DeleteMessageCommand({
-            QueueUrl: TRANSCRIPT_QUEUE_URL,
-            ReceiptHandle: message.ReceiptHandle!,
-          })
-      );
-      continue;
-    }
+
     if (!ev.isFinal) {
       // Delete non-final message
       await sqs.send(
@@ -320,36 +303,11 @@ async function processMessages(messages: Message[]) {
             ReceiptHandle: message.ReceiptHandle!,
           })
       );
-      continue;
+      return;
     }
 
-    // final文をウィンドウに追加
-    // Include speaker information if available
-    const speakerPrefix = ev.speakerId ? `[${ev.speakerId}] ` : '';
-    window.push(speakerPrefix + ev.text, ev.timestamp);
-
-    // Log speaker information for debugging
-    if (ev.speakerId) {
-      console.log(JSON.stringify({
-        type: 'orchestrator.transcript.speaker',
-        meetingId: ev.meetingId,
-        speakerId: ev.speakerId,
-        textLength: ev.text.length,
-        ts: Date.now()
-      }));
-    }
-
-    // 各 Grasp をキューに追加（実行すべきものだけ）
-    const now = Date.now();
-    for (const grasp of grasps) {
-      if (grasp.shouldExecute(now)) {
-        graspQueue.enqueue(grasp, ev.timestamp || now);
-      }
-    }
-
-    // キューから1つだけ実行（グローバルクールダウン付き）
-    const notebook = notesStore.getNotebook(ev.meetingId);
-    await graspQueue.processNext(window, ev.meetingId, notifier, metrics, notebook);
+    // ミーティングIDに基づいて適切なオーケストレーターに処理を委譲
+    await orchestratorManager.processAsrEvent(ev, notifier, metrics);
 
     // 処理完了後にメッセージを削除
     await sqs.send(
@@ -358,18 +316,17 @@ async function processMessages(messages: Message[]) {
           ReceiptHandle: message.ReceiptHandle!,
         })
     );
-  }
+  }));
 }
 
 async function runLoop() {
   console.log(JSON.stringify({
     type: 'orchestrator.loop.config',
-    POLL_INTERVAL_MS,
-    WINDOW_LINES,
     TRANSCRIPT_QUEUE_URL,
+    MAX_MEETINGS,
+    MEETING_TIMEOUT_MS,
     ts: Date.now()
   }));
-  if (!CURRENT_MEETING_ID) console.warn('CURRENT_MEETING_ID is empty. All events will be processed; set via CONTROL_SQS_URL or MEETING_ID env to restrict.');
 
   let consecutiveErrors = 0;
   let loopCount = 0;
@@ -392,17 +349,24 @@ async function runLoop() {
 
       // Log periodically (heartbeat) or when we receive messages
       if (loopCount % 50 === 0 || messages.length > 0) {
+        const status = orchestratorManager.getStatus();
         console.log(JSON.stringify({
           type: 'orchestrator.loop.poll',
           loopCount,
           messageCount: messages.length,
           consecutiveErrors,
+          activeMeetings: status.totalMeetings,
           ts: Date.now()
         }));
       }
 
       await processMessages(messages);
       consecutiveErrors = 0;
+
+      // 非アクティブなミーティングのクリーンアップ（100ループごと）
+      if (loopCount % 100 === 0) {
+        orchestratorManager.cleanupInactiveMeetings();
+      }
 
       // SQS long polling handles waiting, but add minimal interval for control plane
       const dt = Date.now() - t0;
@@ -442,6 +406,12 @@ async function initializeGraspConfig() {
     const graspGroupDef = parseGraspGroupDefinition(yaml);
     rebuildGrasps(graspGroupDef);
 
+    // Initialize OrchestratorManager with grasp templates
+    orchestratorManager = new OrchestratorManager(graspTemplates, {
+      maxMeetings: MAX_MEETINGS,
+      meetingTimeoutMs: MEETING_TIMEOUT_MS,
+    });
+
     console.log(JSON.stringify({
       type: 'orchestrator.config.grasp.initialized',
       graspCount: graspGroupDef.grasps.length,
@@ -457,21 +427,18 @@ async function initializeGraspConfig() {
 console.log(JSON.stringify({
   type: 'orchestrator.worker.start',
   ts: Date.now(),
-  env: { BEDROCK_REGION, BEDROCK_MODEL_ID, CURRENT_MEETING_ID, CONTROL_SQS_URL, CONFIG_TABLE_NAME }
+  env: { BEDROCK_REGION, BEDROCK_MODEL_ID, MAX_MEETINGS, MEETING_TIMEOUT_MS, CONTROL_SQS_URL, CONFIG_TABLE_NAME }
 }));
 
-// 定期的にキューを処理（完全な沈黙時でもキューに入った Grasp を実行）
+// 定期的にすべてのミーティングの待機Graspを処理（完全な沈黙時でも待機中の Grasp を実行）
 setInterval(async () => {
-  if (CURRENT_MEETING_ID && graspQueue.size() > 0) {
-    const notebook = notesStore.getNotebook(CURRENT_MEETING_ID);
-    const processed = await graspQueue.processNext(window, CURRENT_MEETING_ID, notifier, metrics, notebook);
-    if (processed) {
-      console.log(JSON.stringify({
-        type: 'orchestrator.timer.processed',
-        queueSize: graspQueue.size(),
-        ts: Date.now()
-      }));
-    }
+  const processed = await orchestratorManager.processAllWaitingGrasps(notifier, metrics);
+  if (processed > 0) {
+    console.log(JSON.stringify({
+      type: 'orchestrator.timer.processed',
+      processedMeetings: processed,
+      ts: Date.now()
+    }));
   }
 }, 3000); // 3秒ごと
 
