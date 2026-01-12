@@ -271,7 +271,8 @@ async function pollControlOnce() {
 }
 
 async function processMessages(messages: Message[]) {
-  for (const message of messages) {
+  // Process messages in parallel for better throughput
+  await Promise.all(messages.map(async (message) => {
     let ev: AsrEvent | null = null;
     try { ev = JSON.parse(message.Body || ''); } catch {}
     if (!ev) {
@@ -282,7 +283,7 @@ async function processMessages(messages: Message[]) {
             ReceiptHandle: message.ReceiptHandle!,
           })
       );
-      continue;
+      return;
     }
 
     if (!ev.isFinal) {
@@ -293,7 +294,7 @@ async function processMessages(messages: Message[]) {
             ReceiptHandle: message.ReceiptHandle!,
           })
       );
-      continue;
+      return;
     }
 
     // ミーティングIDに基づいて適切なオーケストレーターに処理を委譲
@@ -306,7 +307,7 @@ async function processMessages(messages: Message[]) {
           ReceiptHandle: message.ReceiptHandle!,
         })
     );
-  }
+  }));
 }
 
 async function runLoop() {

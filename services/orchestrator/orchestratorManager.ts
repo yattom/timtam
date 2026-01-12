@@ -87,24 +87,21 @@ export class OrchestratorManager {
 
   /**
    * すべてのミーティングのキューを定期的に処理
+   * 並列処理により効率化
    */
   async processAllQueues(
     notifier: Notifier,
     metrics: Metrics
   ): Promise<number> {
-    let processedCount = 0;
-    
-    for (const [meetingId, orchestrator] of this.orchestrators) {
-      const processed = await orchestrator.processQueuePeriodically(
-        notifier,
-        metrics
-      );
-      if (processed) {
-        processedCount++;
-      }
-    }
+    // Process all meeting queues in parallel for better performance
+    const results = await Promise.all(
+      Array.from(this.orchestrators.values()).map(async (orchestrator) => {
+        return await orchestrator.processQueuePeriodically(notifier, metrics);
+      })
+    );
 
-    return processedCount;
+    // Count how many meetings processed something
+    return results.filter(processed => processed).length;
   }
 
   /**
