@@ -1,6 +1,7 @@
 import {
   CloudFormationClient,
   DescribeStackResourcesCommand,
+  DescribeStacksCommand,
 } from '@aws-sdk/client-cloudformation';
 import {
   LambdaClient,
@@ -42,6 +43,31 @@ export async function getStackResourceArns(
   ) || [];
 
   return resources.map((r) => r.PhysicalResourceId!);
+}
+
+/**
+ * CloudFormationスタックのOutputから値を取得する
+ */
+export async function getStackOutput(
+  stackName: string,
+  outputKey: string
+): Promise<string | undefined> {
+  const stacksResp = await cloudFormationClient.send(
+    new DescribeStacksCommand({ StackName: stackName })
+  );
+
+  const stack = stacksResp.Stacks?.[0];
+  if (!stack) {
+    console.error(`CloudFormation stack not found: ${stackName}`);
+    return undefined;
+  }
+
+  const output = stack.Outputs?.find((o) => o.OutputKey === outputKey);
+  if (!output) {
+    console.error(`Stack output not found: ${outputKey} in stack ${stackName}`);
+    return undefined;
+  }
+  return output.OutputValue;
 }
 
 /**
@@ -144,30 +170,36 @@ async function manageECSServices(desiredCount: number): Promise<void> {
  * CloudFrontディストリビューションの有効化/無効化を行う
  */
 async function manageCloudFront(enabled: boolean): Promise<void> {
-  const distributionIds = await getStackResourceArns(
-    'TimtamInfraStack',
-    'AWS::CloudFront::Distribution'
+  // CloudFormation Stack OutputからDistribution IDを取得
+  const distId = await getStackOutput('TimtamInfraStack', 'WebDistributionId');
+
+  if (!distId) {
+    console.error('CloudFront Distribution ID not found in stack outputs');
+    return;
+  }
+
+  console.log(`Managing CloudFront distribution: ${distId}, enabled: ${enabled}`);
+  
+  const getConfigResp = await cloudFrontClient.send(
+    new GetDistributionConfigCommand({ Id: distId })
   );
 
-  if (distributionIds.length > 0) {
-    const distId = distributionIds[0];
-    const getConfigResp = await cloudFrontClient.send(
-      new GetDistributionConfigCommand({ Id: distId })
-    );
-
-    if (getConfigResp.DistributionConfig && getConfigResp.ETag) {
-      const config = getConfigResp.DistributionConfig;
-      config.Enabled = enabled;
-
-      await cloudFrontClient.send(
-        new UpdateDistributionCommand({
-          Id: distId,
-          DistributionConfig: config,
-          IfMatch: getConfigResp.ETag,
-        })
-      );
-    }
+  if (!getConfigResp.DistributionConfig || !getConfigResp.ETag) {
+    console.error(`Failed to get CloudFront distribution config or ETag for ${distId}`);
+    return;
   }
+
+  const config = getConfigResp.DistributionConfig;
+  config.Enabled = enabled;
+
+  await cloudFrontClient.send(
+    new UpdateDistributionCommand({
+      Id: distId,
+      DistributionConfig: config,
+      IfMatch: getConfigResp.ETag,
+    })
+  );
+  console.log(`CloudFront distribution ${distId} updated successfully`);
 }
 
 /**

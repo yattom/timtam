@@ -339,7 +339,7 @@ export class TimtamInfraStack extends Stack {
       resources: ['*'],
     }));
     adminCloseFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['cloudformation:DescribeStackResources'],
+      actions: ['cloudformation:DescribeStackResources', 'cloudformation:DescribeStacks'],
       resources: [`arn:aws:cloudformation:${this.region}:${this.account}:stack/TimtamInfraStack/*`],
     }));
 
@@ -352,7 +352,7 @@ export class TimtamInfraStack extends Stack {
       resources: ['*'],
     }));
     adminOpenFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['cloudformation:DescribeStackResources'],
+      actions: ['cloudformation:DescribeStackResources', 'cloudformation:DescribeStacks'],
       resources: [`arn:aws:cloudformation:${this.region}:${this.account}:stack/TimtamInfraStack/*`],
     }));
 
