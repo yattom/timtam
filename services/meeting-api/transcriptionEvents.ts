@@ -94,7 +94,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       // As a fallback (for partials or older clients), use a hash of the text plus a time window.
       let deduplicationId: string;
       if (resultId) {
-        deduplicationId = resultId;
+        deduplicationId = `${pathMeetingId}-${resultId}`;
       } else {
         // Group events within a ~2-second window to catch duplicates of short, identical phrases.
         const timeWindow = Math.round((timestamp || Date.now()) / 2000);
