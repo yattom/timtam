@@ -124,12 +124,14 @@ async function waitForTranscription(page: Page, timeoutMs: number = 60000) {
   
   // 文字起こしのテキストが表示されるまで待つ
   await page.waitForFunction(
-    (container) => {
-      const text = container.textContent || '';
+    () => {
+      const container = document.querySelector('h3:has-text("文字起こし")') 
+        ?.parentElement
+        ?.querySelector('div[style*="border"]');
+      const text = container?.textContent || '';
       // 初期メッセージではなく、実際の文字起こしが含まれているか確認
       return text.length > 50 && !text.includes('ここに文字起こしが表示される');
     },
-    transcriptionContainer,
     { timeout: timeoutMs }
   );
 }
@@ -143,15 +145,15 @@ async function waitForAiResponse(page: Page, timeoutMs: number = 90000) {
   await expect(aiSection).toBeVisible();
   
   // AIメッセージが表示されるのを待つ
-  const aiOutputContainer = aiSection.locator('div[style*="border"]');
-  
   await page.waitForFunction(
-    (container) => {
-      const text = container.textContent || '';
+    () => {
+      const container = document.querySelector('h3:has-text("AI Assistant")')
+        ?.parentElement
+        ?.querySelector('div[style*="border"]');
+      const text = container?.textContent || '';
       // AIメッセージが含まれているか確認（初期メッセージではない）
       return text.length > 30 && !text.includes('AI Assistantのメッセージがここに表示される');
     },
-    aiOutputContainer,
     { timeout: timeoutMs }
   );
 }
