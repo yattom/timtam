@@ -2,6 +2,7 @@ import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
+import { parseGraspGroupDefinition } from '../orchestrator/graspConfigParser';
 
 const REGION = process.env.AWS_REGION || 'ap-northeast-1';
 const CONFIG_TABLE = process.env.CONFIG_TABLE_NAME || 'timtam-orchestrator-config';
@@ -12,9 +13,9 @@ const ddb = DynamoDBDocumentClient.from(ddbClient);
 const sqs = new SQSClient({});
 
 /**
- * PUT /orchestrator/prompt
- * Update the orchestrator prompt configuration
- * Body: { prompt: string }
+ * PUT /grasp/config
+ * Update the Grasp configuration
+ * Body: { yaml: string }
  */
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   try {
@@ -27,26 +28,36 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     }
 
     const body = event.body ? JSON.parse(event.body) : {};
-    const prompt = body.prompt;
+    const yaml = body.yaml;
 
     // Validation
-    if (typeof prompt !== 'string' || prompt.trim() === '') {
+    if (typeof yaml !== 'string' || yaml.trim() === '') {
       return {
         statusCode: 400,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ok: false, error: 'prompt is required and must be non-empty' }),
+        body: JSON.stringify({ ok: false, error: 'yaml is required and must be non-empty' }),
       };
     }
 
-    if (prompt.length > 2000) {
+    // Validate YAML format and structure
+    try {
+      parseGraspGroupDefinition(yaml);
+    } catch (validationError: any) {
       return {
         statusCode: 400,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ok: false, error: 'prompt must be 2000 characters or less' }),
+        body: JSON.stringify({
+          ok: false,
+          error: validationError?.message || 'YAML validation failed',
+          validationErrors: [{
+            field: 'yaml',
+            message: validationError?.message || 'Invalid YAML format'
+          }]
+        }),
       };
     }
 
-    const trimmedPrompt = prompt.trim();
+    const trimmedYaml = yaml.trim();
     const updatedAt = Date.now();
 
     // Save to DynamoDB
@@ -54,8 +65,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       new PutCommand({
         TableName: CONFIG_TABLE,
         Item: {
-          configKey: 'current_prompt',
-          prompt: trimmedPrompt,
+          configKey: 'current_grasp_config',
+          yaml: trimmedYaml,
           updatedAt,
         },
       })
@@ -63,8 +74,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
     // Send control message to orchestrator via SQS
     const controlMessage = {
-      type: 'prompt',
-      prompt: trimmedPrompt,
+      type: 'grasp_config',
+      yaml: trimmedYaml,
     };
 
     await sqs.send(
@@ -75,8 +86,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     );
 
     console.log(JSON.stringify({
-      type: 'orchestrator.config.prompt.updated',
-      promptLength: trimmedPrompt.length,
+      type: 'grasp.config.updated',
+      yamlLength: trimmedYaml.length,
       updatedAt,
     }));
 
@@ -85,12 +96,12 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ok: true,
-        prompt: trimmedPrompt,
+        yaml: trimmedYaml,
         updatedAt,
       }),
     };
   } catch (err: any) {
-    console.error('[UpdatePrompt] Error', err);
+    console.error('[UpdateGraspConfig] Error', err);
     return {
       statusCode: 500,
       headers: { 'Content-Type': 'application/json' },

@@ -7,17 +7,13 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3n from 'aws-cdk-lib/aws-s3-notifications';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
-import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as logs from 'aws-cdk-lib/aws-logs';
-import * as kinesis from 'aws-cdk-lib/aws-kinesis';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
-import * as fs from 'fs';
-import * as path from 'path';
 
 export class TimtamInfraStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
@@ -61,14 +57,12 @@ export class TimtamInfraStack extends Stack {
       removalPolicy: this.node.tryGetContext('keepTables') ? undefined : RemovalPolicy.DESTROY,
     });
 
-    // === Kinesis stream (created early so we can reference it in Lambda env) ===
-    // Use PROVISIONED with 1 shard since orchestrator reads from single shard only
-    // and filters by CURRENT_MEETING_ID (non-standard consumer pattern)
-    const transcriptStream = new kinesis.Stream(this, 'TranscriptAsrStream', {
-      streamName: 'transcript-asr',
-      streamMode: kinesis.StreamMode.PROVISIONED,
-      shardCount: 1,
-      retentionPeriod: Duration.hours(24),
+    // === DynamoDB table for Grasp Configuration Presets ===
+    const graspConfigsTable = new dynamodb.Table(this, 'GraspConfigsTable', {
+      tableName: 'timtam-grasp-configs',
+      partitionKey: { name: 'configId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: this.node.tryGetContext('keepTables') ? undefined : RemovalPolicy.DESTROY,
     });
 
     // === SQS FIFO Queue for transcript streaming (ADR-0011) ===
@@ -85,7 +79,7 @@ export class TimtamInfraStack extends Stack {
       fifo: true,
       contentBasedDeduplication: true,  // Prevents duplicate transcripts
       visibilityTimeout: Duration.seconds(30),
-      retentionPeriod: Duration.days(1),  // Same as Kinesis 24h retention
+      retentionPeriod: Duration.days(1),
       deadLetterQueue: {
         queue: transcriptDlq,
         maxReceiveCount: 3,
@@ -162,8 +156,7 @@ export class TimtamInfraStack extends Stack {
       timeout: Duration.seconds(10),
       runtime: lambda.Runtime.NODEJS_20_X,
       environment: {
-        KINESIS_STREAM_NAME: transcriptStream.streamName,
-        TRANSCRIPT_QUEUE_URL: transcriptQueue.queueUrl,  // ADR-0011: Phase 1 parallel operation
+        TRANSCRIPT_QUEUE_URL: transcriptQueue.queueUrl,  // ADR-0011
       },
     });
 
@@ -185,9 +178,8 @@ export class TimtamInfraStack extends Stack {
     transcriptionStartFn.addToRolePolicy(meetingPolicies);
     transcriptionStopFn.addToRolePolicy(meetingPolicies);
 
-    // Grant Kinesis write permission to transcriptionEvents Lambda
-    transcriptStream.grantWrite(transcriptionEventsFn);
-    transcriptQueue.grantSendMessages(transcriptionEventsFn);  // ADR-0011: Grant SQS write permission
+    // Grant SQS write permission to transcriptionEvents Lambda (ADR-0011)
+    transcriptQueue.grantSendMessages(transcriptionEventsFn);
 
     // Ensure the Chime transcription service-linked role exists in this account
     // Required for Amazon Chime SDK live transcription with Amazon Transcribe
@@ -234,22 +226,29 @@ export class TimtamInfraStack extends Stack {
       resources: ['*'],
     }));
 
-    // === Orchestrator Configuration Lambdas ===
-    const DEFAULT_PROMPT = '会話の内容が具体的に寄りすぎていたり、抽象的になりすぎていたら指摘してください';
+    // === Grasp Config API Lambdas ===
+    const getGraspConfigsFn = new NodejsFunction(this, 'GetGraspConfigsFn', {
+      entry: '../../services/grasp-config/getConfigs.ts',
+      timeout: Duration.seconds(10),
+      runtime: lambda.Runtime.NODEJS_20_X,
+      environment: {
+        GRASP_CONFIGS_TABLE: graspConfigsTable.tableName,
+      },
+    });
+    graspConfigsTable.grantReadData(getGraspConfigsFn);
 
-    const getPromptFn = new NodejsFunction(this, 'GetPromptFn', {
-      entry: '../../services/orchestrator-config/getPrompt.ts',
+    const getCurrentGraspConfigFn = new NodejsFunction(this, 'GetCurrentGraspConfigFn', {
+      entry: '../../services/grasp-config/getCurrentConfig.ts',
       timeout: Duration.seconds(10),
       runtime: lambda.Runtime.NODEJS_20_X,
       environment: {
         CONFIG_TABLE_NAME: orchestratorConfigTable.tableName,
-        DEFAULT_PROMPT,
       },
     });
-    orchestratorConfigTable.grantReadData(getPromptFn);
+    orchestratorConfigTable.grantReadData(getCurrentGraspConfigFn);
 
-    const updatePromptFn = new NodejsFunction(this, 'UpdatePromptFn', {
-      entry: '../../services/orchestrator-config/updatePrompt.ts',
+    const updateGraspConfigFn = new NodejsFunction(this, 'UpdateGraspConfigFn', {
+      entry: '../../services/grasp-config/updateConfig.ts',
       timeout: Duration.seconds(10),
       runtime: lambda.Runtime.NODEJS_20_X,
       environment: {
@@ -257,13 +256,29 @@ export class TimtamInfraStack extends Stack {
         CONTROL_SQS_URL: '', // Will be set after controlQueue is created
       },
       bundling: {
-        nodeModules: ['@aws-sdk/client-sqs'],
+        nodeModules: ['@aws-sdk/client-sqs', 'js-yaml'],
         externalModules: ['aws-sdk'],
         target: 'node20',
         platform: 'node',
       },
     });
-    orchestratorConfigTable.grantWriteData(updatePromptFn);
+    orchestratorConfigTable.grantWriteData(updateGraspConfigFn);
+
+    const saveGraspPresetFn = new NodejsFunction(this, 'SaveGraspPresetFn', {
+      entry: '../../services/grasp-config/savePreset.ts',
+      timeout: Duration.seconds(10),
+      runtime: lambda.Runtime.NODEJS_20_X,
+      environment: {
+        GRASP_CONFIGS_TABLE: graspConfigsTable.tableName,
+      },
+      bundling: {
+        nodeModules: ['js-yaml'],
+        externalModules: ['aws-sdk'],
+        target: 'node20',
+        platform: 'node',
+      },
+    });
+    graspConfigsTable.grantWriteData(saveGraspPresetFn);
 
     // === Admin API Lambdas ===
     // Read ADMIN_PASSWORD from context (passed via --context or cdk.json)
@@ -347,9 +362,9 @@ export class TimtamInfraStack extends Stack {
       retentionPeriod: Duration.days(1),
     });
 
-    // Update updatePromptFn with SQS URL and grant permissions
-    updatePromptFn.addEnvironment('CONTROL_SQS_URL', controlQueue.queueUrl);
-    controlQueue.grantSendMessages(updatePromptFn);
+    // Update updateGraspConfigFn with SQS URL and grant permissions
+    updateGraspConfigFn.addEnvironment('CONTROL_SQS_URL', controlQueue.queueUrl);
+    controlQueue.grantSendMessages(updateGraspConfigFn);
 
     const startMeetingFn = new NodejsFunction(this, 'StartMeetingOrchestratorFn', {
       entry: '../../services/orchestrator/startMeeting.ts',
@@ -715,41 +730,83 @@ export class TimtamInfraStack extends Stack {
       action: 'lambda:InvokeFunction',
     });
 
-    // Get Prompt integration + route (GET /orchestrator/prompt)
-    const getPromptInt = new CfnIntegration(this, 'GetPromptIntegration', {
+    // === Grasp Config API Routes ===
+
+    // Get Grasp Configs (GET /grasp/configs)
+    const getGraspConfigsInt = new CfnIntegration(this, 'GetGraspConfigsIntegration', {
       apiId: httpApi.ref,
       integrationType: 'AWS_PROXY',
-      integrationUri: lambdaIntegrationUri(getPromptFn),
+      integrationUri: lambdaIntegrationUri(getGraspConfigsFn),
       payloadFormatVersion: '2.0',
       integrationMethod: 'POST',
     });
-    const getPromptRoute = new CfnRoute(this, 'GetPromptRoute', {
+    const getGraspConfigsRoute = new CfnRoute(this, 'GetGraspConfigsRoute', {
       apiId: httpApi.ref,
-      routeKey: 'GET /orchestrator/prompt',
-      target: `integrations/${getPromptInt.ref}`,
+      routeKey: 'GET /grasp/configs',
+      target: `integrations/${getGraspConfigsInt.ref}`,
     });
-    getPromptRoute.addDependency(getPromptInt);
-    getPromptFn.addPermission('InvokeByHttpApiGetPrompt', {
+    getGraspConfigsRoute.addDependency(getGraspConfigsInt);
+    getGraspConfigsFn.addPermission('InvokeByHttpApiGetGraspConfigs', {
       principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
       sourceArn,
       action: 'lambda:InvokeFunction',
     });
 
-    // Update Prompt integration + route (PUT /orchestrator/prompt)
-    const updatePromptInt = new CfnIntegration(this, 'UpdatePromptIntegration', {
+    // Get Current Grasp Config (GET /grasp/config/current)
+    const getCurrentGraspConfigInt = new CfnIntegration(this, 'GetCurrentGraspConfigIntegration', {
       apiId: httpApi.ref,
       integrationType: 'AWS_PROXY',
-      integrationUri: lambdaIntegrationUri(updatePromptFn),
+      integrationUri: lambdaIntegrationUri(getCurrentGraspConfigFn),
       payloadFormatVersion: '2.0',
       integrationMethod: 'POST',
     });
-    const updatePromptRoute = new CfnRoute(this, 'UpdatePromptRoute', {
+    const getCurrentGraspConfigRoute = new CfnRoute(this, 'GetCurrentGraspConfigRoute', {
       apiId: httpApi.ref,
-      routeKey: 'PUT /orchestrator/prompt',
-      target: `integrations/${updatePromptInt.ref}`,
+      routeKey: 'GET /grasp/config/current',
+      target: `integrations/${getCurrentGraspConfigInt.ref}`,
     });
-    updatePromptRoute.addDependency(updatePromptInt);
-    updatePromptFn.addPermission('InvokeByHttpApiUpdatePrompt', {
+    getCurrentGraspConfigRoute.addDependency(getCurrentGraspConfigInt);
+    getCurrentGraspConfigFn.addPermission('InvokeByHttpApiGetCurrentGraspConfig', {
+      principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+      sourceArn,
+      action: 'lambda:InvokeFunction',
+    });
+
+    // Update Grasp Config (PUT /grasp/config)
+    const updateGraspConfigInt = new CfnIntegration(this, 'UpdateGraspConfigIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(updateGraspConfigFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const updateGraspConfigRoute = new CfnRoute(this, 'UpdateGraspConfigRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'PUT /grasp/config',
+      target: `integrations/${updateGraspConfigInt.ref}`,
+    });
+    updateGraspConfigRoute.addDependency(updateGraspConfigInt);
+    updateGraspConfigFn.addPermission('InvokeByHttpApiUpdateGraspConfig', {
+      principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+      sourceArn,
+      action: 'lambda:InvokeFunction',
+    });
+
+    // Save Grasp Preset (POST /grasp/presets)
+    const saveGraspPresetInt = new CfnIntegration(this, 'SaveGraspPresetIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(saveGraspPresetFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const saveGraspPresetRoute = new CfnRoute(this, 'SaveGraspPresetRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'POST /grasp/presets',
+      target: `integrations/${saveGraspPresetInt.ref}`,
+    });
+    saveGraspPresetRoute.addDependency(saveGraspPresetInt);
+    saveGraspPresetFn.addPermission('InvokeByHttpApiSaveGraspPreset', {
       principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
       sourceArn,
       action: 'lambda:InvokeFunction',
@@ -802,15 +859,7 @@ export class TimtamInfraStack extends Stack {
     const taskRole = new iam.Role(this, 'OrchestratorTaskRole', {
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
     });
-    // Permissions: Kinesis read, Bedrock invoke, CloudWatch metrics, SQS consume, DynamoDB write
-    taskRole.addToPolicy(new iam.PolicyStatement({
-      actions: [
-        'kinesis:DescribeStream',
-        'kinesis:GetShardIterator',
-        'kinesis:GetRecords'
-      ],
-      resources: [transcriptStream.streamArn],
-    }));
+    // Permissions: Bedrock invoke, CloudWatch metrics, SQS consume, DynamoDB write
     taskRole.addToPolicy(new iam.PolicyStatement({
       actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
       resources: ['*'],
@@ -838,17 +887,14 @@ export class TimtamInfraStack extends Stack {
       }),
       logging: ecs.LogDriver.awsLogs({ logGroup, streamPrefix: 'orchestrator' }),
       environment: {
-        // Stream name: can be changed later; default here is a functional name
-        KINESIS_STREAM_NAME: transcriptStream.streamName,
         TRANSCRIPT_QUEUE_URL: transcriptQueue.queueUrl,  // ADR-0011: SQS FIFO queue
         BEDROCK_REGION: 'ap-northeast-1',
         BEDROCK_MODEL_ID: 'arn:aws:bedrock:ap-northeast-1:030046728177:inference-profile/global.anthropic.claude-haiku-4-5-20251001-v1:0',
         WINDOW_LINES: '5',
-        POLL_INTERVAL_MS: '1000', // 1 second to avoid Kinesis rate limits (5 req/sec max)
+        POLL_INTERVAL_MS: '1000', // 1 second polling interval
         CONTROL_SQS_URL: controlQueue.queueUrl,
         AI_MESSAGES_TABLE: aiMessagesTable.tableName,
         CONFIG_TABLE_NAME: orchestratorConfigTable.tableName,
-        DEFAULT_PROMPT,
       },
     });
     container.addPortMappings({ containerPort: 3000 });
@@ -861,32 +907,8 @@ export class TimtamInfraStack extends Stack {
     });
 
     // === Web assets deployment ===
-    // Deploy web assets and runtime config.js together to avoid S3 bucket conflicts
-    const webDistPath = path.join(__dirname, '../../../web/timtam-web/dist');
-
-    // Build check: fail fast if web build is missing
-    if (!fs.existsSync(webDistPath)) {
-      throw new Error(
-        `Web build not found at ${webDistPath}! Run "pnpm build" in web/timtam-web first.`
-      );
-    }
-
-    // Generate runtime config.js using Source.data() to properly resolve CDK tokens at deploy time
-    const configSource = s3deploy.Source.data(
-      'config.js',
-      `window.API_BASE_URL='${apiBaseUrl}';`
-    );
-
-    // Deploy web assets and config.js together
-    new s3deploy.BucketDeployment(this, 'DeployWebsite', {
-      sources: [
-        s3deploy.Source.asset(webDistPath),
-        configSource,
-      ],
-      destinationBucket: siteBucket,
-      distribution: webDistribution,
-      distributionPaths: ['/*'],
-    });
+    // Note: Web assets are deployed separately via `pnpm run web:deploy`
+    // This avoids the slow and unreliable BucketDeployment custom resource
 
     // Grant ECS and CloudFront permissions to admin Lambdas
     // (These are added here because the resources need to be defined first)
@@ -927,9 +949,10 @@ export class TimtamInfraStack extends Stack {
     });
     new CfnOutput(this, 'TtsDefaultVoice', { value: 'Mizuki' });
     new CfnOutput(this, 'WebUrl', { value: `https://${webDistribution.distributionDomainName}` });
+    new CfnOutput(this, 'WebBucketName', { value: siteBucket.bucketName });
+    new CfnOutput(this, 'WebDistributionId', { value: webDistribution.distributionId });
     new CfnOutput(this, 'OrchestratorControlQueueUrl', { value: controlQueue.queueUrl });
     new CfnOutput(this, 'OrchestratorServiceName', { value: service.serviceName });
-    new CfnOutput(this, 'TranscriptStreamName', { value: transcriptStream.streamName });
     new CfnOutput(this, 'TranscriptQueueUrl', { value: transcriptQueue.queueUrl });  // ADR-0011
   }
 }

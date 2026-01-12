@@ -1,6 +1,6 @@
 # ADR 0011: トランスクリプトストリーミングにSQS FIFOを使用
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2025-12-25
 - Owners: timtam PoC チーム
 

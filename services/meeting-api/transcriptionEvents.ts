@@ -1,18 +1,15 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
-import { KinesisClient, PutRecordCommand } from '@aws-sdk/client-kinesis';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 
 const REGION = process.env.AWS_REGION || 'ap-northeast-1';
-const KINESIS_STREAM_NAME = process.env.KINESIS_STREAM_NAME || 'transcript-asr';
 const TRANSCRIPT_QUEUE_URL = process.env.TRANSCRIPT_QUEUE_URL || '';  // ADR-0011: SQS FIFO queue
 
-const kinesis = new KinesisClient({ region: REGION });
 const sqs = new SQSClient({ region: REGION });
 
 /**
  * POST /meetings/{meetingId}/transcription/events
  *
- * Receives TranscriptEvent from browser and forwards to Kinesis
+ * Receives TranscriptEvent from browser and forwards to SQS FIFO queue (ADR-0011)
  * This replaces the server-side audio capture + Transcribe batch job flow
  *
  * Request body:
@@ -88,47 +85,24 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       sequenceNumber: undefined, // Not applicable for client-side events
     };
 
-    // ADR-0011 Phase 1: Write to both Kinesis and SQS for parallel operation
-    // Write to Kinesis (legacy)
+    // ADR-0011: Write to SQS
     try {
-      await kinesis.send(
-        new PutRecordCommand({
-          StreamName: KINESIS_STREAM_NAME,
-          Data: Buffer.from(JSON.stringify(asrEvent)),
-          PartitionKey: pathMeetingId, // Partition by meetingId for ordering
+      await sqs.send(
+        new SendMessageCommand({
+          QueueUrl: TRANSCRIPT_QUEUE_URL,
+          MessageBody: JSON.stringify(asrEvent),
+          MessageGroupId: pathMeetingId,  // Ensures ordering per meeting
         })
       );
-      console.log('[TranscriptionEvents] Written to Kinesis', {
+      console.log('[TranscriptionEvents] Written to SQS', {
         meetingId: pathMeetingId,
         speakerId: asrEvent.speakerId,
         textLength: text.length,
         isFinal,
       });
     } catch (err) {
-      console.error('[TranscriptionEvents] Kinesis write failed', err);
-      throw err;  // Phase 1: fail entire request if either destination fails
-    }
-
-    // Write to SQS FIFO (new)
-    if (TRANSCRIPT_QUEUE_URL) {
-      try {
-        await sqs.send(
-          new SendMessageCommand({
-            QueueUrl: TRANSCRIPT_QUEUE_URL,
-            MessageBody: JSON.stringify(asrEvent),
-            MessageGroupId: pathMeetingId,  // Ensures ordering per meeting
-          })
-        );
-        console.log('[TranscriptionEvents] Written to SQS', {
-          meetingId: pathMeetingId,
-          speakerId: asrEvent.speakerId,
-          textLength: text.length,
-          isFinal,
-        });
-      } catch (err) {
-        console.error('[TranscriptionEvents] SQS write failed', err);
-        throw err;  // Phase 1: fail entire request if either destination fails
-      }
+      console.error('[TranscriptionEvents] SQS write failed', err);
+      throw err;
     }
 
     return {
