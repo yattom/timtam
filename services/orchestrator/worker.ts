@@ -16,7 +16,7 @@ import { parseGraspGroupDefinition, GraspGroupDefinition } from './graspConfigPa
 import { ensureDefaultGraspConfig } from './selfSetup';
 import { Message } from '@aws-sdk/client-sqs';
 import { OrchestratorManager } from './orchestratorManager';
-import { AsrEvent } from './meetingOrchestrator';
+import { AsrEvent, MeetingId } from './meetingOrchestrator';
 
 // 環境変数
 const TRANSCRIPT_QUEUE_URL = process.env.TRANSCRIPT_QUEUE_URL || '';
@@ -26,7 +26,7 @@ const AI_MESSAGES_TABLE = process.env.AI_MESSAGES_TABLE || 'timtam-ai-messages';
 const CONFIG_TABLE_NAME = process.env.CONFIG_TABLE_NAME || 'timtam-orchestrator-config';
 const CONTROL_SQS_URL = process.env.CONTROL_SQS_URL || '';
 const MAX_MEETINGS = Number(process.env.MAX_MEETINGS || '100');
-const MEETING_TIMEOUT_MS = Number(process.env.MEETING_TIMEOUT_MS || '3600000'); // 1時間
+const MEETING_TIMEOUT_MS = Number(process.env.MEETING_TIMEOUT_MS || '43200000'); // 12時間
 
 class Metrics implements IMetrics {
   private cw = new CloudWatchClient({});
@@ -213,13 +213,14 @@ function rebuildGrasps(graspGroupDef: GraspGroupDefinition): void {
     graspTemplates.push(grasp);
   }
 
-  // すべてのミーティングのGraspを再構築
+  // すべての新規ミーティングのためのGraspテンプレートを更新
+  // 既存のミーティングには影響しない
   if (orchestratorManager) {
-    orchestratorManager.rebuildAllGrasps(graspTemplates);
+    orchestratorManager.updateGraspsTemplate(graspTemplates);
   }
 
   console.log(JSON.stringify({
-    type: 'orchestrator.grasps.rebuilt',
+    type: 'orchestrator.grasps.template.rebuilt',
     graspCount: graspTemplates.length,
     ts: Date.now()
   }));
@@ -274,7 +275,14 @@ async function processMessages(messages: Message[]) {
   // Process messages in parallel for better throughput
   await Promise.all(messages.map(async (message) => {
     let ev: AsrEvent | null = null;
-    try { ev = JSON.parse(message.Body || ''); } catch {}
+    try { 
+      const parsed = JSON.parse(message.Body || '');
+      // Cast string to MeetingId
+      ev = {
+        ...parsed,
+        meetingId: parsed.meetingId as MeetingId
+      };
+    } catch {}
     if (!ev) {
       // Delete malformed message
       await sqs.send(
@@ -421,9 +429,9 @@ console.log(JSON.stringify({
   env: { BEDROCK_REGION, BEDROCK_MODEL_ID, MAX_MEETINGS, MEETING_TIMEOUT_MS, CONTROL_SQS_URL, CONFIG_TABLE_NAME }
 }));
 
-// 定期的にすべてのミーティングのキューを処理（完全な沈黙時でもキューに入った Grasp を実行）
+// 定期的にすべてのミーティングの待機Graspを処理（完全な沈黙時でも待機中の Grasp を実行）
 setInterval(async () => {
-  const processed = await orchestratorManager.processAllQueues(notifier, metrics);
+  const processed = await orchestratorManager.processAllWaitingGrasps(notifier, metrics);
   if (processed > 0) {
     console.log(JSON.stringify({
       type: 'orchestrator.timer.processed',

@@ -1,5 +1,5 @@
 // OrchestratorManager: 複数ミーティングのオーケストレーターを管理
-import { MeetingOrchestrator, AsrEvent } from './meetingOrchestrator';
+import { Meeting, MeetingId, AsrEvent } from './meetingOrchestrator';
 import { Grasp, LLMClient, Notifier, Metrics } from './grasp';
 
 export interface OrchestratorManagerConfig {
@@ -10,11 +10,11 @@ export interface OrchestratorManagerConfig {
 /**
  * OrchestratorManager: 複数ミーティングの管理
  * 
- * 複数のMeetingOrchestratorインスタンスを管理し、
+ * 複数のMeetingインスタンスを管理し、
  * ミーティングIDに基づいて適切なオーケストレーターに処理を振り分ける。
  */
 export class OrchestratorManager {
-  private orchestrators: Map<string, MeetingOrchestrator> = new Map();
+  private meetings: Map<MeetingId, Meeting> = new Map();
   private config: Required<OrchestratorManagerConfig>;
   private graspsTemplate: Grasp[];
 
@@ -25,7 +25,7 @@ export class OrchestratorManager {
     this.graspsTemplate = graspsTemplate;
     this.config = {
       maxMeetings: config?.maxMeetings || 100,
-      meetingTimeoutMs: config?.meetingTimeoutMs || 3600000, // 1時間
+      meetingTimeoutMs: config?.meetingTimeoutMs || 43200000, // 12時間 (12 * 60 * 60 * 1000)
     };
 
     console.log(JSON.stringify({
@@ -39,38 +39,38 @@ export class OrchestratorManager {
   /**
    * ミーティング用のオーケストレーターを取得または作成
    */
-  getOrCreateOrchestrator(meetingId: string): MeetingOrchestrator {
-    let orchestrator = this.orchestrators.get(meetingId);
+  getOrCreateMeeting(meetingId: MeetingId): Meeting {
+    let meeting = this.meetings.get(meetingId);
     
-    if (!orchestrator) {
+    if (!meeting) {
       // 最大数チェックとクリーンアップ
-      if (this.orchestrators.size >= this.config.maxMeetings) {
+      if (this.meetings.size >= this.config.maxMeetings) {
         this.cleanupInactiveMeetings();
       }
 
       // 新しいオーケストレーターを作成
-      orchestrator = new MeetingOrchestrator(
+      meeting = new Meeting(
         { meetingId },
         this.graspsTemplate
       );
-      this.orchestrators.set(meetingId, orchestrator);
+      this.meetings.set(meetingId, meeting);
 
       console.log(JSON.stringify({
         type: 'orchestrator.manager.meeting.created',
         meetingId,
-        totalMeetings: this.orchestrators.size,
+        totalMeetings: this.meetings.size,
         ts: Date.now()
       }));
     }
 
-    return orchestrator;
+    return meeting;
   }
 
   /**
    * 特定のミーティングのオーケストレーターを取得
    */
-  getOrchestrator(meetingId: string): MeetingOrchestrator | undefined {
-    return this.orchestrators.get(meetingId);
+  getMeeting(meetingId: MeetingId): Meeting | undefined {
+    return this.meetings.get(meetingId);
   }
 
   /**
@@ -81,22 +81,22 @@ export class OrchestratorManager {
     notifier: Notifier,
     metrics: Metrics
   ): Promise<void> {
-    const orchestrator = this.getOrCreateOrchestrator(ev.meetingId);
-    await orchestrator.processAsrEvent(ev, notifier, metrics);
+    const meeting = this.getOrCreateMeeting(ev.meetingId);
+    await meeting.processAsrEvent(ev, notifier, metrics);
   }
 
   /**
-   * すべてのミーティングのキューを定期的に処理
+   * すべてのミーティングの待機Graspを定期的に処理
    * 並列処理により効率化
    */
-  async processAllQueues(
+  async processAllWaitingGrasps(
     notifier: Notifier,
     metrics: Metrics
   ): Promise<number> {
-    // Process all meeting queues in parallel for better performance
+    // Process all meeting waiting Grasps in parallel for better performance
     const results = await Promise.all(
-      Array.from(this.orchestrators.values()).map(async (orchestrator) => {
-        return await orchestrator.processQueuePeriodically(notifier, metrics);
+      Array.from(this.meetings.values()).map(async (meeting) => {
+        return await meeting.processWaitingGraspsPeriodically(notifier, metrics);
       })
     );
 
@@ -109,10 +109,10 @@ export class OrchestratorManager {
    */
   cleanupInactiveMeetings(): number {
     const now = Date.now();
-    const inactiveMeetings: string[] = [];
+    const inactiveMeetings: MeetingId[] = [];
 
-    for (const [meetingId, orchestrator] of this.orchestrators) {
-      const inactiveTime = now - orchestrator.getLastActivityTime();
+    for (const [meetingId, meeting] of this.meetings) {
+      const inactiveTime = now - meeting.getLastActivityTime();
       if (inactiveTime > this.config.meetingTimeoutMs) {
         inactiveMeetings.push(meetingId);
       }
@@ -126,7 +126,7 @@ export class OrchestratorManager {
       console.log(JSON.stringify({
         type: 'orchestrator.manager.cleanup',
         removedMeetings: inactiveMeetings.length,
-        remainingMeetings: this.orchestrators.size,
+        remainingMeetings: this.meetings.size,
         ts: Date.now()
       }));
     }
@@ -137,15 +137,15 @@ export class OrchestratorManager {
   /**
    * 特定のミーティングを削除
    */
-  removeMeeting(meetingId: string): boolean {
-    const orchestrator = this.orchestrators.get(meetingId);
-    if (orchestrator) {
-      orchestrator.cleanup();
-      this.orchestrators.delete(meetingId);
+  removeMeeting(meetingId: MeetingId): boolean {
+    const meeting = this.meetings.get(meetingId);
+    if (meeting) {
+      meeting.cleanup();
+      this.meetings.delete(meetingId);
       console.log(JSON.stringify({
         type: 'orchestrator.manager.meeting.removed',
         meetingId,
-        totalMeetings: this.orchestrators.size,
+        totalMeetings: this.meetings.size,
         ts: Date.now()
       }));
       return true;
@@ -154,18 +154,32 @@ export class OrchestratorManager {
   }
 
   /**
-   * すべてのミーティングのGraspを再構築（設定変更時）
+   * 特定のミーティングのGraspを再構築（設定変更時）
    */
-  rebuildAllGrasps(grasps: Grasp[]): void {
-    this.graspsTemplate = grasps;
-    
-    for (const [meetingId, orchestrator] of this.orchestrators) {
-      orchestrator.rebuildGrasps(grasps);
+  rebuildMeetingGrasps(meetingId: MeetingId, grasps: Grasp[]): boolean {
+    const meeting = this.meetings.get(meetingId);
+    if (meeting) {
+      meeting.rebuildGrasps(grasps);
+      console.log(JSON.stringify({
+        type: 'orchestrator.manager.meeting.grasps.rebuilt',
+        meetingId,
+        graspCount: grasps.length,
+        ts: Date.now()
+      }));
+      return true;
     }
+    return false;
+  }
+
+  /**
+   * すべての新規ミーティングのためのGraspテンプレートを更新（設定変更時）
+   * 既存のミーティングには影響しない
+   */
+  updateGraspsTemplate(grasps: Grasp[]): void {
+    this.graspsTemplate = grasps;
 
     console.log(JSON.stringify({
-      type: 'orchestrator.manager.grasps.rebuilt',
-      meetingCount: this.orchestrators.size,
+      type: 'orchestrator.manager.grasps.template.updated',
       graspCount: grasps.length,
       ts: Date.now()
     }));
@@ -177,21 +191,21 @@ export class OrchestratorManager {
   getStatus(): {
     totalMeetings: number;
     meetings: Array<{
-      meetingId: string;
+      meetingId: MeetingId;
       lastActivityTime: number;
       messageCount: number;
     }>;
   } {
-    const meetings = Array.from(this.orchestrators.entries()).map(
-      ([meetingId, orchestrator]) => ({
+    const meetings = Array.from(this.meetings.entries()).map(
+      ([meetingId, meeting]) => ({
         meetingId,
-        lastActivityTime: orchestrator.getLastActivityTime(),
-        messageCount: orchestrator.getMessageCount(),
+        lastActivityTime: meeting.getLastActivityTime(),
+        messageCount: meeting.getMessageCount(),
       })
     );
 
     return {
-      totalMeetings: this.orchestrators.size,
+      totalMeetings: this.meetings.size,
       meetings,
     };
   }
@@ -200,10 +214,10 @@ export class OrchestratorManager {
    * クリーンアップ（シャットダウン時）
    */
   cleanup(): void {
-    for (const [meetingId, orchestrator] of this.orchestrators) {
-      orchestrator.cleanup();
+    for (const [meetingId, meeting] of this.meetings) {
+      meeting.cleanup();
     }
-    this.orchestrators.clear();
+    this.meetings.clear();
     console.log(JSON.stringify({
       type: 'orchestrator.manager.shutdown',
       ts: Date.now()

@@ -8,7 +8,7 @@ import {
   JudgeResult,
 } from './grasp';
 import { OrchestratorManager } from './orchestratorManager';
-import { MeetingOrchestrator, AsrEvent } from './meetingOrchestrator';
+import { Meeting, MeetingId, AsrEvent } from './meetingOrchestrator';
 
 describe('Multi-Meeting Orchestrator', () => {
   // Helper functions for creating test objects
@@ -44,7 +44,7 @@ describe('Multi-Meeting Orchestrator', () => {
   });
 
   const createTestAsrEvent = (meetingId: string, text: string): AsrEvent => ({
-    meetingId,
+    meetingId: meetingId as MeetingId,
     text,
     isFinal: true,
     timestamp: Date.now(),
@@ -54,19 +54,19 @@ describe('Multi-Meeting Orchestrator', () => {
     vi.clearAllMocks();
   });
 
-  describe('MeetingOrchestrator', () => {
-    it('should create an orchestrator for a single meeting', () => {
+  describe('Meeting', () => {
+    it('should create a Meeting for a single meeting', () => {
       const config = createTestConfig();
       const llm = createMockLLMClient();
       const grasps = [new Grasp(config, llm)];
 
-      const orchestrator = new MeetingOrchestrator(
-        { meetingId: 'meeting-001' },
+      const meeting = new Meeting(
+        { meetingId: 'meeting-001' as MeetingId },
         grasps
       );
 
-      expect(orchestrator.getMeetingId()).toBe('meeting-001');
-      expect(orchestrator.getMessageCount()).toBe(0);
+      expect(meeting.getMeetingId()).toBe('meeting-001' as MeetingId);
+      expect(meeting.getMessageCount()).toBe(0);
     });
 
     it('should process ASR events and update message count', async () => {
@@ -76,15 +76,15 @@ describe('Multi-Meeting Orchestrator', () => {
       const notifier = createMockNotifier();
       const metrics = createMockMetrics();
 
-      const orchestrator = new MeetingOrchestrator(
-        { meetingId: 'meeting-001' },
+      const meeting = new Meeting(
+        { meetingId: 'meeting-001' as MeetingId },
         grasps
       );
 
       const event = createTestAsrEvent('meeting-001', 'テスト発言です');
-      await orchestrator.processAsrEvent(event, notifier, metrics);
+      await meeting.processAsrEvent(event, notifier, metrics);
 
-      expect(orchestrator.getMessageCount()).toBe(1);
+      expect(meeting.getMessageCount()).toBe(1);
     });
 
     it('should maintain independent state for each meeting', async () => {
@@ -94,35 +94,35 @@ describe('Multi-Meeting Orchestrator', () => {
       const notifier = createMockNotifier();
       const metrics = createMockMetrics();
 
-      const orchestrator1 = new MeetingOrchestrator(
+      const meeting1 = new Meeting(
         { meetingId: 'meeting-001' },
         grasps
       );
-      const orchestrator2 = new MeetingOrchestrator(
+      const meeting2 = new Meeting(
         { meetingId: 'meeting-002' },
         grasps
       );
 
       // Process events for both meetings
-      await orchestrator1.processAsrEvent(
+      await meeting1.processAsrEvent(
         createTestAsrEvent('meeting-001', '最初のミーティング'),
         notifier,
         metrics
       );
-      await orchestrator1.processAsrEvent(
+      await meeting1.processAsrEvent(
         createTestAsrEvent('meeting-001', '2つ目の発言'),
         notifier,
         metrics
       );
-      await orchestrator2.processAsrEvent(
+      await meeting2.processAsrEvent(
         createTestAsrEvent('meeting-002', '別のミーティング'),
         notifier,
         metrics
       );
 
       // Verify independent state
-      expect(orchestrator1.getMessageCount()).toBe(2);
-      expect(orchestrator2.getMessageCount()).toBe(1);
+      expect(meeting1.getMessageCount()).toBe(2);
+      expect(meeting2.getMessageCount()).toBe(1);
     });
 
     it('should cleanup resources on meeting end', () => {
@@ -130,13 +130,13 @@ describe('Multi-Meeting Orchestrator', () => {
       const llm = createMockLLMClient();
       const grasps = [new Grasp(config, llm)];
 
-      const orchestrator = new MeetingOrchestrator(
+      const meeting = new Meeting(
         { meetingId: 'meeting-001' },
         grasps
       );
 
       // Should not throw
-      expect(() => orchestrator.cleanup()).not.toThrow();
+      expect(() => meeting.cleanup()).not.toThrow();
     });
   });
 
@@ -160,27 +160,27 @@ describe('Multi-Meeting Orchestrator', () => {
 
       const manager = new OrchestratorManager(grasps);
 
-      const orchestrator1 = manager.getOrCreateOrchestrator('meeting-001');
-      const orchestrator2 = manager.getOrCreateOrchestrator('meeting-002');
-      const orchestrator3 = manager.getOrCreateOrchestrator('meeting-003');
+      const meeting1 = manager.getOrCreateMeeting('meeting-001' as MeetingId);
+      const meeting2 = manager.getOrCreateMeeting('meeting-002' as MeetingId);
+      const meeting3 = manager.getOrCreateMeeting('meeting-003' as MeetingId);
 
-      expect(orchestrator1.getMeetingId()).toBe('meeting-001');
-      expect(orchestrator2.getMeetingId()).toBe('meeting-002');
-      expect(orchestrator3.getMeetingId()).toBe('meeting-003');
+      expect(meeting1.getMeetingId()).toBe('meeting-001' as MeetingId);
+      expect(meeting2.getMeetingId()).toBe('meeting-002' as MeetingId);
+      expect(meeting3.getMeetingId()).toBe('meeting-003' as MeetingId);
       expect(manager.getStatus().totalMeetings).toBe(3);
     });
 
-    it('should return existing orchestrator for the same meeting ID', () => {
+    it('should return existing meeting for the same meeting ID', () => {
       const config = createTestConfig();
       const llm = createMockLLMClient();
       const grasps = [new Grasp(config, llm)];
 
       const manager = new OrchestratorManager(grasps);
 
-      const orchestrator1 = manager.getOrCreateOrchestrator('meeting-001');
-      const orchestrator2 = manager.getOrCreateOrchestrator('meeting-001');
+      const meeting1 = manager.getOrCreateMeeting('meeting-001' as MeetingId);
+      const meeting2 = manager.getOrCreateMeeting('meeting-001' as MeetingId);
 
-      expect(orchestrator1).toBe(orchestrator2);
+      expect(meeting1).toBe(meeting2);
       expect(manager.getStatus().totalMeetings).toBe(1);
     });
 
@@ -246,11 +246,11 @@ describe('Multi-Meeting Orchestrator', () => {
         metrics
       );
 
-      const orchestrator1 = manager.getOrchestrator('meeting-001');
-      const orchestrator2 = manager.getOrchestrator('meeting-002');
+      const meeting1 = manager.getMeeting('meeting-001' as MeetingId);
+      const meeting2 = manager.getMeeting('meeting-002' as MeetingId);
 
-      expect(orchestrator1?.getMessageCount()).toBe(3);
-      expect(orchestrator2?.getMessageCount()).toBe(1);
+      expect(meeting1?.getMessageCount()).toBe(3);
+      expect(meeting2?.getMessageCount()).toBe(1);
     });
 
     it('should cleanup inactive meetings', async () => {
@@ -299,9 +299,9 @@ describe('Multi-Meeting Orchestrator', () => {
       });
 
       // Create 3 meetings
-      manager.getOrCreateOrchestrator('meeting-001');
-      manager.getOrCreateOrchestrator('meeting-002');
-      manager.getOrCreateOrchestrator('meeting-003');
+      manager.getOrCreateMeeting('meeting-001' as MeetingId);
+      manager.getOrCreateMeeting('meeting-002' as MeetingId);
+      manager.getOrCreateMeeting('meeting-003' as MeetingId);
 
       expect(manager.getStatus().totalMeetings).toBe(3);
 
@@ -309,7 +309,7 @@ describe('Multi-Meeting Orchestrator', () => {
       await new Promise((resolve) => setTimeout(resolve, 150));
 
       // Creating 4th meeting should trigger cleanup
-      manager.getOrCreateOrchestrator('meeting-004');
+      manager.getOrCreateMeeting('meeting-004' as MeetingId);
 
       // Should still have meetings (at least the new one)
       expect(manager.getStatus().totalMeetings).toBeGreaterThan(0);
@@ -323,15 +323,15 @@ describe('Multi-Meeting Orchestrator', () => {
 
       const manager = new OrchestratorManager(grasps);
 
-      manager.getOrCreateOrchestrator('meeting-001');
-      manager.getOrCreateOrchestrator('meeting-002');
+      manager.getOrCreateMeeting('meeting-001' as MeetingId);
+      manager.getOrCreateMeeting('meeting-002' as MeetingId);
       expect(manager.getStatus().totalMeetings).toBe(2);
 
-      const removed = manager.removeMeeting('meeting-001');
+      const removed = manager.removeMeeting('meeting-001' as MeetingId);
       expect(removed).toBe(true);
       expect(manager.getStatus().totalMeetings).toBe(1);
 
-      const removedAgain = manager.removeMeeting('meeting-001');
+      const removedAgain = manager.removeMeeting('meeting-001' as MeetingId);
       expect(removedAgain).toBe(false);
     });
 
@@ -344,11 +344,11 @@ describe('Multi-Meeting Orchestrator', () => {
 
       const manager = new OrchestratorManager(grasps1);
 
-      manager.getOrCreateOrchestrator('meeting-001');
-      manager.getOrCreateOrchestrator('meeting-002');
+      manager.getOrCreateMeeting('meeting-001' as MeetingId);
+      manager.getOrCreateMeeting('meeting-002' as MeetingId);
 
       // Should not throw
-      expect(() => manager.rebuildAllGrasps(grasps2)).not.toThrow();
+      expect(() => manager.updateGraspsTemplate(grasps2)).not.toThrow();
     });
 
     it('should process all queues periodically', async () => {
@@ -373,7 +373,7 @@ describe('Multi-Meeting Orchestrator', () => {
       );
 
       // Process all queues
-      const processed = await manager.processAllQueues(notifier, metrics);
+      const processed = await manager.processAllWaitingGrasps(notifier, metrics);
 
       // Should return number of meetings processed (0 or more depending on queue state)
       expect(typeof processed).toBe('number');
@@ -387,8 +387,8 @@ describe('Multi-Meeting Orchestrator', () => {
 
       const manager = new OrchestratorManager(grasps);
 
-      manager.getOrCreateOrchestrator('meeting-001');
-      manager.getOrCreateOrchestrator('meeting-002');
+      manager.getOrCreateMeeting('meeting-001' as MeetingId);
+      manager.getOrCreateMeeting('meeting-002' as MeetingId);
       expect(manager.getStatus().totalMeetings).toBe(2);
 
       manager.cleanup();

@@ -1,4 +1,4 @@
-// MeetingOrchestrator: 各ミーティング専用のオーケストレーターインスタンス
+// Meeting: 各ミーティング専用のオーケストレーターインスタンス
 import {
   WindowBuffer,
   Notebook,
@@ -11,8 +11,11 @@ import {
 } from './grasp';
 import { Message } from '@aws-sdk/client-sqs';
 
+// MeetingId type for type safety
+export type MeetingId = string & { readonly __brand: unique symbol };
+
 export type AsrEvent = {
-  meetingId: string;
+  meetingId: MeetingId;
   speakerId?: string;
   text: string;
   isFinal: boolean;
@@ -20,19 +23,19 @@ export type AsrEvent = {
   sequenceNumber?: string;
 };
 
-export interface MeetingOrchestratorConfig {
-  meetingId: string;
+export interface MeetingConfig {
+  meetingId: MeetingId;
   windowLines?: number;
 }
 
 /**
- * MeetingOrchestrator: 単一ミーティング用のオーケストレーター
+ * Meeting: 単一ミーティング用のオーケストレーター
  * 
- * 各ミーティングは独立した状態（WindowBuffer、Notebook、GraspQueue）を持ち、
+ * 各ミーティングは独立した状態（WindowBuffer、Notebook、waiting Grasps）を持ち、
  * 他のミーティングと干渉しない。
  */
-export class MeetingOrchestrator {
-  private meetingId: string;
+export class Meeting {
+  private meetingId: MeetingId;
   private window: WindowBuffer;
   private notebook: Notebook;
   private graspQueue: GraspQueue;
@@ -41,25 +44,25 @@ export class MeetingOrchestrator {
   private messageCount: number = 0;
 
   constructor(
-    config: MeetingOrchestratorConfig,
+    config: MeetingConfig,
     grasps: Grasp[]
   ) {
     this.meetingId = config.meetingId;
     this.window = new WindowBuffer();
-    this.notebook = new Notebook(config.meetingId);
+    this.notebook = new Notebook(config.meetingId as string);
     this.graspQueue = new GraspQueue();
     this.grasps = grasps;
     this.lastActivityTime = Date.now();
 
     console.log(JSON.stringify({
-      type: 'meeting.orchestrator.created',
+      type: 'meeting.created',
       meetingId: this.meetingId,
       graspCount: this.grasps.length,
       ts: Date.now()
     }));
   }
 
-  getMeetingId(): string {
+  getMeetingId(): MeetingId {
     return this.meetingId;
   }
 
@@ -72,7 +75,7 @@ export class MeetingOrchestrator {
   }
 
   /**
-   * ASRイベントを処理し、Graspキューに追加
+   * ASRイベントを処理し、waiting Graspsに追加
    */
   async processAsrEvent(
     ev: AsrEvent,
@@ -97,7 +100,7 @@ export class MeetingOrchestrator {
       }));
     }
 
-    // 各 Grasp をキューに追加（実行すべきものだけ）
+    // 各 Grasp を待機リストに追加（実行すべきものだけ）
     const now = Date.now();
     for (const grasp of this.grasps) {
       if (grasp.shouldExecute(now)) {
@@ -105,7 +108,7 @@ export class MeetingOrchestrator {
       }
     }
 
-    // キューから1つだけ実行（グローバルクールダウン付き）
+    // 待機中のGraspから1つだけ実行（グローバルクールダウン付き）
     await this.graspQueue.processNext(
       this.window,
       ev.meetingId,
@@ -116,9 +119,9 @@ export class MeetingOrchestrator {
   }
 
   /**
-   * 定期的なキュー処理（沈黙時でもキュー内のGraspを実行）
+   * 定期的な待機Grasp処理（沈黙時でも待機中のGraspを実行）
    */
-  async processQueuePeriodically(
+  async processWaitingGraspsPeriodically(
     notifier: Notifier,
     metrics: Metrics
   ): Promise<boolean> {
@@ -128,7 +131,7 @@ export class MeetingOrchestrator {
 
     const processed = await this.graspQueue.processNext(
       this.window,
-      this.meetingId,
+      this.meetingId as string,
       notifier,
       metrics,
       this.notebook
@@ -138,7 +141,7 @@ export class MeetingOrchestrator {
       console.log(JSON.stringify({
         type: 'meeting.timer.processed',
         meetingId: this.meetingId,
-        queueSize: this.graspQueue.size(),
+        waitingGrasps: this.graspQueue.size(),
         ts: Date.now()
       }));
     }
@@ -166,7 +169,7 @@ export class MeetingOrchestrator {
   cleanup(): void {
     this.graspQueue.clear();
     console.log(JSON.stringify({
-      type: 'meeting.orchestrator.cleanup',
+      type: 'meeting.cleanup',
       meetingId: this.meetingId,
       messageCount: this.messageCount,
       ts: Date.now()
