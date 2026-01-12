@@ -57,7 +57,15 @@ export async function getStackOutput(
   );
 
   const stack = stacksResp.Stacks?.[0];
-  const output = stack?.Outputs?.find((o) => o.OutputKey === outputKey);
+  if (!stack) {
+    console.error(`CloudFormation stack not found: ${stackName}`);
+    return undefined;
+  }
+
+  const output = stack.Outputs?.find((o) => o.OutputKey === outputKey);
+  if (!output) {
+    console.error(`Stack output not found: ${outputKey} in stack ${stackName}`);
+  }
   return output?.OutputValue;
 }
 
@@ -175,19 +183,22 @@ async function manageCloudFront(enabled: boolean): Promise<void> {
     new GetDistributionConfigCommand({ Id: distId })
   );
 
-  if (getConfigResp.DistributionConfig && getConfigResp.ETag) {
-    const config = getConfigResp.DistributionConfig;
-    config.Enabled = enabled;
-
-    await cloudFrontClient.send(
-      new UpdateDistributionCommand({
-        Id: distId,
-        DistributionConfig: config,
-        IfMatch: getConfigResp.ETag,
-      })
-    );
-    console.log(`CloudFront distribution ${distId} updated successfully`);
+  if (!getConfigResp.DistributionConfig || !getConfigResp.ETag) {
+    console.error(`Failed to get CloudFront distribution config or ETag for ${distId}`);
+    return;
   }
+
+  const config = getConfigResp.DistributionConfig;
+  config.Enabled = enabled;
+
+  await cloudFrontClient.send(
+    new UpdateDistributionCommand({
+      Id: distId,
+      DistributionConfig: config,
+      IfMatch: getConfigResp.ETag,
+    })
+  );
+  console.log(`CloudFront distribution ${distId} updated successfully`);
 }
 
 /**
