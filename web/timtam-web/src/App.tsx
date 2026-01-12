@@ -409,6 +409,8 @@ export function App() {
                 setPartialText('');
               }
 
+              const resultId = r?.ResultId ?? r?.resultId;
+
               // Send transcription event to server (with speaker info)
               if (currentMeetingId && text) {
                 sendTranscriptionEvent(
@@ -416,7 +418,8 @@ export function App() {
                   speakerAttendeeId || speakerExternalUserId || 'unknown',
                   speakerExternalUserId,
                   text,
-                  !isPartial
+                  !isPartial,
+                  resultId
                 ).catch(err => {
                   console.error('Failed to send transcription event:', err);
                 });
@@ -428,67 +431,10 @@ export function App() {
         };
         transcriptHandlerRef.current = handler;
         tc.subscribeToTranscriptEvent(handler);
-      }
-      // Fallback subscription API for older SDKs if available
-      const fallback = (av as any).realtimeSubscribeToReceiveTranscriptionEvent;
-      if (typeof fallback === 'function') {
-        const fbHandler = (evt: any) => {
-          try {
-            const results: any[] = evt?.results ?? evt?.Transcript?.Results ?? [];
-            if (!Array.isArray(results)) return;
-            for (const r of results) {
-              const isPartial = !!(r?.isPartial ?? r?.IsPartial);
-              const alt = r?.alternatives?.[0] ?? r?.Alternatives?.[0];
-              let text: string = alt?.transcript ?? alt?.Transcript ?? '';
-              if (!text && Array.isArray(alt?.Items)) {
-                text = (alt.Items as any[]).map((it: any) => it?.Content ?? it?.content ?? '').join('');
-              }
-              if (!text) continue;
-
-              // Extract speaker information from fallback event format
-              const items = alt?.Items ?? alt?.items ?? [];
-              let speakerAttendeeId: string | undefined;
-              let speakerExternalUserId: string | undefined;
-
-              if (Array.isArray(items) && items.length > 0) {
-                const firstItem = items[0];
-                const attendeeInfo = firstItem?.Attendee ?? firstItem?.attendee;
-                speakerAttendeeId = attendeeInfo?.AttendeeId ?? attendeeInfo?.attendeeId;
-                speakerExternalUserId = attendeeInfo?.ExternalUserId ?? attendeeInfo?.externalUserId;
-              }
-
-              if (speakerAttendeeId || speakerExternalUserId) {
-                fetchParticipantsByIds([speakerAttendeeId, speakerExternalUserId]);
-              }
-
-              // Update UI
-              if (isPartial) {
-                setPartialText(text);
-              } else {
-                setFinalSegments(prev => [...prev, { text, at: Date.now(), speakerAttendeeId, speakerExternalUserId }]);
-                setPartialText('');
-              }
-
-              // Send transcription event to server (with speaker info)
-              if (currentMeetingId && text) {
-                sendTranscriptionEvent(
-                  currentMeetingId,
-                  speakerAttendeeId || speakerExternalUserId || 'unknown',
-                  speakerExternalUserId,
-                  text,
-                  !isPartial
-                ).catch(err => {
-                  console.error('Failed to send transcription event:', err);
-                });
-              }
             }
-          } catch {}
-        };
-        fallback.call(av, fbHandler);
-      }
-    } catch {
-      // ignore if not supported
-    }
+          } catch {
+            // ignore if not supported
+          }
     setJoined(true);
   };
 

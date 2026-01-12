@@ -1,5 +1,6 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
+import { createHash } from 'crypto';
 
 const REGION = process.env.AWS_REGION || 'ap-northeast-1';
 const TRANSCRIPT_QUEUE_URL = process.env.TRANSCRIPT_QUEUE_URL || '';  // ADR-0011: SQS FIFO queue
@@ -47,7 +48,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       externalUserId,
       text,
       isFinal,
-      timestamp
+      timestamp,
+      resultId,
     } = body;
 
     // Validate required fields
@@ -87,11 +89,25 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
     // ADR-0011: Write to SQS
     try {
+      // Generate a deduplication ID to prevent duplicate processing from multiple participants
+      // Prefer resultId if available (for final transcripts), as it's a stable identifier from Chime.
+      // As a fallback (for partials or older clients), use a hash of the text plus a time window.
+      let deduplicationId: string;
+      if (resultId) {
+        deduplicationId = resultId;
+      } else {
+        // Group events within a ~2-second window to catch duplicates of short, identical phrases.
+        const timeWindow = Math.round((timestamp || Date.now()) / 2000);
+        const hash = createHash('sha256').update(`${text}-${timeWindow}`).digest('hex');
+        deduplicationId = `${pathMeetingId}-${hash}`;
+      }
+
       await sqs.send(
         new SendMessageCommand({
           QueueUrl: TRANSCRIPT_QUEUE_URL,
           MessageBody: JSON.stringify(asrEvent),
           MessageGroupId: pathMeetingId,  // Ensures ordering per meeting
+          MessageDeduplicationId: deduplicationId, // Prevents duplicates within 5-min window
         })
       );
       console.log('[TranscriptionEvents] Written to SQS', {
