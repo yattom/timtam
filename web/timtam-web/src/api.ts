@@ -98,7 +98,8 @@ export async function sendTranscriptionEvent(
   attendeeId: string,
   externalUserId: string | undefined,
   text: string,
-  isFinal: boolean
+  isFinal: boolean,
+  resultId?: string
 ): Promise<void> {
   const res = await fetch(u(`/meetings/${encodeURIComponent(meetingId)}/transcription/events`), {
     method: 'POST',
@@ -109,6 +110,7 @@ export async function sendTranscriptionEvent(
       text,
       isFinal,
       timestamp: Date.now(),
+      resultId,
     }),
   });
   if (!res.ok) throw new Error(`send transcription event failed: ${res.status}`);
