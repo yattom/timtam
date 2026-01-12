@@ -77,6 +77,15 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       };
     }
 
+    // Only send isFinal=true events to SQS to avoid duplication
+    if (!isFinal) {
+      return {
+        statusCode: 200,
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ok: true}),
+      };
+    }
+
     // Create AsrEvent format compatible with Orchestrator
     const asrEvent = {
       meetingId: pathMeetingId,
@@ -114,6 +123,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         meetingId: pathMeetingId,
         speakerId: asrEvent.speakerId,
         textLength: text.length,
+        deduplicationId,
         isFinal,
       });
     } catch (err) {
