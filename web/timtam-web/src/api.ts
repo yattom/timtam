@@ -127,29 +127,6 @@ export async function getAiMessages(meetingId: string, since: number = 0): Promi
   return data.messages || [];
 }
 
-export type OrchestratorPrompt = {
-  prompt: string;
-  updatedAt: number;
-};
-
-export async function getOrchestratorPrompt(): Promise<OrchestratorPrompt> {
-  const res = await fetch(u('/orchestrator/prompt'));
-  if (!res.ok) throw new Error(`get orchestrator prompt failed: ${res.status}`);
-  return res.json();
-}
-
-export async function updateOrchestratorPrompt(prompt: string): Promise<void> {
-  const res = await fetch(u('/orchestrator/prompt'), {
-    method: 'PUT',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ prompt }),
-  });
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || `update orchestrator prompt failed: ${res.status}`);
-  }
-}
-
 export type GraspPreset = {
   configId: string;
   name: string;

@@ -25,12 +25,8 @@ const BEDROCK_REGION = process.env.BEDROCK_REGION || 'us-east-1';
 const BEDROCK_MODEL_ID = process.env.BEDROCK_MODEL_ID || 'anthropic.claude-haiku-4.5';
 const AI_MESSAGES_TABLE = process.env.AI_MESSAGES_TABLE || 'timtam-ai-messages';
 const CONFIG_TABLE_NAME = process.env.CONFIG_TABLE_NAME || 'timtam-orchestrator-config';
-const DEFAULT_PROMPT = process.env.DEFAULT_PROMPT ||
-  '会話の内容が具体的に寄りすぎていたり、抽象的になりすぎていたら指摘してください';
 // MEETING_ID は SQS からの指示で動的変更する。初期値があればそれを使う。
 let CURRENT_MEETING_ID = process.env.MEETING_ID || '';
-// PROMPT は SQS からの指示で動的変更する。初期値は環境変数またはデフォルト。
-let CURRENT_PROMPT = DEFAULT_PROMPT;
 const WINDOW_LINES = Number(process.env.WINDOW_LINES || '5');
 const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS || '500');
 const CONTROL_SQS_URL = process.env.CONTROL_SQS_URL || '';
@@ -208,12 +204,13 @@ const notesStore = new NotesStore();
 const graspQueue = new GraspQueue();
 
 // Grasp インスタンス（各LLM呼び出しの設定）
+// Note: これらはデフォルトのGrasp定義で、YAMLベースのGrasp設定で上書きされる
 const judgeGrasp = new Grasp(
   {
     nodeId: 'judge',
     promptTemplate: (input: string) =>
       `以下は会議の直近確定発話です。\n` +
-      CURRENT_PROMPT + `\n` +
+      `会話の内容が具体的に寄りすぎていたり、抽象的になりすぎていたら指摘してください\n` +
       `\n` +
       '介入が必要かを判断し、次のJSON形式だけを厳密に返してください:\n' +
       '{"should_intervene": boolean, "reason": string, "message": string}\n' +
@@ -338,17 +335,6 @@ async function pollControlOnce() {
       const body = m.Body || '';
       try {
         const parsed = JSON.parse(body);
-
-        // Handle prompt update messages
-        if (parsed.type === 'prompt' && typeof parsed.prompt === 'string') {
-          CURRENT_PROMPT = parsed.prompt;
-          console.log(JSON.stringify({
-            type: 'orchestrator.control.prompt.set',
-            promptLength: CURRENT_PROMPT.length,
-            promptPreview: CURRENT_PROMPT.substring(0, 50),
-            ts: Date.now()
-          }));
-        }
 
         // Handle meetingId messages (both new and legacy format)
         if (parsed.type === 'meetingId' || (parsed.meetingId && !parsed.type)) {
@@ -529,36 +515,6 @@ async function runLoop() {
   }
 }
 
-// Initialize prompt from DynamoDB
-async function initializePrompt() {
-  try {
-    const ddbClient = new DynamoDBClient({ region: BEDROCK_REGION });
-    const ddb = DynamoDBDocumentClient.from(ddbClient);
-    const result = await ddb.send(new GetCommand({
-      TableName: CONFIG_TABLE_NAME,
-      Key: { configKey: 'current_prompt' }
-    }));
-    if (result.Item?.prompt) {
-      CURRENT_PROMPT = result.Item.prompt;
-      console.log(JSON.stringify({
-        type: 'orchestrator.config.prompt.loaded',
-        promptLength: CURRENT_PROMPT.length,
-        promptPreview: CURRENT_PROMPT.substring(0, 50),
-        ts: Date.now()
-      }));
-    } else {
-      console.log(JSON.stringify({
-        type: 'orchestrator.config.prompt.default',
-        promptLength: CURRENT_PROMPT.length,
-        promptPreview: CURRENT_PROMPT.substring(0, 50),
-        ts: Date.now()
-      }));
-    }
-  } catch (e) {
-    console.warn('Failed to load prompt from DynamoDB, using default', (e as any)?.message);
-  }
-}
-
 // Initialize Grasp configuration from DynamoDB
 async function initializeGraspConfig() {
   try {
@@ -612,7 +568,6 @@ setInterval(async () => {
 }, 3000); // 3秒ごと
 
 (async () => {
-  await initializePrompt();
   await initializeGraspConfig();
   await runLoop();
 })().catch((e) => {

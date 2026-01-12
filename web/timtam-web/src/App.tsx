@@ -8,7 +8,7 @@ import {
   AudioVideoFacade,
   DeviceChangeObserver,
 } from 'amazon-chime-sdk-js';
-import { addAttendee, createMeeting, getConfig, startTranscription, stopTranscription, getAiMessages, AiMessage, getOrchestratorPrompt, updateOrchestratorPrompt, sendTranscriptionEvent, upsertParticipantProfile, getParticipants, endMeeting } from './api';
+import { addAttendee, createMeeting, getConfig, startTranscription, stopTranscription, getAiMessages, AiMessage, sendTranscriptionEvent, upsertParticipantProfile, getParticipants, endMeeting } from './api';
 import { AiAssistantPanel } from './AiAssistantPanel';
 import { GraspConfigPanel } from './GraspConfigPanel';
 
@@ -52,11 +52,6 @@ export function App() {
   const [lastAiMessageTimestamp, setLastAiMessageTimestamp] = useState<number>(0);
   // AI output area resize
   const [aiOutputHeight, setAiOutputHeight] = useState<number>(300);
-  // Orchestrator prompt configuration
-  const [orchestratorPrompt, setOrchestratorPrompt] = useState<string>('');
-  const [promptEditing, setPromptEditing] = useState<string>('');
-  const [promptSaving, setPromptSaving] = useState(false);
-  const [promptMessage, setPromptMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   // (debug states removed)
 
   const meetingRef = useRef<DefaultMeetingSession | null>(null);
@@ -108,20 +103,6 @@ export function App() {
       }
     })();
   }, []);
-
-  // Load orchestrator prompt on mount
-  useEffect(() => {
-    if (!apiBaseUrl) return;
-    (async () => {
-      try {
-        const result = await getOrchestratorPrompt();
-        setOrchestratorPrompt(result.prompt);
-        setPromptEditing(result.prompt);
-      } catch (e: any) {
-        console.error('Failed to load orchestrator prompt:', e?.message || e);
-      }
-    })();
-  }, [apiBaseUrl]);
 
   // Auto-join if URL contains meetingId
   useEffect(() => {
@@ -640,26 +621,6 @@ export function App() {
     }
   };
 
-  const onSavePrompt = async () => {
-    setPromptSaving(true);
-    setPromptMessage(null);
-    try {
-      await updateOrchestratorPrompt(promptEditing);
-      setOrchestratorPrompt(promptEditing);
-      setPromptMessage({ type: 'success', text: 'プロンプトを保存しました' });
-      setTimeout(() => setPromptMessage(null), 3000);
-    } catch (e: any) {
-      setPromptMessage({ type: 'error', text: e?.message || String(e) });
-    } finally {
-      setPromptSaving(false);
-    }
-  };
-
-  const onResetPrompt = () => {
-    setPromptEditing(orchestratorPrompt);
-    setPromptMessage(null);
-  };
-
   return (
     <div style={{ fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif', padding: 16, maxWidth: 900 }}>
       <h1 style={{ marginTop: 0 }}>timtam web — 会議MVP</h1>
@@ -749,45 +710,6 @@ export function App() {
       />
 
       <section style={{ display: 'grid', gap: 8 }}>
-        <h3>オーケストレーター設定</h3>
-        <div style={{ border: '1px solid #ddd', borderRadius: 6, padding: 12, background: '#fff9f0' }}>
-          <div style={{ marginBottom: 8, color: '#666', fontSize: 14 }}>
-            介入判断プロンプト（会議の直近発話に対してAIが判断する際の指示）:
-          </div>
-          <textarea
-            value={promptEditing}
-            onChange={(e) => setPromptEditing(e.target.value)}
-            rows={4}
-            style={{
-              width: '100%',
-              fontFamily: 'monospace',
-              fontSize: 14,
-              padding: 8,
-              borderRadius: 4,
-              border: '1px solid #ccc',
-              resize: 'vertical'
-            }}
-            disabled={promptSaving}
-          />
-          <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
-            <button onClick={onSavePrompt} disabled={promptSaving || promptEditing === orchestratorPrompt}>
-              {promptSaving ? '保存中...' : '保存'}
-            </button>
-            <button onClick={onResetPrompt} disabled={promptSaving || promptEditing === orchestratorPrompt}>
-              リセット
-            </button>
-            {promptMessage && (
-              <span style={{
-                color: promptMessage.type === 'success' ? '#27ae60' : '#c0392b',
-                fontSize: 14,
-                marginLeft: 4
-              }}>
-                {promptMessage.text}
-              </span>
-            )}
-          </div>
-        </div>
-
         <h3>文字起こし（擬似リアルタイム）</h3>
         <div style={{ border: '1px solid #ddd', borderRadius: 6, padding: 12, minHeight: 120, background: '#fafafa' }}>
           <div style={{ display: 'grid', gap: 6 }}>

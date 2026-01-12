@@ -226,37 +226,6 @@ export class TimtamInfraStack extends Stack {
       resources: ['*'],
     }));
 
-    // === Orchestrator Configuration Lambdas ===
-    const DEFAULT_PROMPT = '会話の内容が具体的に寄りすぎていたり、抽象的になりすぎていたら指摘してください';
-
-    const getPromptFn = new NodejsFunction(this, 'GetPromptFn', {
-      entry: '../../services/orchestrator-config/getPrompt.ts',
-      timeout: Duration.seconds(10),
-      runtime: lambda.Runtime.NODEJS_20_X,
-      environment: {
-        CONFIG_TABLE_NAME: orchestratorConfigTable.tableName,
-        DEFAULT_PROMPT,
-      },
-    });
-    orchestratorConfigTable.grantReadData(getPromptFn);
-
-    const updatePromptFn = new NodejsFunction(this, 'UpdatePromptFn', {
-      entry: '../../services/orchestrator-config/updatePrompt.ts',
-      timeout: Duration.seconds(10),
-      runtime: lambda.Runtime.NODEJS_20_X,
-      environment: {
-        CONFIG_TABLE_NAME: orchestratorConfigTable.tableName,
-        CONTROL_SQS_URL: '', // Will be set after controlQueue is created
-      },
-      bundling: {
-        nodeModules: ['@aws-sdk/client-sqs'],
-        externalModules: ['aws-sdk'],
-        target: 'node20',
-        platform: 'node',
-      },
-    });
-    orchestratorConfigTable.grantWriteData(updatePromptFn);
-
     // === Grasp Config API Lambdas ===
     const getGraspConfigsFn = new NodejsFunction(this, 'GetGraspConfigsFn', {
       entry: '../../services/grasp-config/getConfigs.ts',
@@ -392,10 +361,6 @@ export class TimtamInfraStack extends Stack {
       visibilityTimeout: Duration.seconds(10),
       retentionPeriod: Duration.days(1),
     });
-
-    // Update updatePromptFn with SQS URL and grant permissions
-    updatePromptFn.addEnvironment('CONTROL_SQS_URL', controlQueue.queueUrl);
-    controlQueue.grantSendMessages(updatePromptFn);
 
     // Update updateGraspConfigFn with SQS URL and grant permissions
     updateGraspConfigFn.addEnvironment('CONTROL_SQS_URL', controlQueue.queueUrl);
@@ -760,46 +725,6 @@ export class TimtamInfraStack extends Stack {
     });
     aiMessagesRoute.addDependency(aiMessagesInt);
     aiMessagesFn.addPermission('InvokeByHttpApiAiMessages', {
-      principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
-      sourceArn,
-      action: 'lambda:InvokeFunction',
-    });
-
-    // Get Prompt integration + route (GET /orchestrator/prompt)
-    const getPromptInt = new CfnIntegration(this, 'GetPromptIntegration', {
-      apiId: httpApi.ref,
-      integrationType: 'AWS_PROXY',
-      integrationUri: lambdaIntegrationUri(getPromptFn),
-      payloadFormatVersion: '2.0',
-      integrationMethod: 'POST',
-    });
-    const getPromptRoute = new CfnRoute(this, 'GetPromptRoute', {
-      apiId: httpApi.ref,
-      routeKey: 'GET /orchestrator/prompt',
-      target: `integrations/${getPromptInt.ref}`,
-    });
-    getPromptRoute.addDependency(getPromptInt);
-    getPromptFn.addPermission('InvokeByHttpApiGetPrompt', {
-      principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
-      sourceArn,
-      action: 'lambda:InvokeFunction',
-    });
-
-    // Update Prompt integration + route (PUT /orchestrator/prompt)
-    const updatePromptInt = new CfnIntegration(this, 'UpdatePromptIntegration', {
-      apiId: httpApi.ref,
-      integrationType: 'AWS_PROXY',
-      integrationUri: lambdaIntegrationUri(updatePromptFn),
-      payloadFormatVersion: '2.0',
-      integrationMethod: 'POST',
-    });
-    const updatePromptRoute = new CfnRoute(this, 'UpdatePromptRoute', {
-      apiId: httpApi.ref,
-      routeKey: 'PUT /orchestrator/prompt',
-      target: `integrations/${updatePromptInt.ref}`,
-    });
-    updatePromptRoute.addDependency(updatePromptInt);
-    updatePromptFn.addPermission('InvokeByHttpApiUpdatePrompt', {
       principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
       sourceArn,
       action: 'lambda:InvokeFunction',
