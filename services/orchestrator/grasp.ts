@@ -17,8 +17,7 @@ export type JudgeResult = {
 
 export type GraspConfig = {
   nodeId: string;
-  promptTemplate: string | ((input: string, notebook?: Notebook) => string);
-  inputLength?: number; // undefined = 全部、数値 = 最新N行
+  promptTemplate: string;
   cooldownMs: number;
   outputHandler: 'chat' | 'note' | 'both';
   noteTag?: string;  // 'note' または 'both' の場合、このタグでメモを保存
@@ -345,19 +344,11 @@ export class Grasp {
     windowBuffer: WindowBuffer,
     notebook: Notebook,
   ) : string {
-    if (typeof this.config.promptTemplate === 'string') {
-      return replaceTemplateVariables(
-        this.config.promptTemplate,
-        windowBuffer,
-        notebook
-      );
-    } else {
-      // 関数の場合
-      const inputText = this.config.inputLength !== undefined
-        ? windowBuffer.content(this.config.inputLength)
-        : windowBuffer.content();
-      return this.config.promptTemplate(inputText, notebook);
-    }
+    return replaceTemplateVariables(
+      this.config.promptTemplate,
+      windowBuffer,
+      notebook
+    );
   }
 
   async invokeLLM(prompt: string, meetingId: MeetingId, notifier: Notifier) {
