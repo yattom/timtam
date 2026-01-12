@@ -895,7 +895,6 @@ export class TimtamInfraStack extends Stack {
         CONTROL_SQS_URL: controlQueue.queueUrl,
         AI_MESSAGES_TABLE: aiMessagesTable.tableName,
         CONFIG_TABLE_NAME: orchestratorConfigTable.tableName,
-        DEFAULT_PROMPT,
       },
     });
     container.addPortMappings({ containerPort: 3000 });

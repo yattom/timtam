@@ -18,6 +18,7 @@ import {
   Metrics as IMetrics
 } from './grasp';
 import { parseGraspGroupDefinition, GraspGroupDefinition } from './graspConfigParser';
+import { ensureDefaultGraspConfig } from './selfSetup';
 
 // 環境変数
 const TRANSCRIPT_QUEUE_URL = process.env.TRANSCRIPT_QUEUE_URL || '';  // ADR-0011: SQS FIFO queue
@@ -203,97 +204,8 @@ const sqs = new SQSClient({});
 const notesStore = new NotesStore();
 const graspQueue = new GraspQueue();
 
-// Grasp インスタンス（各LLM呼び出しの設定）
-// Note: これらはデフォルトのGrasp定義で、YAMLベースのGrasp設定で上書きされる
-const judgeGrasp = new Grasp(
-  {
-    nodeId: 'judge',
-    promptTemplate: (input: string) =>
-      `以下は会議の直近確定発話です。\n` +
-      `会話の内容が具体的に寄りすぎていたり、抽象的になりすぎていたら指摘してください\n` +
-      `\n` +
-      '介入が必要かを判断し、次のJSON形式だけを厳密に返してください:\n' +
-      '{"should_intervene": boolean, "reason": string, "message": string}\n' +
-      '---\n' + input,
-    inputLength: WINDOW_LINES,
-    cooldownMs: 20000,
-    outputHandler: 'chat',
-  },
-  triggerLlm
-);
-
-const toneObserverGrasp = new Grasp(
-  {
-    nodeId: 'tone-observer',
-    promptTemplate: (input: string) =>
-      `以下は会議の確定発話です。\n` +
-      `ここまでの会議の流れを整理してください。\n` +
-      `\n` +
-      'コメントが必要かを判断し、次のJSON形式だけを厳密に返してください:\n' +
-      '{"should_intervene": boolean, "reason": string, "message": string}\n' +
-      '---\n' + input,
-    cooldownMs: 60000, // 1分に1回
-    outputHandler: 'chat',
-  },
-  triggerLlm
-);
-
-// テスト用: 参加者の雰囲気を観察してノートに記録
-const moodGrasp = new Grasp(
-  {
-    nodeId: 'mood-observer',
-    promptTemplate: (input: string) =>
-      `以下は会議の直近確定発話です。\n` +
-      `参加者の雰囲気や感情を観察してください。\n` +
-      `例えば: 活発、落ち着いている、緊張している、議論が白熱している、など。\n` +
-      `\n` +
-      '観察結果を次のJSON形式だけを厳密に返してください:\n' +
-      '{"should_intervene": true, "reason": "観察理由", "message": "雰囲気の簡潔な説明"}\n' +
-      '---\n' + input,
-    inputLength: WINDOW_LINES,
-    cooldownMs: 30000, // 30秒に1回
-    outputHandler: 'note',
-    noteTag: 'participant-mood',
-  },
-  triggerLlm
-);
-
-// テスト用: 雰囲気メモを読み込んで、それに基づいて介入
-const moodBasedInterventionGrasp = new Grasp(
-  {
-    nodeId: 'mood-based-intervention',
-    promptTemplate: (input: string, notebook?: Notebook) => {
-      let moodContext = '';
-      if (notebook) {
-        const moodNotes = notebook.getNotesByTag('participant-mood');
-        if (moodNotes.length > 0) {
-          // 最新3件のメモを取得
-          const recentMoods = moodNotes.slice(-3).map(note =>
-            `[${new Date(note.timestamp).toLocaleTimeString()}] ${note.content}`
-          ).join('\n');
-          moodContext = `\n\n【これまでの雰囲気観察】\n${recentMoods}\n`;
-        }
-      }
-
-      return (
-        `以下は会議の直近確定発話です。\n` +
-        `これまでの雰囲気観察を踏まえて、必要に応じて会議の進行をサポートしてください。\n` +
-        moodContext +
-        `\n` +
-        '介入が必要かを判断し、次のJSON形式だけを厳密に返してください:\n' +
-        '{"should_intervene": boolean, "reason": string, "message": string}\n' +
-        '---\n' + input
-      );
-    },
-    inputLength: WINDOW_LINES,
-    cooldownMs: 45000, // 45秒に1回
-    outputHandler: 'chat',
-  },
-  triggerLlm
-);
-
-// すべての Grasp のリスト（新しい Grasp はここに追加するだけ）
-const grasps = [judgeGrasp, toneObserverGrasp, moodGrasp, moodBasedInterventionGrasp];
+// すべての Grasp のリスト（YAML設定から動的に構築される）
+const grasps: Grasp[] = [];
 
 // Grasp グループを動的に再構築
 function rebuildGrasps(graspGroupDef: GraspGroupDefinition): void {
@@ -518,30 +430,21 @@ async function runLoop() {
 // Initialize Grasp configuration from DynamoDB
 async function initializeGraspConfig() {
   try {
-    const ddbClient = new DynamoDBClient({ region: BEDROCK_REGION });
-    const ddb = DynamoDBDocumentClient.from(ddbClient);
-    const result = await ddb.send(new GetCommand({
-      TableName: CONFIG_TABLE_NAME,
-      Key: { configKey: 'current_grasp_config' }
-    }));
+    // Ensure default config exists, or get existing config
+    const yaml = await ensureDefaultGraspConfig(BEDROCK_REGION, CONFIG_TABLE_NAME);
 
-    if (result.Item?.yaml) {
-      const graspGroupDef = parseGraspGroupDefinition(result.Item.yaml);
-      rebuildGrasps(graspGroupDef);
-      console.log(JSON.stringify({
-        type: 'orchestrator.config.grasp.loaded',
-        graspCount: graspGroupDef.grasps.length,
-        ts: Date.now()
-      }));
-    } else {
-      console.log(JSON.stringify({
-        type: 'orchestrator.config.grasp.default',
-        graspCount: grasps.length,
-        ts: Date.now()
-      }));
-    }
+    // Parse and rebuild grasps
+    const graspGroupDef = parseGraspGroupDefinition(yaml);
+    rebuildGrasps(graspGroupDef);
+
+    console.log(JSON.stringify({
+      type: 'orchestrator.config.grasp.initialized',
+      graspCount: graspGroupDef.grasps.length,
+      ts: Date.now()
+    }));
   } catch (e) {
-    console.warn('Failed to load grasp config from DynamoDB, using default', (e as any)?.message);
+    console.error('Failed to initialize grasp config', (e as any)?.message);
+    throw e; // Fail fast if we can't initialize
   }
 }
 

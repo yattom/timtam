@@ -7,6 +7,7 @@ COPY tsconfig.json ./tsconfig.json
 COPY worker.ts ./worker.ts
 COPY grasp.ts ./grasp.ts
 COPY graspConfigParser.ts ./graspConfigParser.ts
+COPY selfSetup.ts ./selfSetup.ts
 
 # Install deps and build (use npm inside container for simplicity)
 RUN npm install --omit=dev=false \

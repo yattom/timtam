@@ -19,7 +19,7 @@ function validateTemplateVariables(promptTemplate: string): void {
   const emptyNotebook = new Notebook('validation');
 
   // Validate {{INPUT:...}} format
-  const inputMatches = promptTemplate.matchAll(/\{\{INPUT(?::([^}]+))?\}\}/g);
+  const inputMatches = Array.from(promptTemplate.matchAll(/\{\{INPUT(?::([^}]+))?\}\}/g));
   for (const match of inputMatches) {
     const modifier = match[1] || '';
     try {
@@ -30,7 +30,7 @@ function validateTemplateVariables(promptTemplate: string): void {
   }
 
   // Validate {{NOTES:...}} format
-  const notesMatches = promptTemplate.matchAll(/\{\{NOTES(?::([^}]*))?\}\}/g);
+  const notesMatches = Array.from(promptTemplate.matchAll(/\{\{NOTES(?::([^}]*))?\}\}/g));
   for (const match of notesMatches) {
     const modifier = match[1];
     if (modifier === undefined || modifier.trim() === '') {
@@ -112,7 +112,7 @@ export function parseGraspGroupDefinition(yaml: string): GraspGroupDefinition {
   }
 
   // Verify all note writers are referenced by at least one other Grasp
-  for (const noteTag of availableNoteTags) {
+  for (const noteTag of Array.from(availableNoteTags)) {
     if (!referencedNoteTags.has(noteTag)) {
       throw new Error(`noteTag "${noteTag}" is written but not referenced by any Grasp in this group`);
     }
