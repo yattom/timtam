@@ -497,13 +497,7 @@ export function App() {
         window.history.pushState({}, '', `/${meetingObj.MeetingId}`);
       }
 
-      // Auto-start transcription
-      try {
-        await startTranscription(meetingObj.MeetingId);
-        setTranscribing(true);
-      } catch (e: any) {
-        console.error('Failed to auto-start transcription:', e?.message || e);
-      }
+      // Transcription is started by the meeting creator, joiners just observe.
     } catch (e: any) {
       setError(e?.message || String(e));
     }
