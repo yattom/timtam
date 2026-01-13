@@ -131,6 +131,14 @@ export class TimtamInfraStack extends Stack {
     });
 
     const getParticipantsFn = new NodejsFunction(this, 'GetParticipantsFn', {
+      entry: '../../services/meeting-api/meetingMetadata.ts',
+      handler: 'getParticipants',
+      timeout: Duration.seconds(15),
+      runtime: lambda.Runtime.NODEJS_20_X,
+      environment: {
+        MEETINGS_METADATA_TABLE: meetingsMetadataTable.tableName,
+      },
+    });
 
     // New Lambda for receiving TranscriptEvent from browser
     const transcriptionEventsFn = new NodejsFunction(this, 'TranscriptionEventsFn', {
@@ -633,7 +641,6 @@ export class TimtamInfraStack extends Stack {
     });
     aiMessagesTable.grantReadData(aiMessagesFn);
     meetingsMetadataTable.grantReadWriteData(upsertParticipantFn);
-    meetingsMetadataTable.grantReadWriteData(endMeetingFn);
     meetingsMetadataTable.grantReadData(getParticipantsFn);
 
     // Config integration + route (GET /config)
