@@ -52,6 +52,14 @@ async function setGraspConfig(page: Page, yaml: string) {
   const graspSection = page.locator('[data-testid="grasp-config-section"]');
   await expect(graspSection).toBeVisible();
 
+  // パネルが折りたたまれている場合は開く
+  const isOpen = await graspSection.getAttribute('open');
+  if (isOpen === null) {
+    // details要素のsummaryをクリックして開く
+    await graspSection.locator('summary').click();
+    await page.waitForTimeout(300); // アニメーションを待つ
+  }
+
   // YAMLテキストエリアを見つけて入力
   const textarea = page.locator('[data-testid="grasp-yaml-textarea"]');
   await textarea.fill(yaml);
