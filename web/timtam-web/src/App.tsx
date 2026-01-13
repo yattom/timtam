@@ -505,6 +505,9 @@ export function App() {
 
   const onLeave = async () => {
     try {
+      if (meetingIdRef.current) {
+        await stopTranscription(meetingIdRef.current);
+      }
       // Unsubscribe transcript events
       const av: any = audioVideoRef.current as any;
       const tc: any = av?.transcriptionController;
@@ -513,7 +516,9 @@ export function App() {
       }
       audioVideoRef.current?.stop();
       meetingRef.current?.destroy();
-    } catch {}
+    } catch (e: any) {
+      console.error('Error during leave:', e);
+    }
     setJoined(false);
     setTranscribing(false);
     setPartialText('');
@@ -623,7 +628,7 @@ export function App() {
             </>
           ) : (
             <>
-              <button onClick={onLeave} data-testid="leave-button">退室</button>
+              <button onClick={onLeave} data-testid="leave-button">会議を終了</button>
               <button onClick={onToggleMute} data-testid="toggle-mute-button">{muted ? 'ミュート解除' : 'ミュート'}</button>
             </>
           )}
