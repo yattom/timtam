@@ -35,7 +35,7 @@ export function AiAssistantPanel({
   };
 
   return (
-    <section style={{ display: 'grid', gap: 8 }} data-testid="ai-assistant-section">
+    <section style={{ display: 'grid', gap: 8 }}>
       <h3>AIアシスタント</h3>
       <div style={{ position: 'relative' }}>
         <div
@@ -49,7 +49,6 @@ export function AiAssistantPanel({
             overflowY: 'auto',
             overflowX: 'hidden'
           }}
-          data-testid="ai-assistant-output"
         >
           <div style={{ display: 'grid', gap: 8 }}>
             {aiMessages.map((msg, i) => {

@@ -39,11 +39,6 @@ coverage/
 lcov.info
 .nyc_output/
 
-# Playwright
-test-results/
-playwright-report/
-playwright/.cache/
-
 # Python
 __pycache__/
 *.py[cod]
