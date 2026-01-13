@@ -422,13 +422,12 @@ export function App() {
               // Update UI
               if (isPartial) {
                 setPartialText(text);
-                startInactivityTimer(); // Reset timer on partial segment
               } else {
                 // Finalized: append and clear partial if it matches
                 setFinalSegments(prev => [...prev, { text, at: Date.now(), speakerAttendeeId, speakerExternalUserId }]);
                 setPartialText('');
-                startInactivityTimer(); // Reset timer on final segment
               }
+              startInactivityTimer(); // Reset timer on any activities
 
               const resultId = r?.ResultId ?? r?.resultId;
 
