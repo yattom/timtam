@@ -61,7 +61,25 @@ export function App() {
   const participantNamesRef = useRef<Record<string, string>>({});
   const pendingNameLookupsRef = useRef<Set<string>>(new Set());
   const meetingIdRef = useRef<string>('');
+  const inactivityTimerIdRef = useRef<NodeJS.Timeout | null>(null);
   const deviceController = useMemo(() => new DefaultDeviceController(new ConsoleLogger('dc', LogLevel.WARN)), []);
+
+  const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
+  const startInactivityTimer = () => {
+    clearInactivityTimer();
+    inactivityTimerIdRef.current = setTimeout(() => {
+      console.log('Inactivity timeout reached. Ending meeting session.');
+      onEndMeetingSession(); // Programmatically end the meeting session
+    }, INACTIVITY_TIMEOUT_MS);
+  };
+
+  const clearInactivityTimer = () => {
+    if (inactivityTimerIdRef.current) {
+      clearTimeout(inactivityTimerIdRef.current);
+      inactivityTimerIdRef.current = null;
+    }
+  };
 
   useEffect(() => {
     const storedName = (typeof localStorage !== 'undefined') ? localStorage.getItem(NAME_STORAGE_KEY) : null;
@@ -296,6 +314,7 @@ export function App() {
     return () => {
       if (permStatus) permStatus.onchange = null as any;
       deviceController.removeDeviceChangeObserver(observer);
+      clearInactivityTimer(); // Clear timer on component unmount
     };
   }, [deviceController]);
 
@@ -407,6 +426,7 @@ export function App() {
                 // Finalized: append and clear partial if it matches
                 setFinalSegments(prev => [...prev, { text, at: Date.now(), speakerAttendeeId, speakerExternalUserId }]);
                 setPartialText('');
+                startInactivityTimer(); // Reset timer on final segment
               }
 
               const resultId = r?.ResultId ?? r?.resultId;
@@ -436,6 +456,7 @@ export function App() {
             // ignore if not supported
           }
     setJoined(true);
+    startInactivityTimer();
   };
 
   const onCreateAndJoin = async () => {
@@ -503,7 +524,7 @@ export function App() {
     }
   };
 
-  const onLeave = async () => {
+  const onEndMeetingSession = async () => {
     try {
       if (meetingIdRef.current) {
         await stopTranscription(meetingIdRef.current);
@@ -528,6 +549,7 @@ export function App() {
     setParticipantNames({});
     participantNamesRef.current = {};
     setMeetingEndedAt(null);
+    clearInactivityTimer(); // Clear timer on explicit leave
   };
 
   const onToggleMute = async () => {
@@ -628,7 +650,7 @@ export function App() {
             </>
           ) : (
             <>
-              <button onClick={onLeave} data-testid="leave-button">会議を終了</button>
+              <button onClick={onEndMeetingSession} data-testid="leave-button">会議を終了</button>
               <button onClick={onToggleMute} data-testid="toggle-mute-button">{muted ? 'ミュート解除' : 'ミュート'}</button>
             </>
           )}
