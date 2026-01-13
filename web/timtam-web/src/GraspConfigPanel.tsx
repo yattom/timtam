@@ -98,12 +98,12 @@ export function GraspConfigPanel() {
   const isModified = yamlEditing !== currentYaml;
 
   return (
-    <details open={isExpanded} onToggle={(e) => setIsExpanded((e.target as HTMLDetailsElement).open)} style={{ marginBottom: 12 }}>
+    <details open={isExpanded} onToggle={(e) => setIsExpanded((e.target as HTMLDetailsElement).open)} style={{ marginBottom: 12 }} data-testid="grasp-config-section">
       <summary style={{ cursor: 'pointer', fontSize: 18, fontWeight: 600, padding: '8px 0' }}>
         Grasp 設定 (YAML)
       </summary>
 
-      <div style={{ padding: 12, border: '1px solid #ddd', borderRadius: 6, background: '#fff9f0' }}>
+      <div style={{ padding: 12, border: '1px solid #ddd', borderRadius: 6, background: '#fff9f0' }} data-testid="grasp-config-panel">
         {isLoading ? (
           <div style={{ padding: 12, textAlign: 'center', color: '#666' }}>
             読み込み中...
@@ -159,6 +159,7 @@ export function GraspConfigPanel() {
                 }}
                 disabled={yamlSaving}
                 placeholder="YAML 設定を入力してください"
+                data-testid="grasp-yaml-textarea"
               />
             </div>
 
@@ -192,6 +193,7 @@ export function GraspConfigPanel() {
                   cursor: yamlSaving || !isModified ? 'not-allowed' : 'pointer',
                   fontWeight: 500
                 }}
+                data-testid="grasp-save-button"
               >
                 {yamlSaving ? '保存中...' : '適用'}
               </button>
