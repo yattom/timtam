@@ -61,7 +61,7 @@ export function App() {
   const participantNamesRef = useRef<Record<string, string>>({});
   const pendingNameLookupsRef = useRef<Set<string>>(new Set());
   const meetingIdRef = useRef<string>('');
-  const deviceController = useMemo(() => new DefaultDeviceController(new ConsoleLogger('dc', LogLevel.WARN)), []);
+  const deviceController = useMemo(() => new DefaultDeviceController(new ConsoleLogger('dc', LogLevel.INFO)), []);
 
   useEffect(() => {
     const storedName = (typeof localStorage !== 'undefined') ? localStorage.getItem(NAME_STORAGE_KEY) : null;
@@ -337,7 +337,7 @@ export function App() {
   };
 
   const configureAndStart = async (meeting: any, attendee: any) => {
-    const logger = new ConsoleLogger('Chime', LogLevel.WARN);
+    const logger = new ConsoleLogger('Chime', LogLevel.INFO);
     const configuration = new MeetingSessionConfiguration(meeting, attendee);
     const meetingSession = new DefaultMeetingSession(configuration, logger, deviceController);
     meetingRef.current = meetingSession as DefaultMeetingSession;
