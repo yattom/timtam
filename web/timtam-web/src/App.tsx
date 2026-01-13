@@ -650,7 +650,7 @@ export function App() {
             </>
           ) : (
             <>
-              <button onClick={onEndMeetingSession} data-testid="leave-button">会議を終了</button>
+              <button onClick={onEndMeetingSession} data-testid="end-meeting-button">会議を終了</button>
               <button onClick={onToggleMute} data-testid="toggle-mute-button">{muted ? 'ミュート解除' : 'ミュート'}</button>
             </>
           )}
