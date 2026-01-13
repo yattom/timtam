@@ -8,7 +8,7 @@ import {
   AudioVideoFacade,
   DeviceChangeObserver,
 } from 'amazon-chime-sdk-js';
-import { addAttendee, createMeeting, getConfig, startTranscription, stopTranscription, getAiMessages, AiMessage, sendTranscriptionEvent, upsertParticipantProfile, getParticipants, endMeeting } from './api';
+import { addAttendee, createMeeting, getConfig, startTranscription, stopTranscription, getAiMessages, AiMessage, sendTranscriptionEvent, upsertParticipantProfile, getParticipants } from './api';
 import { AiAssistantPanel } from './AiAssistantPanel';
 import { GraspConfigPanel } from './GraspConfigPanel';
 
@@ -541,17 +541,6 @@ export function App() {
     }
   };
 
-  const onEndMeeting = async () => {
-    if (!meetingId) return;
-    try {
-      const res = await endMeeting(meetingId);
-      setMeetingEndedAt(res?.endedAt ?? Date.now());
-      setTranscribing(false);
-    } catch (e: any) {
-      setError(e?.message || String(e));
-    }
-  };
-
   const onChangeMic = async (id: string) => {
     setSelectedMic(id);
     // Use audioVideo API; cast to any to accommodate SDK typing differences across versions
@@ -636,7 +625,6 @@ export function App() {
             <>
               <button onClick={onLeave} data-testid="leave-button">退室</button>
               <button onClick={onToggleMute} data-testid="toggle-mute-button">{muted ? 'ミュート解除' : 'ミュート'}</button>
-              <button onClick={onEndMeeting} disabled={!!meetingEndedAt} data-testid="end-meeting-button">会議終了を記録</button>
             </>
           )}
         </div>

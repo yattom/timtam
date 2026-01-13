@@ -87,12 +87,6 @@ export async function getParticipants(
   return res.json();
 }
 
-export async function endMeeting(meetingId: string): Promise<{ endedAt?: number }> {
-  const res = await fetch(u(`/meetings/${encodeURIComponent(meetingId)}/end`), { method: 'POST' });
-  if (!res.ok) throw new Error(`end meeting failed: ${res.status}`);
-  return res.json();
-}
-
 export async function sendTranscriptionEvent(
   meetingId: string,
   attendeeId: string,
