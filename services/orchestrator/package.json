@@ -22,7 +22,7 @@
     "start:worker": "node ./dist/worker.js",
     "build": "tsc -p .",
     "typecheck": "tsc --noEmit --watch",
-    "test": "vitest",
+    "test": "vitest --run",
     "test:watch": "vitest --watch",
     "test:ui": "vitest --ui"
   }

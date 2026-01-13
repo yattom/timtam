@@ -27,5 +27,9 @@
     "e2e:test": "cd e2e && npm test",
     "e2e:test:headed": "cd e2e && npm run test:headed",
     "e2e:test:ui": "cd e2e && npm run test:ui"
+    "deploy:all": "pnpm run cdk:deploy && pnpm run web:build && pnpm run web:deploy",
+    "test": "pnpm --filter orchestrator test",
+    "test:watch": "pnpm --filter orchestrator test:watch",
+    "test:ui": "pnpm --filter orchestrator test:ui"
   }
 }
