@@ -136,30 +136,11 @@ async function waitForTranscription(page: Page, timeoutMs: number = 60000) {
   const transcriptionSection = page.locator('[data-testid="transcription-section"]');
   await expect(transcriptionSection).toBeVisible();
 
-  // 文字起こしエリアまでスクロール
-  const transcriptionContainer = page.locator('[data-testid="transcription-output"]');
-  await transcriptionContainer.scrollIntoViewIfNeeded();
-
-  // スクロール後、少し待ってからスクリーンショットを撮る
-  await page.waitForTimeout(1000);
-  await page.screenshot({ path: `screenshot-transcription-${Date.now()}.png`, fullPage: true });
-
-  // 現在の文字起こしエリアの内容をログ出力
-  const currentText = await transcriptionContainer.textContent();
-  console.log(`[Transcription Check] Current text length: ${currentText?.length || 0}`);
-  console.log(`[Transcription Check] Current text: ${currentText?.substring(0, 200)}...`);
-
   // 文字起こしのテキストが表示されるまで待つ（長さは問わない）
   await page.waitForFunction(
     () => {
       const container = document.querySelector('[data-testid="transcription-output"]');
       const text = container?.textContent || '';
-      // デバッグ用に定期的にログ出力
-      if (typeof window !== 'undefined' && !(window as any).__transcriptionCheckLogged) {
-        console.log(`[Transcription Wait] text.length=${text.length}`);
-        (window as any).__transcriptionCheckLogged = true;
-        setTimeout(() => { (window as any).__transcriptionCheckLogged = false; }, 5000);
-      }
       // 初期メッセージではなく、実際の文字起こしが含まれているか確認（長さは不問）
       return text.length > 0 && !text.includes('ここに文字起こしが表示される');
     },
@@ -239,42 +220,6 @@ test.describe('E2E: 会議のゴールデンパス', () => {
     const page1 = await context1.newPage();
     const page2 = await context2.newPage();
 
-    // ネットワークトラフィックとコンソールログをキャプチャ
-    const networkLogs: string[] = [];
-    const consoleLogs: string[] = [];
-
-    // Page1のネットワークとコンソールをログ
-    page1.on('request', request => {
-      networkLogs.push(`[Page1 Request] ${request.method()} ${request.url()}`);
-    });
-    page1.on('response', response => {
-      networkLogs.push(`[Page1 Response] ${response.status()} ${response.url()}`);
-    });
-    page1.on('console', msg => {
-      consoleLogs.push(`[Page1 Console ${msg.type()}] ${msg.text()}`);
-    });
-    page1.on('websocket', ws => {
-      console.log(`[Page1 WebSocket] ${ws.url()}`);
-      ws.on('framesent', frame => console.log(`[Page1 WS Send] ${frame.payload}`));
-      ws.on('framereceived', frame => console.log(`[Page1 WS Recv] ${frame.payload}`));
-    });
-
-    // Page2のネットワークとコンソールをログ
-    page2.on('request', request => {
-      networkLogs.push(`[Page2 Request] ${request.method()} ${request.url()}`);
-    });
-    page2.on('response', response => {
-      networkLogs.push(`[Page2 Response] ${response.status()} ${response.url()}`);
-    });
-    page2.on('console', msg => {
-      consoleLogs.push(`[Page2 Console ${msg.type()}] ${msg.text()}`);
-    });
-    page2.on('websocket', ws => {
-      console.log(`[Page2 WebSocket] ${ws.url()}`);
-      ws.on('framesent', frame => console.log(`[Page2 WS Send] ${frame.payload}`));
-      ws.on('framereceived', frame => console.log(`[Page2 WS Recv] ${frame.payload}`));
-    });
-
     try {
       // ===== ユーザー1: 会議を作成 =====
       console.log('Step 1: ページを開く (ユーザー1)');
@@ -331,33 +276,7 @@ test.describe('E2E: 会議のゴールデンパス', () => {
       await expect(page2.locator('text=この会議は終了済みとして記録されています')).toBeVisible({ timeout: 10000 });
 
       console.log('✅ E2Eテスト完了！');
-    } catch (error) {
-      console.error('テストエラー:', error);
-      throw error;
     } finally {
-      // ログをファイルに保存
-      const fs = await import('fs');
-      const timestamp = Date.now();
-
-      console.log(`\n=== Network Logs (${networkLogs.length} entries) ===`);
-      networkLogs.slice(-20).forEach(log => console.log(log)); // 最後の20件を表示
-
-      console.log(`\n=== Console Logs (${consoleLogs.length} entries) ===`);
-      consoleLogs.slice(-20).forEach(log => console.log(log)); // 最後の20件を表示
-
-      await fs.promises.writeFile(
-        `network-logs-${timestamp}.txt`,
-        networkLogs.join('\n'),
-        'utf-8'
-      );
-      await fs.promises.writeFile(
-        `console-logs-${timestamp}.txt`,
-        consoleLogs.join('\n'),
-        'utf-8'
-      );
-
-      console.log(`\nログファイルを保存: network-logs-${timestamp}.txt, console-logs-${timestamp}.txt`);
-
       // クリーンアップ
       await page1.close();
       await page2.close();
