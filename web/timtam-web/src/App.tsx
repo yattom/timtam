@@ -8,7 +8,7 @@ import {
   AudioVideoFacade,
   DeviceChangeObserver,
 } from 'amazon-chime-sdk-js';
-import { addAttendee, createMeeting, getConfig, startTranscription, stopTranscription, getAiMessages, AiMessage, sendTranscriptionEvent, upsertParticipantProfile, getParticipants, endMeeting } from './api';
+import { addAttendee, createMeeting, getConfig, startTranscription, stopTranscription, getAiMessages, AiMessage, sendTranscriptionEvent, upsertParticipantProfile, getParticipants } from './api';
 import { AiAssistantPanel } from './AiAssistantPanel';
 import { GraspConfigPanel } from './GraspConfigPanel';
 
@@ -61,7 +61,25 @@ export function App() {
   const participantNamesRef = useRef<Record<string, string>>({});
   const pendingNameLookupsRef = useRef<Set<string>>(new Set());
   const meetingIdRef = useRef<string>('');
+  const inactivityTimerIdRef = useRef<NodeJS.Timeout | null>(null);
   const deviceController = useMemo(() => new DefaultDeviceController(new ConsoleLogger('dc', LogLevel.WARN)), []);
+
+  const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
+  const startInactivityTimer = () => {
+    clearInactivityTimer();
+    inactivityTimerIdRef.current = setTimeout(() => {
+      console.log('Inactivity timeout reached. Ending meeting session.');
+      onEndMeetingSession(); // Programmatically end the meeting session
+    }, INACTIVITY_TIMEOUT_MS);
+  };
+
+  const clearInactivityTimer = () => {
+    if (inactivityTimerIdRef.current) {
+      clearTimeout(inactivityTimerIdRef.current);
+      inactivityTimerIdRef.current = null;
+    }
+  };
 
   useEffect(() => {
     const storedName = (typeof localStorage !== 'undefined') ? localStorage.getItem(NAME_STORAGE_KEY) : null;
@@ -296,6 +314,7 @@ export function App() {
     return () => {
       if (permStatus) permStatus.onchange = null as any;
       deviceController.removeDeviceChangeObserver(observer);
+      clearInactivityTimer(); // Clear timer on component unmount
     };
   }, [deviceController]);
 
@@ -408,6 +427,7 @@ export function App() {
                 setFinalSegments(prev => [...prev, { text, at: Date.now(), speakerAttendeeId, speakerExternalUserId }]);
                 setPartialText('');
               }
+              startInactivityTimer(); // Reset timer on any activities
 
               const resultId = r?.ResultId ?? r?.resultId;
 
@@ -436,6 +456,7 @@ export function App() {
             // ignore if not supported
           }
     setJoined(true);
+    startInactivityTimer();
   };
 
   const onCreateAndJoin = async () => {
@@ -497,20 +518,17 @@ export function App() {
         window.history.pushState({}, '', `/${meetingObj.MeetingId}`);
       }
 
-      // Auto-start transcription
-      try {
-        await startTranscription(meetingObj.MeetingId);
-        setTranscribing(true);
-      } catch (e: any) {
-        console.error('Failed to auto-start transcription:', e?.message || e);
-      }
+      // Transcription is started by the meeting creator, joiners just observe.
     } catch (e: any) {
       setError(e?.message || String(e));
     }
   };
 
-  const onLeave = async () => {
+  const onEndMeetingSession = async () => {
     try {
+      if (meetingIdRef.current) {
+        await stopTranscription(meetingIdRef.current);
+      }
       // Unsubscribe transcript events
       const av: any = audioVideoRef.current as any;
       const tc: any = av?.transcriptionController;
@@ -519,7 +537,9 @@ export function App() {
       }
       audioVideoRef.current?.stop();
       meetingRef.current?.destroy();
-    } catch {}
+    } catch (e: any) {
+      console.error('Error during leave:', e);
+    }
     setJoined(false);
     setTranscribing(false);
     setPartialText('');
@@ -529,6 +549,7 @@ export function App() {
     setParticipantNames({});
     participantNamesRef.current = {};
     setMeetingEndedAt(null);
+    clearInactivityTimer(); // Clear timer on explicit leave
   };
 
   const onToggleMute = async () => {
@@ -542,17 +563,6 @@ export function App() {
         await av.realtimeMuteLocalAudio();
         setMuted(true);
       }
-    } catch (e: any) {
-      setError(e?.message || String(e));
-    }
-  };
-
-  const onEndMeeting = async () => {
-    if (!meetingId) return;
-    try {
-      const res = await endMeeting(meetingId);
-      setMeetingEndedAt(res?.endedAt ?? Date.now());
-      setTranscribing(false);
     } catch (e: any) {
       setError(e?.message || String(e));
     }
@@ -640,9 +650,8 @@ export function App() {
             </>
           ) : (
             <>
-              <button onClick={onLeave} data-testid="leave-button">退室</button>
+              <button onClick={onEndMeetingSession} data-testid="end-meeting-button">会議を終了</button>
               <button onClick={onToggleMute} data-testid="toggle-mute-button">{muted ? 'ミュート解除' : 'ミュート'}</button>
-              <button onClick={onEndMeeting} disabled={!!meetingEndedAt} data-testid="end-meeting-button">会議終了を記録</button>
             </>
           )}
         </div>

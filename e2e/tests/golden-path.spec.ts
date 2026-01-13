@@ -101,8 +101,8 @@ async function createAndJoinMeeting(page: Page): Promise<string> {
     throw new Error('会議IDが取得できませんでした');
   }
 
-  // 退室ボタンが表示されることを確認（参加完了の証拠）
-  await expect(page.locator('[data-testid="leave-button"]')).toBeVisible({ timeout: 10000 });
+  // 会議終了ボタンが表示されることを確認（参加完了の証拠）
+  await expect(page.locator('[data-testid="end-meeting-button"]')).toBeVisible({ timeout: 10000 });
 
   return meetingId;
 }
@@ -124,8 +124,8 @@ async function joinExistingMeeting(page: Page, meetingId: string) {
   // 入室ボタンをクリック
   await page.click('[data-testid="join-existing-button"]');
 
-  // 退室ボタンが表示されることを確認（参加完了の証拠）
-  await expect(page.locator('[data-testid="leave-button"]')).toBeVisible({ timeout: 10000 });
+  // 会議終了ボタンが表示されることを確認（参加完了の証拠）
+  await expect(page.locator('[data-testid="end-meeting-button"]')).toBeVisible({ timeout: 10000 });
 }
 
 /**
@@ -174,8 +174,8 @@ async function waitForAiResponse(page: Page, timeoutMs: number = 90000) {
 async function endMeeting(page: Page) {
   await page.click('[data-testid="end-meeting-button"]');
 
-  // 会議終了メッセージが表示されることを確認
-  await expect(page.locator('text=この会議は終了済みとして記録されています')).toBeVisible({ timeout: 10000 });
+  // 「新規作成して入室」ボタンが表示されることを確認（会議終了完了の証拠）
+  await expect(page.locator('[data-testid="create-and-join-button"]')).toBeVisible({ timeout: 10000 });
 }
 
 test.describe('E2E: 会議のゴールデンパス', () => {
@@ -244,8 +244,8 @@ test.describe('E2E: 会議のゴールデンパス', () => {
       await joinExistingMeeting(page2, meetingId);
 
       // 両方のページで参加していることを確認
-      await expect(page1.locator('[data-testid="leave-button"]')).toBeVisible();
-      await expect(page2.locator('[data-testid="leave-button"]')).toBeVisible();
+      await expect(page1.locator('[data-testid="end-meeting-button"]')).toBeVisible();
+      await expect(page2.locator('[data-testid="end-meeting-button"]')).toBeVisible();
 
       console.log('Step 6: 音声入力のシミュレーション（実際の音声ファイル使用）');
       // 実際の音声ファイルを使ってブラウザが音声入力をシミュレートする
@@ -269,11 +269,10 @@ test.describe('E2E: 会議のゴールデンパス', () => {
       ]);
 
       console.log('Step 9: 会議を終了する');
+      // ユーザー1が会議を終了（文字起こしも停止される）
       await endMeeting(page1);
-
-      // ユーザー2のページでも会議終了が反映されることを確認
-      await page2.reload();
-      await expect(page2.locator('text=この会議は終了済みとして記録されています')).toBeVisible({ timeout: 10000 });
+      // ユーザー2が会議を終了
+      await endMeeting(page2);
 
       console.log('✅ E2Eテスト完了！');
     } finally {

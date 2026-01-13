@@ -140,16 +140,6 @@ export class TimtamInfraStack extends Stack {
       },
     });
 
-    const endMeetingFn = new NodejsFunction(this, 'EndMeetingFn', {
-      entry: '../../services/meeting-api/meetingMetadata.ts',
-      handler: 'endMeeting',
-      timeout: Duration.seconds(15),
-      runtime: lambda.Runtime.NODEJS_20_X,
-      environment: {
-        MEETINGS_METADATA_TABLE: meetingsMetadataTable.tableName,
-      },
-    });
-
     // New Lambda for receiving TranscriptEvent from browser
     const transcriptionEventsFn = new NodejsFunction(this, 'TranscriptionEventsFn', {
       entry: '../../services/meeting-api/transcriptionEvents.ts',
@@ -525,21 +515,6 @@ export class TimtamInfraStack extends Stack {
     });
     getParticipantsRoute.addDependency(getParticipantsInt);
 
-    const endMeetingInt = new CfnIntegration(this, 'EndMeetingIntegration', {
-      apiId: httpApi.ref,
-      integrationType: 'AWS_PROXY',
-      integrationUri: lambdaIntegrationUri(endMeetingFn),
-      payloadFormatVersion: '2.0',
-      integrationMethod: 'POST',
-    });
-
-    const endMeetingRoute = new CfnRoute(this, 'EndMeetingRoute', {
-      apiId: httpApi.ref,
-      routeKey: 'POST /meetings/{meetingId}/end',
-      target: `integrations/${endMeetingInt.ref}`,
-    });
-    endMeetingRoute.addDependency(endMeetingInt);
-
     // Transcription events integration + route (NEW: for browser TranscriptEvent)
     const transcriptionEventsInt = new CfnIntegration(this, 'TranscriptionEventsIntegration', {
       apiId: httpApi.ref,
@@ -565,7 +540,6 @@ export class TimtamInfraStack extends Stack {
       transcriptionEventsFn,
       upsertParticipantFn,
       getParticipantsFn,
-      endMeetingFn,
     ].forEach((fn, i) => {
       fn.addPermission(`InvokeByHttpApi${i}`, {
         principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
@@ -667,7 +641,6 @@ export class TimtamInfraStack extends Stack {
     });
     aiMessagesTable.grantReadData(aiMessagesFn);
     meetingsMetadataTable.grantReadWriteData(upsertParticipantFn);
-    meetingsMetadataTable.grantReadWriteData(endMeetingFn);
     meetingsMetadataTable.grantReadData(getParticipantsFn);
 
     // Config integration + route (GET /config)
