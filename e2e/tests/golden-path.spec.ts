@@ -38,10 +38,10 @@ const AUDIO_INPUT_DURATION_MS = 30000; // 音声入力のシミュレーショ�
  * ページで名前を設定する
  */
 async function setDisplayName(page: Page, name: string) {
-  await page.fill('input[placeholder*="ひらがなで入力"]', name);
-  await page.click('button:has-text("保存")');
+  await page.fill('[data-testid="display-name-input"]', name);
+  await page.click('[data-testid="save-name-button"]');
   // 保存メッセージが表示されるのを待つ
-  await expect(page.locator('text=名前を保存したよ')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('[data-testid="name-message"]')).toBeVisible({ timeout: 5000 });
 }
 
 /**
@@ -49,19 +49,19 @@ async function setDisplayName(page: Page, name: string) {
  */
 async function setGraspConfig(page: Page, yaml: string) {
   // Grasp設定パネルを探す
-  const graspSection = page.locator('h3:has-text("Grasp設定")').locator('..');
+  const graspSection = page.locator('[data-testid="grasp-config-section"]');
   await expect(graspSection).toBeVisible();
-  
+
   // YAMLテキストエリアを見つけて入力
-  const textarea = graspSection.locator('textarea');
+  const textarea = page.locator('[data-testid="grasp-yaml-textarea"]');
   await textarea.fill(yaml);
-  
+
   // 保存ボタンをクリック
-  const saveButton = graspSection.locator('button:has-text("保存")');
+  const saveButton = page.locator('[data-testid="grasp-save-button"]');
   await saveButton.click();
-  
+
   // 保存成功メッセージを待つ
-  await expect(page.locator('text=設定を保存しました')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('text=設定を適用しました')).toBeVisible({ timeout: 5000 });
 }
 
 /**
@@ -69,29 +69,29 @@ async function setGraspConfig(page: Page, yaml: string) {
  */
 async function createAndJoinMeeting(page: Page): Promise<string> {
   // マイク許可をリクエスト（必要な場合）
-  const micRequestButton = page.locator('button:has-text("マイク許可をリクエスト")');
+  const micRequestButton = page.locator('[data-testid="request-mic-permission-button"]');
   if (await micRequestButton.isVisible()) {
     await micRequestButton.click();
     await page.waitForTimeout(1000);
   }
-  
+
   // 新規作成して入室ボタンをクリック
-  await page.click('button:has-text("新規作成して入室")');
-  
+  await page.click('[data-testid="create-and-join-button"]');
+
   // 会議IDが表示されるまで待つ
   await page.waitForSelector('text=/meetingId: [a-f0-9-]{36}/', { timeout: 30000 });
-  
+
   // 会議IDを取得
   const meetingIdText = await page.locator('text=/meetingId: [a-f0-9-]{36}/').textContent();
   const meetingId = meetingIdText?.match(/[a-f0-9-]{36}/)?.[0];
-  
+
   if (!meetingId) {
     throw new Error('会議IDが取得できませんでした');
   }
-  
+
   // 退室ボタンが表示されることを確認（参加完了の証拠）
-  await expect(page.locator('button:has-text("退室")')).toBeVisible({ timeout: 10000 });
-  
+  await expect(page.locator('[data-testid="leave-button"]')).toBeVisible({ timeout: 10000 });
+
   return meetingId;
 }
 
@@ -100,20 +100,20 @@ async function createAndJoinMeeting(page: Page): Promise<string> {
  */
 async function joinExistingMeeting(page: Page, meetingId: string) {
   // マイク許可をリクエスト（必要な場合）
-  const micRequestButton = page.locator('button:has-text("マイク許可をリクエスト")');
+  const micRequestButton = page.locator('[data-testid="request-mic-permission-button"]');
   if (await micRequestButton.isVisible()) {
     await micRequestButton.click();
     await page.waitForTimeout(1000);
   }
-  
+
   // 会議IDを入力
-  await page.fill('input[placeholder="meetingId"]', meetingId);
-  
+  await page.fill('[data-testid="join-meeting-id-input"]', meetingId);
+
   // 入室ボタンをクリック
-  await page.click('button:has-text("このIDで入室")');
-  
+  await page.click('[data-testid="join-existing-button"]');
+
   // 退室ボタンが表示されることを確認（参加完了の証拠）
-  await expect(page.locator('button:has-text("退室")')).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('[data-testid="leave-button"]')).toBeVisible({ timeout: 10000 });
 }
 
 /**
@@ -121,18 +121,16 @@ async function joinExistingMeeting(page: Page, meetingId: string) {
  */
 async function waitForTranscription(page: Page, timeoutMs: number = 60000) {
   // 文字起こしセクションを探す
-  const transcriptionSection = page.locator('h3:has-text("文字起こし")').locator('..');
+  const transcriptionSection = page.locator('[data-testid="transcription-section"]');
   await expect(transcriptionSection).toBeVisible();
-  
+
   // 文字起こしが表示されるのを待つ（初期メッセージ以外のテキスト）
-  const transcriptionContainer = transcriptionSection.locator('div[style*="border"]');
-  
+  const transcriptionContainer = page.locator('[data-testid="transcription-output"]');
+
   // 文字起こしのテキストが表示されるまで待つ
   await page.waitForFunction(
     (minLength) => {
-      const container = document.querySelector('h3:has-text("文字起こし")') 
-        ?.parentElement
-        ?.querySelector('div[style*="border"]');
+      const container = document.querySelector('[data-testid="transcription-output"]');
       const text = container?.textContent || '';
       // 初期メッセージではなく、実際の文字起こしが含まれているか確認
       return text.length > minLength && !text.includes('ここに文字起こしが表示される');
@@ -147,18 +145,16 @@ async function waitForTranscription(page: Page, timeoutMs: number = 60000) {
  */
 async function waitForAiResponse(page: Page, timeoutMs: number = 90000) {
   // AIアシスタントセクションを探す
-  const aiSection = page.locator('h3:has-text("AI Assistant")').locator('..');
+  const aiSection = page.locator('[data-testid="ai-assistant-section"]');
   await expect(aiSection).toBeVisible();
-  
+
   // AIメッセージが表示されるのを待つ
   await page.waitForFunction(
     (minLength) => {
-      const container = document.querySelector('h3:has-text("AI Assistant")')
-        ?.parentElement
-        ?.querySelector('div[style*="border"]');
+      const container = document.querySelector('[data-testid="ai-assistant-output"]');
       const text = container?.textContent || '';
       // AIメッセージが含まれているか確認（初期メッセージではない）
-      return text.length > minLength && !text.includes('AI Assistantのメッセージがここに表示される');
+      return text.length > minLength && !text.includes('AIアシスタントからのメッセージがここに表示される');
     },
     MIN_AI_MESSAGE_LENGTH,
     { timeout: timeoutMs }
@@ -169,8 +165,8 @@ async function waitForAiResponse(page: Page, timeoutMs: number = 90000) {
  * 会議を終了する
  */
 async function endMeeting(page: Page) {
-  await page.click('button:has-text("会議終了を記録")');
-  
+  await page.click('[data-testid="end-meeting-button"]');
+
   // 会議終了メッセージが表示されることを確認
   await expect(page.locator('text=この会議は終了済みとして記録されています')).toBeVisible({ timeout: 10000 });
 }
@@ -214,8 +210,8 @@ test.describe('E2E: 会議のゴールデンパス', () => {
       await joinExistingMeeting(page2, meetingId);
 
       // 両方のページで参加していることを確認
-      await expect(page1.locator('button:has-text("退室")')).toBeVisible();
-      await expect(page2.locator('button:has-text("退室")')).toBeVisible();
+      await expect(page1.locator('[data-testid="leave-button"]')).toBeVisible();
+      await expect(page2.locator('[data-testid="leave-button"]')).toBeVisible();
 
       console.log('Step 6: 音声入力のシミュレーション（フェイクメディアストリーム使用）');
       // Playwrightのフェイクメディアストリームは自動的に音声を生成する
