@@ -589,9 +589,10 @@ export function App() {
             placeholder="ひらがなで入力（未入力ならランダム動物名）"
             maxLength={50}
             style={{ padding: 8, borderRadius: 4, border: '1px solid #ccc', minWidth: 220 }}
+            data-testid="display-name-input"
           />
-          <button onClick={onSaveDisplayName}>保存</button>
-          {nameMessage && <span style={{ color: '#27ae60', fontSize: 14 }}>{nameMessage}</span>}
+          <button onClick={onSaveDisplayName} data-testid="save-name-button">保存</button>
+          {nameMessage && <span style={{ color: '#27ae60', fontSize: 14 }} data-testid="name-message">{nameMessage}</span>}
         </div>
         <div style={{ color: '#666', fontSize: 13 }}>
           会議に入るとき、この名前とChimeのattendeeIdをDynamoDBに保存して全員に表示するよ。
@@ -608,7 +609,7 @@ export function App() {
         {micPermission !== 'granted' && (
           <div style={{ background: '#fffbe6', border: '1px solid #f1c40f', padding: 8, borderRadius: 4 }}>
             <div style={{ marginBottom: 8 }}>マイクの許可が必要です。ボタンを押して許可ダイアログを出してください。</div>
-            <button onClick={requestMicPermission}>マイク許可をリクエスト</button>
+            <button onClick={requestMicPermission} data-testid="request-mic-permission-button">マイク許可をリクエスト</button>
           </div>
         )}
         <div>
@@ -624,7 +625,7 @@ export function App() {
           {!joined ? (
             <>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <button onClick={onCreateAndJoin} disabled={!apiBaseUrl}>新規作成して入室</button>
+                <button onClick={onCreateAndJoin} disabled={!apiBaseUrl} data-testid="create-and-join-button">新規作成して入室</button>
                 <span style={{ color: '#666' }}>または 既存会議に入室:</span>
                 <input
                   type="text"
@@ -632,15 +633,16 @@ export function App() {
                   value={joinMeetingId}
                   onChange={(e) => setJoinMeetingId(e.target.value)}
                   style={{ minWidth: 260 }}
+                  data-testid="join-meeting-id-input"
                 />
-                <button onClick={onJoinExisting} disabled={!apiBaseUrl}>このIDで入室</button>
+                <button onClick={onJoinExisting} disabled={!apiBaseUrl} data-testid="join-existing-button">このIDで入室</button>
               </div>
             </>
           ) : (
             <>
-              <button onClick={onLeave}>退室</button>
-              <button onClick={onToggleMute}>{muted ? 'ミュート解除' : 'ミュート'}</button>
-              <button onClick={onEndMeeting} disabled={!!meetingEndedAt}>会議終了を記録</button>
+              <button onClick={onLeave} data-testid="leave-button">退室</button>
+              <button onClick={onToggleMute} data-testid="toggle-mute-button">{muted ? 'ミュート解除' : 'ミュート'}</button>
+              <button onClick={onEndMeeting} disabled={!!meetingEndedAt} data-testid="end-meeting-button">会議終了を記録</button>
             </>
           )}
         </div>
@@ -655,9 +657,9 @@ export function App() {
         setAiOutputHeight={setAiOutputHeight}
       />
 
-      <section style={{ display: 'grid', gap: 8 }}>
+      <section style={{ display: 'grid', gap: 8 }} data-testid="transcription-section">
         <h3>文字起こし（擬似リアルタイム）</h3>
-        <div style={{ border: '1px solid #ddd', borderRadius: 6, padding: 12, minHeight: 120, background: '#fafafa' }}>
+        <div style={{ border: '1px solid #ddd', borderRadius: 6, padding: 12, minHeight: 120, background: '#fafafa' }} data-testid="transcription-output">
           <div style={{ display: 'grid', gap: 6 }}>
             {partialText && (
               <div style={{ color: '#555' }}>{partialText}<span style={{ opacity: 0.5 }}> ▋</span></div>

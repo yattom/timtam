@@ -2,3 +2,4 @@ packages:
   - infra/*
   - services/*
   - web/*
+  - e2e

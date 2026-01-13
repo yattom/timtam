@@ -222,3 +222,8 @@ infra/cdk/cdk.out/
 !.gitkeep
 /tts.b64
 /tts.mp3
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
