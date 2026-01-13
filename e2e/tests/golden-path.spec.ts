@@ -101,7 +101,7 @@ async function createAndJoinMeeting(page: Page): Promise<string> {
     throw new Error('会議IDが取得できませんでした');
   }
 
-  // 退室ボタンが表示されることを確認（参加完了の証拠）
+  // 会議終了ボタンが表示されることを確認（参加完了の証拠）
   await expect(page.locator('[data-testid="end-meeting-button"]')).toBeVisible({ timeout: 10000 });
 
   return meetingId;
@@ -124,7 +124,7 @@ async function joinExistingMeeting(page: Page, meetingId: string) {
   // 入室ボタンをクリック
   await page.click('[data-testid="join-existing-button"]');
 
-  // 退室ボタンが表示されることを確認（参加完了の証拠）
+  // 会議終了ボタンが表示されることを確認（参加完了の証拠）
   await expect(page.locator('[data-testid="end-meeting-button"]')).toBeVisible({ timeout: 10000 });
 }
 
@@ -174,7 +174,7 @@ async function waitForAiResponse(page: Page, timeoutMs: number = 90000) {
 async function endMeeting(page: Page) {
   await page.click('[data-testid="end-meeting-button"]');
 
-  // 「新規作成して入室」ボタンが表示されることを確認（退出完了の証拠）
+  // 「新規作成して入室」ボタンが表示されることを確認（会議終了完了の証拠）
   await expect(page.locator('[data-testid="create-and-join-button"]')).toBeVisible({ timeout: 10000 });
 }
 
@@ -269,9 +269,9 @@ test.describe('E2E: 会議のゴールデンパス', () => {
       ]);
 
       console.log('Step 9: 会議を終了する');
-      // ユーザー1が退出
+      // ユーザー1が会議を終了（文字起こしも停止される）
       await endMeeting(page1);
-      // ユーザー2が退出
+      // ユーザー2が会議を終了
       await endMeeting(page2);
 
       console.log('✅ E2Eテスト完了！');
