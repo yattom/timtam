@@ -9,6 +9,7 @@
     "@aws-sdk/client-sqs": "3.600.0",
     "@aws-sdk/client-dynamodb": "3.600.0",
     "@aws-sdk/lib-dynamodb": "3.600.0",
+    "@timtam/shared": "workspace:*",
     "js-yaml": "^4.1.0"
   },
   "devDependencies": {

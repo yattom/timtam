@@ -75,7 +75,7 @@ build/
 *.suo
 *.userosscache
 *.sln.docstates
-packages/
+# packages/  # Commented out - conflicts with pnpm workspace packages/
 TestResult*/
 TestResults/
 

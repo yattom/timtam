@@ -18,6 +18,7 @@ import { Message } from '@aws-sdk/client-sqs';
 import { OrchestratorManager } from './orchestratorManager';
 import { AsrEvent } from './meetingOrchestrator';
 import { MeetingId } from './grasp';
+import { ChimeAdapter } from '@timtam/shared';
 
 // 環境変数
 const TRANSCRIPT_QUEUE_URL = process.env.TRANSCRIPT_QUEUE_URL || '';
@@ -100,88 +101,23 @@ class TriggerLLM implements LLMClient {
   }
 }
 
+// Notifierは@timtam/sharedのChimeAdapterに置き換え
+// ただし、INotifierインターフェースとの互換性を保つため、ラッパークラスを定義
 class Notifier implements INotifier {
-  private ddb: DynamoDBDocumentClient;
+  private adapter: ChimeAdapter;
 
   constructor() {
-    const ddbClient = new DynamoDBClient({});
-    this.ddb = DynamoDBDocumentClient.from(ddbClient);
+    this.adapter = new ChimeAdapter({
+      aiMessagesTable: AI_MESSAGES_TABLE,
+    });
   }
 
   async postChat(meetingId: MeetingId, message: string) {
-    const timestamp = Date.now();
-    const ttl = Math.floor(timestamp / 1000) + 86400; // Expire after 24 hours
-
-    // Write to DynamoDB for web UI polling
-    try {
-      await this.ddb.send(
-        new PutCommand({
-          TableName: AI_MESSAGES_TABLE,
-          Item: {
-            meetingId,
-            timestamp,
-            message,
-            ttl,
-            type: 'ai_intervention',
-          },
-        })
-      );
-      console.log(JSON.stringify({
-        type: 'chat.post',
-        meetingId,
-        message: message.substring(0, 100),
-        timestamp,
-        stored: 'dynamodb'
-      }));
-    } catch (err: any) {
-      console.error('Failed to store AI message', {
-        error: err?.message || err,
-        meetingId,
-      });
-      // Still log to CloudWatch as fallback
-      console.log(JSON.stringify({ type: 'chat.post', meetingId, message, ts: timestamp }));
-    }
+    return this.adapter.postChat(meetingId, message);
   }
 
   async postLlmCallLog(meetingId: MeetingId, prompt: string, rawResponse: string, nodeId: string = 'default') {
-    const timestamp = Date.now();
-    const ttl = Math.floor(timestamp / 1000) + 86400; // Expire after 24 hours
-
-    const logData = {
-      nodeId,
-      prompt,
-      rawResponse,
-      timestamp,
-    };
-
-    try {
-      await this.ddb.send(
-        new PutCommand({
-          TableName: AI_MESSAGES_TABLE,
-          Item: {
-            meetingId,
-            timestamp,
-            message: JSON.stringify(logData),
-            ttl,
-            type: 'llm_call',
-          },
-        })
-      );
-      console.log(JSON.stringify({
-        type: 'llm_call.logged',
-        meetingId,
-        nodeId,
-        promptLength: prompt.length,
-        responseLength: rawResponse.length,
-        timestamp,
-      }));
-    } catch (err: any) {
-      console.error('Failed to store LLM call log', {
-        error: err?.message || err,
-        meetingId,
-        nodeId,
-      });
-    }
+    return this.adapter.postLlmCallLog(meetingId, prompt, rawResponse, nodeId);
   }
 }
 
