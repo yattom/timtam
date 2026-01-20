@@ -167,11 +167,20 @@ promptTemplate: |
 
 ## レスポンス形式の自動追加
 
-システムは自動的に以下の形式指定を promptTemplate の最後に追加します:
+システムは自動的に outputHandler に応じた形式指定を promptTemplate の前に追加します:
+
+### チャット用 (outputHandler: "chat" または "both")
 
 ```
-次のJSON形式だけを厳密に返してください:
-{"should_intervene": boolean, "reason": string, "message": string}
+以下の指示に対して、会議のチャットに発言すべきか判断して、次のJSON形式だけを厳密に返してください:
+{"should_output": true, "reason": "判断の理由", "message": "チャットに投稿するメッセージ"}
+```
+
+### ノート用 (outputHandler: "note")
+
+```
+以下の指示に対して、記録すべき内容があるか判断して、次のJSON形式だけを厳密に返してください:
+{"should_output": true, "reason": "判断の理由", "message": "記録内容"}
 ```
 
 **ユーザーは promptTemplate にこの形式指定を含める必要はありません。** タスク固有のプロンプト内容のみを記述してください。
