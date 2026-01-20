@@ -855,8 +855,8 @@ export class TimtamInfraStack extends Stack {
       retention: logs.RetentionDays.ONE_WEEK,
     });
     const container = taskDef.addContainer('OrchestratorContainer', {
-      image: ecs.ContainerImage.fromAsset('../../services/orchestrator', {
-        file: 'Dockerfile',
+      image: ecs.ContainerImage.fromAsset('../..', {  // モノレポルート
+        file: 'services/orchestrator/Dockerfile',
       }),
       logging: ecs.LogDriver.awsLogs({ logGroup, streamPrefix: 'orchestrator' }),
       environment: {
