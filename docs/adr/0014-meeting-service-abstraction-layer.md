@@ -603,7 +603,7 @@ const result = await sqs.send(new ReceiveMessageCommand({
 // 統一フォーマットを処理
 for (const message of result.Messages || []) {
   const event: TranscriptEvent = JSON.parse(message.Body);
-  await orchestratorManager.processAsrEvent(event, notifier, metrics);
+  await orchestratorManager.processTranscriptEvent(event, notifier, metrics);
 }
 ```
 

@@ -9,7 +9,8 @@ import {
   MeetingId,
 } from './grasp';
 import { OrchestratorManager } from './orchestratorManager';
-import { Meeting, AsrEvent } from './meetingOrchestrator';
+import { Meeting } from './meetingOrchestrator';
+import { TranscriptEvent } from '@timtam/shared';
 
 describe('Multi-Meeting Orchestrator', () => {
   // Helper functions for creating test objects
@@ -44,8 +45,9 @@ describe('Multi-Meeting Orchestrator', () => {
     ...overrides,
   });
 
-  const createTestAsrEvent = (meetingId: string, text: string): AsrEvent => ({
+  const createTestAsrEvent = (meetingId: string, text: string): TranscriptEvent => ({
     meetingId: meetingId as MeetingId,
+    speakerId: 'test-speaker',
     text,
     isFinal: true,
     timestamp: Date.now(),
@@ -83,7 +85,7 @@ describe('Multi-Meeting Orchestrator', () => {
       );
 
       const event = createTestAsrEvent('meeting-001', 'テスト発言です');
-      await meeting.processAsrEvent(event, notifier, metrics);
+      await meeting.processTranscriptEvent(event, notifier, metrics);
 
       expect(meeting.getMessageCount()).toBe(1);
     });
@@ -105,17 +107,17 @@ describe('Multi-Meeting Orchestrator', () => {
       );
 
       // Process events for both meetings
-      await meeting1.processAsrEvent(
+      await meeting1.processTranscriptEvent(
         createTestAsrEvent('meeting-001', '最初のミーティング'),
         notifier,
         metrics
       );
-      await meeting1.processAsrEvent(
+      await meeting1.processTranscriptEvent(
         createTestAsrEvent('meeting-001', '2つ目の発言'),
         notifier,
         metrics
       );
-      await meeting2.processAsrEvent(
+      await meeting2.processTranscriptEvent(
         createTestAsrEvent('meeting-002', '別のミーティング'),
         notifier,
         metrics
@@ -195,17 +197,17 @@ describe('Multi-Meeting Orchestrator', () => {
       const manager = new OrchestratorManager(grasps);
 
       // Process events for multiple meetings
-      await manager.processAsrEvent(
+      await manager.processTranscriptEvent(
         createTestAsrEvent('meeting-001', 'ミーティング1の発言'),
         notifier,
         metrics
       );
-      await manager.processAsrEvent(
+      await manager.processTranscriptEvent(
         createTestAsrEvent('meeting-002', 'ミーティング2の発言'),
         notifier,
         metrics
       );
-      await manager.processAsrEvent(
+      await manager.processTranscriptEvent(
         createTestAsrEvent('meeting-003', 'ミーティング3の発言'),
         notifier,
         metrics
@@ -226,22 +228,22 @@ describe('Multi-Meeting Orchestrator', () => {
       const manager = new OrchestratorManager(grasps);
 
       // Process different numbers of events for each meeting
-      await manager.processAsrEvent(
+      await manager.processTranscriptEvent(
         createTestAsrEvent('meeting-001', '発言1'),
         notifier,
         metrics
       );
-      await manager.processAsrEvent(
+      await manager.processTranscriptEvent(
         createTestAsrEvent('meeting-001', '発言2'),
         notifier,
         metrics
       );
-      await manager.processAsrEvent(
+      await manager.processTranscriptEvent(
         createTestAsrEvent('meeting-001', '発言3'),
         notifier,
         metrics
       );
-      await manager.processAsrEvent(
+      await manager.processTranscriptEvent(
         createTestAsrEvent('meeting-002', '発言A'),
         notifier,
         metrics
@@ -266,12 +268,12 @@ describe('Multi-Meeting Orchestrator', () => {
       });
 
       // Create meetings
-      await manager.processAsrEvent(
+      await manager.processTranscriptEvent(
         createTestAsrEvent('meeting-001', '発言'),
         notifier,
         metrics
       );
-      await manager.processAsrEvent(
+      await manager.processTranscriptEvent(
         createTestAsrEvent('meeting-002', '発言'),
         notifier,
         metrics
@@ -362,12 +364,12 @@ describe('Multi-Meeting Orchestrator', () => {
       const manager = new OrchestratorManager(grasps);
 
       // Create meetings
-      await manager.processAsrEvent(
+      await manager.processTranscriptEvent(
         createTestAsrEvent('meeting-001', '発言'),
         notifier,
         metrics
       );
-      await manager.processAsrEvent(
+      await manager.processTranscriptEvent(
         createTestAsrEvent('meeting-002', '発言'),
         notifier,
         metrics
@@ -413,7 +415,7 @@ describe('Multi-Meeting Orchestrator', () => {
       const promises = [];
       for (let i = 1; i <= 20; i++) {
         promises.push(
-          manager.processAsrEvent(
+          manager.processTranscriptEvent(
             createTestAsrEvent(`meeting-${i.toString().padStart(3, '0')}`, `発言 ${i}`),
             notifier,
             metrics
@@ -441,27 +443,27 @@ describe('Multi-Meeting Orchestrator', () => {
 
       // Process multiple events in parallel
       await Promise.all([
-        manager.processAsrEvent(
+        manager.processTranscriptEvent(
           createTestAsrEvent('meeting-001', '発言1'),
           notifier,
           metrics
         ),
-        manager.processAsrEvent(
+        manager.processTranscriptEvent(
           createTestAsrEvent('meeting-002', '発言2'),
           notifier,
           metrics
         ),
-        manager.processAsrEvent(
+        manager.processTranscriptEvent(
           createTestAsrEvent('meeting-003', '発言3'),
           notifier,
           metrics
         ),
-        manager.processAsrEvent(
+        manager.processTranscriptEvent(
           createTestAsrEvent('meeting-004', '発言4'),
           notifier,
           metrics
         ),
-        manager.processAsrEvent(
+        manager.processTranscriptEvent(
           createTestAsrEvent('meeting-005', '発言5'),
           notifier,
           metrics

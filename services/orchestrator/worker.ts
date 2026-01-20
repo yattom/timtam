@@ -16,8 +16,7 @@ import { parseGraspGroupDefinition, GraspGroupDefinition } from './graspConfigPa
 import { ensureDefaultGraspConfig } from './selfSetup';
 import { Message } from '@aws-sdk/client-sqs';
 import { OrchestratorManager } from './orchestratorManager';
-import { AsrEvent } from './meetingOrchestrator';
-import { ChimeAdapter, MeetingId } from '@timtam/shared';
+import { ChimeAdapter, MeetingId, TranscriptEvent } from '@timtam/shared';
 
 // 環境変数
 const TRANSCRIPT_QUEUE_URL = process.env.TRANSCRIPT_QUEUE_URL || '';
@@ -210,15 +209,32 @@ async function pollControlOnce() {
 async function processMessages(messages: Message[]) {
   // Process messages in parallel for better throughput
   await Promise.all(messages.map(async (message) => {
-    let ev: AsrEvent | null = null;
+    let ev: TranscriptEvent | null = null;
     try { 
       const parsed = JSON.parse(message.Body || '');
-      // Cast string to MeetingId
-      ev = {
-        ...parsed,
-        meetingId: parsed.meetingId as MeetingId
-      };
-    } catch {}
+      
+      // Validate required fields for TranscriptEvent
+      if (!parsed.meetingId || !parsed.speakerId || typeof parsed.text !== 'string' || 
+          typeof parsed.isFinal !== 'boolean' || typeof parsed.timestamp !== 'number') {
+        console.warn('[Worker] Invalid TranscriptEvent format', { 
+          hasmeeting: !!parsed.meetingId,
+          hasSpeaker: !!parsed.speakerId,
+          hasText: typeof parsed.text === 'string',
+          hasisFinal: typeof parsed.isFinal === 'boolean',
+          hasTimestamp: typeof parsed.timestamp === 'number'
+        });
+        ev = null;
+      } else {
+        // Cast to TranscriptEvent with MeetingId type
+        ev = {
+          ...parsed,
+          meetingId: parsed.meetingId as MeetingId
+        } as TranscriptEvent;
+      }
+    } catch (err) {
+      console.error('[Worker] Failed to parse message', err);
+    }
+    
     if (!ev) {
       // Delete malformed message
       await sqs.send(
@@ -242,7 +258,7 @@ async function processMessages(messages: Message[]) {
     }
 
     // ミーティングIDに基づいて適切なオーケストレーターに処理を委譲
-    await orchestratorManager.processAsrEvent(ev, notifier, metrics);
+    await orchestratorManager.processTranscriptEvent(ev, notifier, metrics);
 
     // 処理完了後にメッセージを削除
     await sqs.send(

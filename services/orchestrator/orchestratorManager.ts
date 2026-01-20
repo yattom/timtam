@@ -1,6 +1,7 @@
 // OrchestratorManager: 複数ミーティングのオーケストレーターを管理
-import { Meeting, AsrEvent } from './meetingOrchestrator';
+import { Meeting } from './meetingOrchestrator';
 import { Grasp, MeetingId, Notifier, Metrics } from './grasp';
+import { TranscriptEvent } from '@timtam/shared';
 
 export interface OrchestratorManagerConfig {
   maxMeetings?: number; // 最大同時ミーティング数
@@ -74,15 +75,15 @@ export class OrchestratorManager {
   }
 
   /**
-   * ASRイベントを適切なオーケストレーターに振り分けて処理
+   * Transcriptイベントを適切なオーケストレーターに振り分けて処理
    */
-  async processAsrEvent(
-    ev: AsrEvent,
+  async processTranscriptEvent(
+    ev: TranscriptEvent,
     notifier: Notifier,
     metrics: Metrics
   ): Promise<void> {
     const meeting = this.getOrCreateMeeting(ev.meetingId);
-    await meeting.processAsrEvent(ev, notifier, metrics);
+    await meeting.processTranscriptEvent(ev, notifier, metrics);
   }
 
   /**
