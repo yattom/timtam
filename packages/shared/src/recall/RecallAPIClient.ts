@@ -5,6 +5,23 @@
  * @see https://docs.recall.ai/reference/
  */
 
+/**
+ * サポートされている会議プラットフォーム
+ */
+export type MeetingPlatform = 'zoom' | 'google_meet' | 'microsoft_teams' | 'webex';
+
+/**
+ * サポートされているプラットフォームの配列（検証用）
+ */
+export const VALID_PLATFORMS: readonly MeetingPlatform[] = ['zoom', 'google_meet', 'microsoft_teams', 'webex'] as const;
+
+/**
+ * 値が有効なMeetingPlatformかどうかを判定する型ガード
+ */
+export function isMeetingPlatform(value: unknown): value is MeetingPlatform {
+  return typeof value === 'string' && VALID_PLATFORMS.includes(value as MeetingPlatform);
+}
+
 export interface RecallAPIConfig {
   /** Recall.ai APIキー */
   apiKey: string;
@@ -71,7 +88,7 @@ export interface Bot {
   status_message?: string;
 
   /** プラットフォーム */
-  platform?: 'zoom' | 'google_meet' | 'microsoft_teams' | 'webex';
+  platform?: MeetingPlatform;
 
   /** 作成日時 */
   created_at: string;
