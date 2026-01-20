@@ -3,8 +3,11 @@
  * ADR 0014に基づく、Recall.ai固有のロジックをカプセル化
  */
 
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { MeetingServiceAdapter } from './MeetingServiceAdapter';
 import { MeetingId, TranscriptEvent } from '../types/events';
+import { RecallAPIClient } from '../recall/RecallAPIClient';
 
 export interface RecallAdapterConfig {
   /** Recall.ai APIキー */
@@ -12,6 +15,12 @@ export interface RecallAdapterConfig {
 
   /** Recall.ai APIベースURL（デフォルト: https://us-west-2.recall.ai） */
   apiBaseUrl?: string;
+
+  /** DynamoDB テーブル名（AI応答メッセージ保存用、LLMログ用） */
+  aiMessagesTable: string;
+
+  /** DynamoDBクライアント（オプション、テスト用） */
+  ddbClient?: DynamoDBClient;
 }
 
 /**
@@ -22,17 +31,24 @@ export interface RecallAdapterConfig {
  *
  * OUTBOUND（Orchestrator用）:
  * - postChat: Recall.ai Chat API呼び出し
- * - postLlmCallLog: DynamoDBにLLMログ書き込み
+ * - postLlmCallLog: DynamoDBにLLMログ書き込み（Chimeと同じテーブル）
  *
- * @note Phase 2で完全実装予定
+ * @note Phase 2で完全実装
  */
 export class RecallAdapter implements MeetingServiceAdapter {
-  private apiKey: string;
-  private apiBaseUrl: string;
+  private recallClient: RecallAPIClient;
+  private ddb: DynamoDBDocumentClient;
+  private aiMessagesTable: string;
 
   constructor(config: RecallAdapterConfig) {
-    this.apiKey = config.apiKey;
-    this.apiBaseUrl = config.apiBaseUrl || 'https://us-west-2.recall.ai';
+    this.recallClient = new RecallAPIClient({
+      apiKey: config.apiKey,
+      apiBaseUrl: config.apiBaseUrl,
+    });
+
+    const ddbClient = config.ddbClient || new DynamoDBClient({});
+    this.ddb = DynamoDBDocumentClient.from(ddbClient);
+    this.aiMessagesTable = config.aiMessagesTable;
   }
 
   // ========================================
@@ -104,8 +120,30 @@ export class RecallAdapter implements MeetingServiceAdapter {
    * @param message - 送信するメッセージ
    */
   async postChat(meetingId: MeetingId, message: string): Promise<void> {
-    // Phase 2で実装
-    throw new Error('RecallAdapter.postChat not implemented yet (Phase 2)');
+    const botId = meetingId as string; // Recall.aiではmeetingId = botId
+
+    try {
+      await this.recallClient.sendChatMessage(botId, {
+        message,
+        pin_message: false,
+      });
+
+      console.log(JSON.stringify({
+        type: 'recall.chat.post',
+        meetingId,
+        botId,
+        messageLength: message.length,
+        timestamp: Date.now(),
+        delivered: 'recall-api',
+      }));
+    } catch (err: any) {
+      console.error('RecallAdapter: Failed to send chat message', {
+        error: err?.message || err,
+        meetingId,
+        botId,
+      });
+      throw err;
+    }
   }
 
   /**
@@ -123,7 +161,44 @@ export class RecallAdapter implements MeetingServiceAdapter {
     rawResponse: string,
     nodeId: string = 'default'
   ): Promise<void> {
-    // Phase 2で実装（DynamoDBへの書き込みはChimeと同じ）
-    throw new Error('RecallAdapter.postLlmCallLog not implemented yet (Phase 2)');
+    const timestamp = Date.now();
+    const ttl = Math.floor(timestamp / 1000) + 86400; // 24時間後に削除
+
+    const logData = {
+      nodeId,
+      prompt,
+      rawResponse,
+      timestamp,
+    };
+
+    try {
+      await this.ddb.send(
+        new PutCommand({
+          TableName: this.aiMessagesTable,
+          Item: {
+            meetingId,
+            timestamp,
+            message: JSON.stringify(logData),
+            ttl,
+            type: 'llm_call',
+          },
+        })
+      );
+
+      console.log(JSON.stringify({
+        type: 'recall.llm_call.logged',
+        meetingId,
+        nodeId,
+        promptLength: prompt.length,
+        responseLength: rawResponse.length,
+        timestamp,
+      }));
+    } catch (err: any) {
+      console.error('RecallAdapter: Failed to store LLM call log', {
+        error: err?.message || err,
+        meetingId,
+        nodeId,
+      });
+    }
   }
 }
