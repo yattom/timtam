@@ -145,7 +145,7 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
     return {
       statusCode: 500,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Failed to join meeting', details: err?.message }),
+      body: JSON.stringify({ error: 'Failed to join meeting' }),
     };
   }
 };
