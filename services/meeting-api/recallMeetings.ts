@@ -383,13 +383,38 @@ export const getMeetingByCodeHandler: APIGatewayProxyHandlerV2 = async (event) =
 
 /**
  * 会議コード生成（6桁の英数字）
- * 衝突回避のため、ランダム生成
+ * DynamoDB 上で衝突がないことを確認しながらランダム生成
  */
-function generateMeetingCode(): string {
+async function generateMeetingCode(maxRetries: number = 5): Promise<string> {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 類似文字を除外（O/0, I/1）
-  let code = '';
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+
+    // Check DynamoDB (GSI: meetingCode-index) for existing usage of this code
+    const result = await ddb.send(
+      new QueryCommand({
+        TableName: MEETINGS_METADATA_TABLE,
+        IndexName: 'meetingCode-index',
+        KeyConditionExpression: '#meetingCode = :meetingCode',
+        ExpressionAttributeNames: {
+          '#meetingCode': 'meetingCode',
+        },
+        ExpressionAttributeValues: {
+          ':meetingCode': code,
+        },
+        Limit: 1,
+      })
+    );
+
+    if (!result.Items || result.Items.length === 0) {
+      // No collision detected; safe to use this code
+      return code;
+    }
   }
-  return code;
+
+  throw new Error('Failed to generate a unique meeting code after maximum retries');
 }
