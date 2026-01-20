@@ -32,7 +32,7 @@
 ```typescript
 class MeetingOrchestrator {
   constructor(config: MeetingOrchestratorConfig, grasps: Grasp[])
-  async processAsrEvent(ev: AsrEvent, notifier: Notifier, metrics: Metrics): Promise<void>
+  async processTranscriptEvent(ev: TranscriptEvent, notifier: Notifier, metrics: Metrics): Promise<void>
   async processQueuePeriodically(notifier: Notifier, metrics: Metrics): Promise<boolean>
   rebuildGrasps(grasps: Grasp[]): void
   cleanup(): void
@@ -59,7 +59,7 @@ class MeetingOrchestrator {
 class OrchestratorManager {
   constructor(graspsTemplate: Grasp[], config?: OrchestratorManagerConfig)
   getOrCreateOrchestrator(meetingId: string): MeetingOrchestrator
-  async processAsrEvent(ev: AsrEvent, notifier: Notifier, metrics: Metrics): Promise<void>
+  async processTranscriptEvent(ev: TranscriptEvent, notifier: Notifier, metrics: Metrics): Promise<void>
   async processAllQueues(notifier: Notifier, metrics: Metrics): Promise<number>
   cleanupInactiveMeetings(): number
   removeMeeting(meetingId: string): boolean
@@ -80,9 +80,9 @@ ASRイベント (SQS)
     ↓
 worker.ts (processMessages)
     ↓
-OrchestratorManager.processAsrEvent()
+OrchestratorManager.processTranscriptEvent()
     ↓
-MeetingOrchestrator.processAsrEvent()
+MeetingOrchestrator.processTranscriptEvent()
     ↓
 - WindowBuffer に追加
 - Graspキューに追加
@@ -117,7 +117,7 @@ let orchestratorManager: OrchestratorManager;
 const graspTemplates: Grasp[] = [];
 
 // メッセージ処理
-await orchestratorManager.processAsrEvent(ev, notifier, metrics);
+await orchestratorManager.processTranscriptEvent(ev, notifier, metrics);
 ```
 
 ## 利点

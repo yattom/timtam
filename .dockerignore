@@ -1,0 +1,61 @@
+# Node modules (will be reinstalled)
+node_modules
+**/node_modules
+
+# Build outputs (will be rebuilt)
+dist
+**/dist
+build
+**/build
+
+# Test files
+e2e/
+**/*.test.ts
+**/*.spec.ts
+coverage/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Infrastructure code (not needed in container)
+infra/
+
+# Web code (not needed for orchestrator)
+web/
+
+# Environment files
+.env*
+!.env.example
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# CI/CD
+.github
+.gitlab-ci.yml
+
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp
+temp
+*.tmp

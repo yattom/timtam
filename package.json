@@ -22,6 +22,7 @@
     "infra:open:lambda": "aws lambda list-functions --query \"Functions[?starts_with(FunctionName, 'TimtamInfraStack-')].FunctionName\" --output text --profile admin | tr '\\t' '\\n' | xargs -I {} aws lambda delete-function-concurrency --function-name {} --profile admin > /dev/null",
     "infra:open:ecs": "bash -c 'CLUSTER=$(aws cloudformation describe-stack-resources --stack-name TimtamInfraStack --profile admin --query \"StackResources[?ResourceType==\\`AWS::ECS::Cluster\\`].PhysicalResourceId\" --output text) && SERVICE=$(aws ecs list-services --cluster \"$CLUSTER\" --profile admin --query \"serviceArns[0]\" --output text | awk -F/ \"{print \\$NF}\") && aws ecs update-service --cluster \"$CLUSTER\" --service \"$SERVICE\" --desired-count 1 --profile admin > /dev/null'",
     "infra:open:cloudfront": "bash -c 'DIST_ID=$(aws cloudfront list-distributions --profile admin --query \"DistributionList.Items[0].Id\" --output text) && CONFIG_JSON=$(aws cloudfront get-distribution-config --id \"$DIST_ID\" --profile admin) && ETAG=$(echo \"$CONFIG_JSON\" | jq -r \".ETag\") && NEW_CONFIG=$(echo \"$CONFIG_JSON\" | jq \".DistributionConfig.Enabled = true | .DistributionConfig\") && aws cloudfront update-distribution --id \"$DIST_ID\" --if-match \"$ETAG\" --distribution-config \"$NEW_CONFIG\" --profile admin > /dev/null'",
+    "orchestrator:build": "pnpm --filter orchestrator build",
     "web:build": "pnpm --filter timtam-web build",
     "web:deploy": "AWS_PROFILE=admin ./scripts/deploy-web.sh",
     "e2e:test": "cd e2e && pnpm test",

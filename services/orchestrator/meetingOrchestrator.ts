@@ -11,15 +11,7 @@ import {
   Metrics,
 } from './grasp';
 import { Message } from '@aws-sdk/client-sqs';
-
-export type AsrEvent = {
-  meetingId: MeetingId;
-  speakerId?: string;
-  text: string;
-  isFinal: boolean;
-  timestamp?: number; // epoch ms
-  sequenceNumber?: string;
-};
+import { TranscriptEvent } from '@timtam/shared';
 
 export interface MeetingConfig {
   meetingId: MeetingId;
@@ -73,10 +65,10 @@ export class Meeting {
   }
 
   /**
-   * ASRイベントを処理し、waiting Graspsに追加
+   * Transcriptイベントを処理し、waiting Graspsに追加
    */
-  async processAsrEvent(
-    ev: AsrEvent,
+  async processTranscriptEvent(
+    ev: TranscriptEvent,
     notifier: Notifier,
     metrics: Metrics
   ): Promise<void> {
@@ -84,25 +76,23 @@ export class Meeting {
     this.messageCount++;
 
     // final文をウィンドウに追加
-    const speakerPrefix = ev.speakerId ? `[${ev.speakerId}] ` : '';
+    const speakerPrefix = `[${ev.speakerId}] `;
     this.window.push(speakerPrefix + ev.text, ev.timestamp);
 
     // Log speaker information for debugging
-    if (ev.speakerId) {
-      console.log(JSON.stringify({
-        type: 'meeting.transcript.speaker',
-        meetingId: ev.meetingId,
-        speakerId: ev.speakerId,
-        textLength: ev.text.length,
-        ts: Date.now()
-      }));
-    }
+    console.log(JSON.stringify({
+      type: 'meeting.transcript.speaker',
+      meetingId: ev.meetingId,
+      speakerId: ev.speakerId,
+      textLength: ev.text.length,
+      ts: Date.now()
+    }));
 
     // 各 Grasp を待機リストに追加（実行すべきものだけ）
     const now = Date.now();
     for (const grasp of this.grasps) {
       if (grasp.shouldExecute(now)) {
-        this.graspQueue.enqueue(grasp, ev.timestamp || now);
+        this.graspQueue.enqueue(grasp, ev.timestamp);
       }
     }
 

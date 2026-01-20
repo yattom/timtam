@@ -16,8 +16,7 @@ import { parseGraspGroupDefinition, GraspGroupDefinition } from './graspConfigPa
 import { ensureDefaultGraspConfig } from './selfSetup';
 import { Message } from '@aws-sdk/client-sqs';
 import { OrchestratorManager } from './orchestratorManager';
-import { AsrEvent } from './meetingOrchestrator';
-import { MeetingId } from './grasp';
+import { ChimeAdapter, MeetingId, TranscriptEvent } from '@timtam/shared';
 
 // 環境変数
 const TRANSCRIPT_QUEUE_URL = process.env.TRANSCRIPT_QUEUE_URL || '';
@@ -100,88 +99,23 @@ class TriggerLLM implements LLMClient {
   }
 }
 
+// Notifierは@timtam/sharedのChimeAdapterに置き換え
+// ただし、INotifierインターフェースとの互換性を保つため、ラッパークラスを定義
 class Notifier implements INotifier {
-  private ddb: DynamoDBDocumentClient;
+  private adapter: ChimeAdapter;
 
   constructor() {
-    const ddbClient = new DynamoDBClient({});
-    this.ddb = DynamoDBDocumentClient.from(ddbClient);
+    this.adapter = new ChimeAdapter({
+      aiMessagesTable: AI_MESSAGES_TABLE,
+    });
   }
 
   async postChat(meetingId: MeetingId, message: string) {
-    const timestamp = Date.now();
-    const ttl = Math.floor(timestamp / 1000) + 86400; // Expire after 24 hours
-
-    // Write to DynamoDB for web UI polling
-    try {
-      await this.ddb.send(
-        new PutCommand({
-          TableName: AI_MESSAGES_TABLE,
-          Item: {
-            meetingId,
-            timestamp,
-            message,
-            ttl,
-            type: 'ai_intervention',
-          },
-        })
-      );
-      console.log(JSON.stringify({
-        type: 'chat.post',
-        meetingId,
-        message: message.substring(0, 100),
-        timestamp,
-        stored: 'dynamodb'
-      }));
-    } catch (err: any) {
-      console.error('Failed to store AI message', {
-        error: err?.message || err,
-        meetingId,
-      });
-      // Still log to CloudWatch as fallback
-      console.log(JSON.stringify({ type: 'chat.post', meetingId, message, ts: timestamp }));
-    }
+    return this.adapter.postChat(meetingId, message);
   }
 
   async postLlmCallLog(meetingId: MeetingId, prompt: string, rawResponse: string, nodeId: string = 'default') {
-    const timestamp = Date.now();
-    const ttl = Math.floor(timestamp / 1000) + 86400; // Expire after 24 hours
-
-    const logData = {
-      nodeId,
-      prompt,
-      rawResponse,
-      timestamp,
-    };
-
-    try {
-      await this.ddb.send(
-        new PutCommand({
-          TableName: AI_MESSAGES_TABLE,
-          Item: {
-            meetingId,
-            timestamp,
-            message: JSON.stringify(logData),
-            ttl,
-            type: 'llm_call',
-          },
-        })
-      );
-      console.log(JSON.stringify({
-        type: 'llm_call.logged',
-        meetingId,
-        nodeId,
-        promptLength: prompt.length,
-        responseLength: rawResponse.length,
-        timestamp,
-      }));
-    } catch (err: any) {
-      console.error('Failed to store LLM call log', {
-        error: err?.message || err,
-        meetingId,
-        nodeId,
-      });
-    }
+    return this.adapter.postLlmCallLog(meetingId, prompt, rawResponse, nodeId);
   }
 }
 
@@ -275,15 +209,32 @@ async function pollControlOnce() {
 async function processMessages(messages: Message[]) {
   // Process messages in parallel for better throughput
   await Promise.all(messages.map(async (message) => {
-    let ev: AsrEvent | null = null;
+    let ev: TranscriptEvent | null = null;
     try { 
       const parsed = JSON.parse(message.Body || '');
-      // Cast string to MeetingId
-      ev = {
-        ...parsed,
-        meetingId: parsed.meetingId as MeetingId
-      };
-    } catch {}
+      
+      // Validate required fields for TranscriptEvent
+      if (!parsed.meetingId || !parsed.speakerId || typeof parsed.text !== 'string' || 
+          typeof parsed.isFinal !== 'boolean' || typeof parsed.timestamp !== 'number') {
+        console.warn('[Worker] Invalid TranscriptEvent format', { 
+          hasmeeting: !!parsed.meetingId,
+          hasSpeaker: !!parsed.speakerId,
+          hasText: typeof parsed.text === 'string',
+          hasisFinal: typeof parsed.isFinal === 'boolean',
+          hasTimestamp: typeof parsed.timestamp === 'number'
+        });
+        ev = null;
+      } else {
+        // Cast to TranscriptEvent with MeetingId type
+        ev = {
+          ...parsed,
+          meetingId: parsed.meetingId as MeetingId
+        } as TranscriptEvent;
+      }
+    } catch (err) {
+      console.error('[Worker] Failed to parse message', err);
+    }
+    
     if (!ev) {
       // Delete malformed message
       await sqs.send(
@@ -307,7 +258,7 @@ async function processMessages(messages: Message[]) {
     }
 
     // ミーティングIDに基づいて適切なオーケストレーターに処理を委譲
-    await orchestratorManager.processAsrEvent(ev, notifier, metrics);
+    await orchestratorManager.processTranscriptEvent(ev, notifier, metrics);
 
     // 処理完了後にメッセージを削除
     await sqs.send(

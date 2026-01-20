@@ -1,11 +1,18 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import { createHash } from 'crypto';
+import { ChimeAdapter } from '@timtam/shared';
 
 const REGION = process.env.AWS_REGION || 'ap-northeast-1';
 const TRANSCRIPT_QUEUE_URL = process.env.TRANSCRIPT_QUEUE_URL || '';  // ADR-0011: SQS FIFO queue
+const AI_MESSAGES_TABLE = process.env.AI_MESSAGES_TABLE || 'timtam-ai-messages'; // ダミー、使われない
 
 const sqs = new SQSClient({ region: REGION });
+
+// ChimeAdapter for INBOUND processing (Chime format → TranscriptEvent)
+const chimeAdapter = new ChimeAdapter({
+  aiMessagesTable: AI_MESSAGES_TABLE, // Lambda側では使わないが、必須パラメータ
+});
 
 /**
  * POST /meetings/{meetingId}/transcription/events
@@ -86,15 +93,15 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       };
     }
 
-    // Create AsrEvent format compatible with Orchestrator
-    const asrEvent = {
+    // Use ChimeAdapter to convert Chime format → TranscriptEvent (ADR-0014)
+    const transcriptEvent = chimeAdapter.processInboundTranscript({
       meetingId: pathMeetingId,
-      speakerId: externalUserId || attendeeId, // Prefer externalUserId, fallback to attendeeId
+      attendeeId,
+      externalUserId,
       text,
       isFinal,
-      timestamp: timestamp || Date.now(),
-      sequenceNumber: undefined, // Not applicable for client-side events
-    };
+      timestamp,
+    });
 
     // ADR-0011: Write to SQS
     try {
@@ -114,14 +121,14 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       await sqs.send(
         new SendMessageCommand({
           QueueUrl: TRANSCRIPT_QUEUE_URL,
-          MessageBody: JSON.stringify(asrEvent),
+          MessageBody: JSON.stringify(transcriptEvent),
           MessageGroupId: pathMeetingId,  // Ensures ordering per meeting
           MessageDeduplicationId: deduplicationId, // Prevents duplicates within 5-min window
         })
       );
       console.log('[TranscriptionEvents] Written to SQS', {
         meetingId: pathMeetingId,
-        speakerId: asrEvent.speakerId,
+        speakerId: transcriptEvent.speakerId,
         textLength: text.length,
         deduplicationId,
         isFinal,

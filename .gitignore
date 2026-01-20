@@ -3,6 +3,8 @@
 # Generated: 2025-12-10
 # ==============================
 
+/branches/
+
 # OS files
 .DS_Store
 Thumbs.db
@@ -73,7 +75,7 @@ build/
 *.suo
 *.userosscache
 *.sln.docstates
-packages/
+# packages/  # Commented out - conflicts with pnpm workspace packages/
 TestResult*/
 TestResults/
 
