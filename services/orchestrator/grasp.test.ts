@@ -22,7 +22,7 @@ describe('Grasp', () => {
   const createMockLLMClient = (overrides?: Partial<JudgeResult>): LLMClient => ({
     invoke: vi.fn(async (prompt: string, nodeId: string): Promise<JudgeResult> => ({
       result: {
-        should_intervene: false,
+        should_output: false,
         reason: 'test',
         message: 'test message',
       },
@@ -52,7 +52,7 @@ describe('Grasp', () => {
 
   const createTestJudgeResult = (overrides?: Partial<JudgeResult>): JudgeResult => ({
     result: {
-      should_intervene: true,
+      should_output: true,
       reason: 'test',
       message: 'response from LLM',
     },
@@ -269,14 +269,14 @@ describe('Grasp', () => {
     expect(writtenNote.content).toEqual('response from LLM');
   });
 
-  it('should not output when should_intervene is false', async () => {
+  it('should not output when should_output is false', async () => {
     // Setup
     const config = createTestConfig({ outputHandler: 'chat' });
     const mockNotifier = createMockNotifier();
     const notebook = new Notebook('test-meeting-001');
     const judgeResult = createTestJudgeResult({
       result: {
-        should_intervene: false,
+        should_output: false,
         reason: 'no intervention needed',
         message: 'should not be posted',
       },

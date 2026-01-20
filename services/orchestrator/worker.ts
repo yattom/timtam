@@ -78,7 +78,7 @@ class TriggerLLM implements LLMClient {
       const parsed = JSON.parse(txt);
       // Anthropic on Bedrock (messages API) は {content:[{type:'text',text:'...'}]} 形式のことが多い
       // ただし 本PoCではJSONそのものを返すように指示しているため、直接JSONとして解釈できる経路を優先
-      if (parsed && parsed.should_intervene !== undefined) {
+      if (parsed && parsed.should_output !== undefined) {
         result = parsed as TriggerResult;
       } else {
         // モデルにより content に入る場合へのフォールバック

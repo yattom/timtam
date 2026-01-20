@@ -17,7 +17,7 @@ describe('Multi-Meeting Orchestrator', () => {
   const createMockLLMClient = (overrides?: Partial<JudgeResult>): LLMClient => ({
     invoke: vi.fn(async (prompt: string, nodeId: string): Promise<JudgeResult> => ({
       result: {
-        should_intervene: false,
+        should_output: false,
         reason: 'test',
         message: 'test message',
       },
