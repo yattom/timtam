@@ -52,7 +52,7 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
       };
     }
 
-    if (!platform || !VALID_PLATFORMS.includes(platform as MeetingPlatform)) {
+    if (!platform || !(VALID_PLATFORMS as readonly string[]).includes(platform)) {
       return {
         statusCode: 400,
         headers: { 'Content-Type': 'application/json' },
