@@ -4,7 +4,7 @@
 export type MeetingId = string & { readonly __brand: unique symbol };
 
 export type TriggerResult = {
-  should_intervene: boolean;
+  should_output: boolean;
   reason: string;
   message: string;
 };
@@ -367,7 +367,7 @@ export class Grasp {
       notifier: Notifier,
       notebook: Notebook
   ) {
-    if (!response.result || !response.result.should_intervene) {
+    if (!response.result || !response.result.should_output) {
       return;
     }
 
@@ -411,9 +411,21 @@ export class Grasp {
 
     try {
       const prompt = this.buildPrompt(windowBuffer, notebook);
-      const promptWithFormat = '以下の指示に対して、会議への介入が必要か判断して、次のJSON形式だけを厳密に返してください:\n' +
-        '{"should_intervene": true, "reason": "判断理由", "message": "介入のメッセージ"}\n' +
-        '----------\n\n' + prompt;
+      
+      // outputHandler に応じてプロンプトを変える
+      let promptWithFormat: string;
+      if (this.config.outputHandler === 'note') {
+        // ノート用: 記録すべき内容があるか判断
+        promptWithFormat = '以下の指示に対して、記録すべき内容があるか判断して、次のJSON形式だけを厳密に返してください:\n' +
+          '{"should_output": true, "reason": "判断の理由", "message": "記録内容"}\n' +
+          '----------\n\n' + prompt;
+      } else {
+        // チャット用 (chat または both): チャットに発言すべきか判断
+        promptWithFormat = '以下の指示に対して、会議のチャットに発言すべきか判断して、次のJSON形式だけを厳密に返してください:\n' +
+          '{"should_output": true, "reason": "判断の理由", "message": "チャットに投稿するメッセージ"}\n' +
+          '----------\n\n' + prompt;
+      }
+      
       const response = await this.invokeLLM(promptWithFormat, meetingId, notifier);
       await this.reflectResponse(response, meetingId, notifier, notebook);
       await this.recordMetrics(metrics, startTime, asrTimestamp);

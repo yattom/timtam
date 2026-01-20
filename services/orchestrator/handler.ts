@@ -20,7 +20,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     const prompt =
       `以下は会議の直近発話です。プロンプト方針: ${policy}\n` +
       '介入が必要かを判断し、次のJSON形式だけを厳密に返してください:\n' +
-      '{"should_intervene": boolean, "reason": string, "message": string}\n' +
+      '{"should_output": boolean, "reason": string, "message": string}\n' +
       '---\n' + windowText;
 
     const payload: any = {
