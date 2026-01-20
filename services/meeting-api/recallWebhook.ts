@@ -42,7 +42,19 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       };
     }
 
-    const payload = JSON.parse(event.body);
+    let payload: any;
+    try {
+      payload = JSON.parse(event.body);
+    } catch (parseError) {
+      console.error('Failed to parse Recall webhook request body as JSON', {
+        errorMessage: (parseError as Error).message,
+      });
+      return {
+        statusCode: 400,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ok: false, error: 'Invalid JSON in request body' }),
+      };
+    }
     const { event: eventType } = payload;
 
     console.log(JSON.stringify({
