@@ -41,8 +41,18 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
       };
     }
 
-    const { meetingUrl, platform, botName } = JSON.parse(event.body);
+    let parsedBody: any;
+    try {
+      parsedBody = JSON.parse(event.body);
+    } catch {
+      return {
+        statusCode: 400,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'Request body must be valid JSON' }),
+      };
+    }
 
+    const { meetingUrl, platform, botName } = parsedBody;
     // Validate inputs
     if (!meetingUrl || typeof meetingUrl !== 'string') {
       return {
