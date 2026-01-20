@@ -75,15 +75,15 @@ export class OrchestratorManager {
   }
 
   /**
-   * ASRイベントを適切なオーケストレーターに振り分けて処理
+   * Transcriptイベントを適切なオーケストレーターに振り分けて処理
    */
-  async processAsrEvent(
+  async processTranscriptEvent(
     ev: TranscriptEvent,
     notifier: Notifier,
     metrics: Metrics
   ): Promise<void> {
     const meeting = this.getOrCreateMeeting(ev.meetingId);
-    await meeting.processAsrEvent(ev, notifier, metrics);
+    await meeting.processTranscriptEvent(ev, notifier, metrics);
   }
 
   /**

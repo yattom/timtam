@@ -258,7 +258,7 @@ async function processMessages(messages: Message[]) {
     }
 
     // ミーティングIDに基づいて適切なオーケストレーターに処理を委譲
-    await orchestratorManager.processAsrEvent(ev, notifier, metrics);
+    await orchestratorManager.processTranscriptEvent(ev, notifier, metrics);
 
     // 処理完了後にメッセージを削除
     await sqs.send(

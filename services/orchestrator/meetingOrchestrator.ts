@@ -65,9 +65,9 @@ export class Meeting {
   }
 
   /**
-   * ASRイベントを処理し、waiting Graspsに追加
+   * Transcriptイベントを処理し、waiting Graspsに追加
    */
-  async processAsrEvent(
+  async processTranscriptEvent(
     ev: TranscriptEvent,
     notifier: Notifier,
     metrics: Metrics
