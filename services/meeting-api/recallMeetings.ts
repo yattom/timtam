@@ -269,21 +269,31 @@ export const leaveHandler: APIGatewayProxyHandlerV2 = async (event) => {
 
     // Update DynamoDB status
     const now = Date.now();
-    await ddb.send(
-      new UpdateCommand({
-        TableName: MEETINGS_METADATA_TABLE,
-        Key: { meetingId },
-        UpdateExpression: 'SET #status = :status, #endedAt = :endedAt',
-        ExpressionAttributeNames: {
-          '#status': 'status',
-          '#endedAt': 'endedAt',
-        },
-        ExpressionAttributeValues: {
-          ':status': 'ended',
-          ':endedAt': now,
-        },
-      })
-    );
+    try {
+      await ddb.send(
+        new UpdateCommand({
+          TableName: MEETINGS_METADATA_TABLE,
+          Key: { meetingId },
+          UpdateExpression: 'SET #status = :status, #endedAt = :endedAt',
+          ExpressionAttributeNames: {
+            '#status': 'status',
+            '#endedAt': 'endedAt',
+          },
+          ExpressionAttributeValues: {
+            ':status': 'ended',
+            ':endedAt': now,
+          },
+        })
+      );
+    } catch (err: any) {
+      console.error('Failed to update DynamoDB after bot deletion', {
+        meetingId,
+        error: err?.message || err,
+        stack: err?.stack,
+        note: 'Bot was successfully deleted from Recall.ai but DynamoDB update failed. Database is out of sync.',
+      });
+      throw err;
+    }
 
     console.log(JSON.stringify({
       type: 'recall.meeting.left',
