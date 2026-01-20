@@ -16,8 +16,7 @@ import { parseGraspGroupDefinition, GraspGroupDefinition } from './graspConfigPa
 import { ensureDefaultGraspConfig } from './selfSetup';
 import { Message } from '@aws-sdk/client-sqs';
 import { OrchestratorManager } from './orchestratorManager';
-import { AsrEvent } from './meetingOrchestrator';
-import { ChimeAdapter, MeetingId } from '@timtam/shared';
+import { ChimeAdapter, MeetingId, TranscriptEvent } from '@timtam/shared';
 
 // 環境変数
 const TRANSCRIPT_QUEUE_URL = process.env.TRANSCRIPT_QUEUE_URL || '';
@@ -210,7 +209,7 @@ async function pollControlOnce() {
 async function processMessages(messages: Message[]) {
   // Process messages in parallel for better throughput
   await Promise.all(messages.map(async (message) => {
-    let ev: AsrEvent | null = null;
+    let ev: TranscriptEvent | null = null;
     try { 
       const parsed = JSON.parse(message.Body || '');
       // Cast string to MeetingId

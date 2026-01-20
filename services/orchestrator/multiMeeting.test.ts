@@ -9,7 +9,8 @@ import {
   MeetingId,
 } from './grasp';
 import { OrchestratorManager } from './orchestratorManager';
-import { Meeting, AsrEvent } from './meetingOrchestrator';
+import { Meeting } from './meetingOrchestrator';
+import { TranscriptEvent } from '@timtam/shared';
 
 describe('Multi-Meeting Orchestrator', () => {
   // Helper functions for creating test objects
@@ -44,8 +45,9 @@ describe('Multi-Meeting Orchestrator', () => {
     ...overrides,
   });
 
-  const createTestAsrEvent = (meetingId: string, text: string): AsrEvent => ({
+  const createTestAsrEvent = (meetingId: string, text: string): TranscriptEvent => ({
     meetingId: meetingId as MeetingId,
+    speakerId: 'test-speaker',
     text,
     isFinal: true,
     timestamp: Date.now(),
