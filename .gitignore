@@ -3,6 +3,8 @@
 # Generated: 2025-12-10
 # ==============================
 
+/branches/
+
 # OS files
 .DS_Store
 Thumbs.db
