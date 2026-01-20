@@ -1,7 +1,7 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
-import { RecallAPIClient, CreateBotRequest, MeetingPlatform, VALID_PLATFORMS } from '@timtam/shared';
+import { RecallAPIClient, CreateBotRequest, MeetingPlatform, VALID_PLATFORMS, isMeetingPlatform } from '@timtam/shared';
 
 const REGION = process.env.AWS_REGION || 'ap-northeast-1';
 const MEETINGS_METADATA_TABLE = process.env.MEETINGS_METADATA_TABLE || 'timtam-meetings-metadata';
@@ -52,7 +52,7 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
       };
     }
 
-    if (!platform || !(VALID_PLATFORMS as readonly string[]).includes(platform)) {
+    if (!isMeetingPlatform(platform)) {
       return {
         statusCode: 400,
         headers: { 'Content-Type': 'application/json' },

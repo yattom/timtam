@@ -15,6 +15,13 @@ export type MeetingPlatform = 'zoom' | 'google_meet' | 'microsoft_teams' | 'webe
  */
 export const VALID_PLATFORMS: readonly MeetingPlatform[] = ['zoom', 'google_meet', 'microsoft_teams', 'webex'] as const;
 
+/**
+ * 値が有効なMeetingPlatformかどうかを判定する型ガード
+ */
+export function isMeetingPlatform(value: unknown): value is MeetingPlatform {
+  return typeof value === 'string' && VALID_PLATFORMS.includes(value as MeetingPlatform);
+}
+
 export interface RecallAPIConfig {
   /** Recall.ai APIキー */
   apiKey: string;
