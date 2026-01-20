@@ -21,7 +21,7 @@
   },
   "scripts": {
     "start:worker": "node ./dist/worker.js",
-    "build": "tsc -p .",
+    "build": "pnpm --filter @timtam/shared build && tsc -p .",
     "typecheck": "tsc --noEmit --watch",
     "test": "vitest --run",
     "test:watch": "vitest --watch",

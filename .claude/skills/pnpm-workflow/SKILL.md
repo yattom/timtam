@@ -108,7 +108,19 @@ pnpm run web:deploy
 ```
 ビルドしたWebアプリをS3にアップロードしてCloudFrontで配信。
 
-### 5. テスト
+### 5. Orchestratorビルド
+
+#### orchestrator:build - Orchestratorサービスビルド
+```bash
+pnpm run orchestrator:build
+```
+orchestratorサービスをビルド。自動的に依存する`@timtam/shared`パッケージも先にビルドされる。
+
+**注**:
+- shared パッケージに変更があった場合でも、このコマンド一つで両方ビルドされる
+- ビルドが高速なため、毎回 shared を含めてビルドしても問題ない
+
+### 6. テスト
 
 #### test - テスト実行
 ```bash
@@ -120,7 +132,7 @@ orchestratorのテストを実行（Vitest使用）。
 - 現在、テストはorchestratorサービスにのみ存在します
 - `test:watch` と `test:ui` はpackage.jsonに定義されていますが、継続的に実行されるため、Claude Codeでは使用しません（手動実行用）
 
-### 6. その他
+### 7. その他
 
 #### sso:admin - AWS SSO管理者権限取得 ⚠️ **重要**
 ```bash
@@ -207,6 +219,7 @@ pnpm run infra:open
 - 「すべてデプロイして」 → `deploy:all` ⭐ **推奨**
 - 「インフラだけデプロイして」 → `cdk:deploy`
 - 「Webアプリだけデプロイ」 → `web:build` → `web:deploy`
+- 「orchestratorをビルドして」 → `orchestrator:build`
 - 「テストを実行して」 → `test`
 - 「今日の作業は終了」 → `infra:close`
 - 「開発を再開したい」 → `infra:open`
@@ -244,4 +257,6 @@ pnpm run infra:open
 - AWS Profile: `admin`
 - インフラパッケージ: `timtam-infra`
 - Webパッケージ: `timtam-web`
+- Orchestratorサービス: `services/orchestrator`
+- Sharedパッケージ: `packages/shared`
 
