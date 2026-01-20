@@ -19,7 +19,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     const inferenceProfileId: string | undefined = body.inferenceProfileId || DEFAULT_INF_PROFILE_ID || undefined;
     const prompt =
       `以下は会議の直近発話です。プロンプト方針: ${policy}\n` +
-      '介入が必要かを判断し、次のJSON形式だけを厳密に返してください:\n' +
+      '出力が必要かを判断し、次のJSON形式だけを厳密に返してください:\n' +
       '{"should_output": boolean, "reason": string, "message": string}\n' +
       '---\n' + windowText;
 
