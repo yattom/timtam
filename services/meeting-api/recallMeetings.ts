@@ -291,6 +291,7 @@ export const leaveHandler: APIGatewayProxyHandlerV2 = async (event) => {
         error: err?.message || err,
         stack: err?.stack,
         note: 'Bot was successfully deleted from Recall.ai but DynamoDB update failed. Database is out of sync.',
+        recovery: 'Manual intervention may be required to update the meeting status to "ended" in DynamoDB.',
       });
       throw err;
     }
