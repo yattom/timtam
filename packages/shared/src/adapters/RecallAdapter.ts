@@ -70,12 +70,23 @@ export class RecallAdapter implements MeetingServiceAdapter {
     // words配列からテキストを結合
     const text = words.map((w: any) => w.text).join(' ');
 
+    // 発話時刻はwords配列のstart_time/end_timeを優先的に利用し、なければ現在時刻を使用
+    const firstWord = words[0];
+    const lastWord = words[words.length - 1];
+    let timestampFromWords: number | undefined;
+
+    if (firstWord && typeof firstWord.start_time === 'number') {
+      timestampFromWords = firstWord.start_time;
+    } else if (lastWord && typeof lastWord.end_time === 'number') {
+      timestampFromWords = lastWord.end_time;
+    }
+
     return {
       meetingId: bot_id as MeetingId,
       speakerId: speaker.participant_id || speaker.name || 'unknown',
       text,
       isFinal: !is_partial, // Recallはis_partialなので反転
-      timestamp: Date.now(), // Recallはtimestampを提供しないので現在時刻
+      timestamp: timestampFromWords ?? Date.now(), // words由来のタイムスタンプがなければ現在時刻
       sequenceNumber: sequence_number,
     };
   }
