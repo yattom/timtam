@@ -17,8 +17,7 @@ import { ensureDefaultGraspConfig } from './selfSetup';
 import { Message } from '@aws-sdk/client-sqs';
 import { OrchestratorManager } from './orchestratorManager';
 import { AsrEvent } from './meetingOrchestrator';
-import { MeetingId } from './grasp';
-import { ChimeAdapter } from '@timtam/shared';
+import { ChimeAdapter, MeetingId } from '@timtam/shared';
 
 // 環境変数
 const TRANSCRIPT_QUEUE_URL = process.env.TRANSCRIPT_QUEUE_URL || '';

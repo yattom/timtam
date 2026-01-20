@@ -1,7 +1,8 @@
 // Grasp-related types and classes
+import { MeetingId } from '@timtam/shared';
 
-// MeetingId type for type safety
-export type MeetingId = string & { readonly __brand: unique symbol };
+// Re-export MeetingId for backwards compatibility
+export type { MeetingId };
 
 export type TriggerResult = {
   should_intervene: boolean;
