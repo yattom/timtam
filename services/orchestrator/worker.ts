@@ -212,12 +212,29 @@ async function processMessages(messages: Message[]) {
     let ev: TranscriptEvent | null = null;
     try { 
       const parsed = JSON.parse(message.Body || '');
-      // Cast string to MeetingId
-      ev = {
-        ...parsed,
-        meetingId: parsed.meetingId as MeetingId
-      };
-    } catch {}
+      
+      // Validate required fields for TranscriptEvent
+      if (!parsed.meetingId || !parsed.speakerId || typeof parsed.text !== 'string' || 
+          typeof parsed.isFinal !== 'boolean' || typeof parsed.timestamp !== 'number') {
+        console.warn('[Worker] Invalid TranscriptEvent format', { 
+          hasmeeting: !!parsed.meetingId,
+          hasSpeaker: !!parsed.speakerId,
+          hasText: typeof parsed.text === 'string',
+          hasisFinal: typeof parsed.isFinal === 'boolean',
+          hasTimestamp: typeof parsed.timestamp === 'number'
+        });
+        ev = null;
+      } else {
+        // Cast to TranscriptEvent with MeetingId type
+        ev = {
+          ...parsed,
+          meetingId: parsed.meetingId as MeetingId
+        } as TranscriptEvent;
+      }
+    } catch (err) {
+      console.error('[Worker] Failed to parse message', err);
+    }
+    
     if (!ev) {
       // Delete malformed message
       await sqs.send(
