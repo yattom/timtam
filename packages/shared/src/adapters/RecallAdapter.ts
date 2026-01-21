@@ -99,7 +99,9 @@ export class RecallAdapter implements MeetingServiceAdapter {
       throw new Error('Invalid Recall.ai transcript payload');
     }
 
-    // words配列からテキストを結合（日本語なのでスペースなし）
+    // words配列からテキストを結合
+    // NOTE: Recallは現在language_code='ja'（日本語）のみを想定しているため、単語間にスペースを挿入しない。
+    //       英語などスペース区切りの言語をサポートする場合は、ここを言語別に処理（例: join(' ')）するよう拡張すること。
     const text = words.map((w: any) => w.text).join('');
 
     // 発話時刻はwords配列のstart_timestamp/end_timestampを利用
