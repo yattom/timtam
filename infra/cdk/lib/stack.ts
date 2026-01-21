@@ -456,19 +456,82 @@ export class TimtamInfraStack extends Stack {
     });
 
     // CloudFront distribution (SPA fallback) with Origin Access Identity
+    // ADR 0015: Multiple UIs with different URL paths
     const webOai = new cloudfront.OriginAccessIdentity(this, 'WebOAI');
     siteBucket.grantRead(webOai);
 
+    const s3Origin = new origins.S3Origin(siteBucket, { originAccessIdentity: webOai });
+
     const webDistribution = new cloudfront.Distribution(this, 'WebDistribution', {
       defaultRootObject: 'index.html',
+      // Default behavior: Facilitator UI (/)
       defaultBehavior: {
-        origin: new origins.S3Origin(siteBucket, { originAccessIdentity: webOai }),
+        origin: s3Origin,
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+        functionAssociations: [{
+          function: new cloudfront.Function(this, 'FacilitatorRewrite', {
+            code: cloudfront.FunctionCode.fromInline(`
+              function handler(event) {
+                var request = event.request;
+                var uri = request.uri;
+
+                // Facilitator UI (root path)
+                // If requesting /, serve facilitator/index.html
+                if (uri === '/' || uri === '') {
+                  request.uri = '/facilitator/index.html';
+                }
+                // If requesting /something without extension, serve facilitator/index.html for SPA routing
+                else if (!uri.includes('.') && !uri.startsWith('/experiment') && !uri.includes('/attendee')) {
+                  request.uri = '/facilitator/index.html';
+                }
+                // If requesting /_next/... (Next.js assets), prepend /facilitator
+                else if (uri.startsWith('/_next/')) {
+                  request.uri = '/facilitator' + uri;
+                }
+
+                return request;
+              }
+            `),
+          }),
+          eventType: cloudfront.FunctionEventType.VIEWER_REQUEST,
+        }],
+      },
+      additionalBehaviors: {
+        // Experimental Chime WebUI (/experiment/*)
+        '/experiment/*': {
+          origin: s3Origin,
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+          functionAssociations: [{
+            function: new cloudfront.Function(this, 'ExperimentRewrite', {
+              code: cloudfront.FunctionCode.fromInline(`
+                function handler(event) {
+                  var request = event.request;
+                  var uri = request.uri;
+
+                  // Remove /experiment prefix and serve from timtam-web/
+                  if (uri.startsWith('/experiment')) {
+                    uri = uri.substring(11); // Remove '/experiment'
+                    if (uri === '' || uri === '/') {
+                      request.uri = '/timtam-web/index.html';
+                    } else {
+                      request.uri = '/timtam-web' + uri;
+                    }
+                  }
+
+                  return request;
+                }
+              `),
+            }),
+            eventType: cloudfront.FunctionEventType.VIEWER_REQUEST,
+          }],
+        },
       },
       errorResponses: [
-        { httpStatus: 403, responsePagePath: '/index.html', responseHttpStatus: 200 },
-        { httpStatus: 404, responsePagePath: '/index.html', responseHttpStatus: 200 },
+        // Facilitator UI SPA fallback
+        { httpStatus: 403, responsePagePath: '/facilitator/index.html', responseHttpStatus: 200 },
+        { httpStatus: 404, responsePagePath: '/facilitator/index.html', responseHttpStatus: 200 },
       ],
     });
 
