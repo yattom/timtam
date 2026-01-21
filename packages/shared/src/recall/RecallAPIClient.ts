@@ -57,7 +57,10 @@ export interface CreateBotRequest {
       /** 文字起こしプロバイダー */
       provider?: {
         /** Recall.ai Streaming（リアルタイム文字起こし） */
-        recallai_streaming?: Record<string, never>;
+        recallai_streaming?: {
+          /** 言語コード (e.g., "ja" for Japanese, "auto" for auto-detection) */
+          language_code?: string;
+        };
       };
     };
     /** リアルタイムWebhookエンドポイント */

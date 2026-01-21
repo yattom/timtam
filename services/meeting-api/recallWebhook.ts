@@ -35,10 +35,11 @@ const recallAdapter = new RecallAdapter({
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   try {
     if (!event.body) {
+      console.error('Recall webhook received empty body');
       return {
-        statusCode: 400,
+        statusCode: 200,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ok: false, error: 'Request body is required' }),
+        body: JSON.stringify({ ok: true }),
       };
     }
 
@@ -50,9 +51,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         errorMessage: (parseError as Error).message,
       });
       return {
-        statusCode: 400,
+        statusCode: 200,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ok: false, error: 'Invalid JSON in request body' }),
+        body: JSON.stringify({ ok: true }),
       };
     }
     const { event: eventType } = payload;
@@ -71,7 +72,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     // }
 
     switch (eventType) {
-      case 'transcript':
+      case 'transcript.data':
         return await handleTranscriptEvent(payload);
 
       case 'participant.join':
@@ -116,9 +117,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     });
 
     return {
-      statusCode: 500,
+      statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ok: false, error: 'Internal server error' }),
+      body: JSON.stringify({ ok: true }),
     };
   }
 };
@@ -127,25 +128,33 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
  * リアルタイム文字起こしイベント処理
  */
 async function handleTranscriptEvent(payload: any): Promise<any> {
-  const { bot_id, speaker, words, is_partial, sequence_number } = payload;
+  const bot_id = payload.data?.bot?.id;
+  const words = payload.data?.data?.words;
+  const participant = payload.data?.data?.participant;
 
-  // Partial resultsはスキップ（final onlyをSQSに送信）
-  // NOTE: ChimeAdapter同様、最終結果のみを処理して重複を避ける
-  if (is_partial) {
+  if (!bot_id || !words || !participant) {
+    console.error('Missing required fields in Recall.ai webhook payload', {
+      hasBotId: !!bot_id,
+      hasWords: !!words,
+      hasParticipant: !!participant,
+    });
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ok: true, message: 'Partial result skipped' }),
+      body: JSON.stringify({ ok: true }),
     };
   }
 
-  // RecallAdapterでRecall形式 → TranscriptEventに変換
   const transcriptEvent = recallAdapter.processInboundTranscript(payload);
 
-  // MessageDeduplicationIdを生成（Recall.aiはsequence_numberを提供）
-  // SQS FIFO重複排除のため、botId + sequence_numberをハッシュ化
+  // MessageDeduplicationIdを生成
+  // transcript.idとparticipant.idとwords[0]のtimestampを組み合わせてユニークなIDを作成
+  const transcript_id = payload.data?.transcript?.id || 'unknown';
+  const participant_id = participant.id || 'unknown';
+  const first_word_timestamp = words[0]?.start_timestamp?.relative || Date.now();
+
   const deduplicationId = createHash('sha256')
-    .update(`${bot_id}:${sequence_number}`)
+    .update(`${bot_id}:${transcript_id}:${participant_id}:${first_word_timestamp}`)
     .digest('hex')
     .substring(0, 128); // AWS制限: 最大128文字
 
@@ -165,9 +174,9 @@ async function handleTranscriptEvent(payload: any): Promise<any> {
   console.log(JSON.stringify({
     type: 'recall.transcript.forwarded',
     botId: bot_id,
-    speakerId: speaker?.participant_id || speaker?.name,
+    speakerId: participant?.id || participant?.name,
     textLength: words?.length || 0,
-    sequenceNumber: sequence_number,
+    transcriptId: transcript_id,
     deduplicationId,
   }));
 

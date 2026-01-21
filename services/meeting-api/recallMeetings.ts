@@ -97,7 +97,9 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
       recording_config: {
         transcript: {
           provider: {
-            recallai_streaming: {},
+            recallai_streaming: {
+              language_code: 'ja', // Japanese transcription
+            },
           },
         },
         realtime_endpoints: [
