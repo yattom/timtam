@@ -42,11 +42,19 @@ export class TimtamInfraStack extends Stack {
     });
 
     // === DynamoDB table for meeting metadata (participants, start/end timestamps) ===
+    // ADR 0015: Phase 2でGSI追加（Recall.ai統合）
     const meetingsMetadataTable = new dynamodb.Table(this, 'MeetingsMetadataTable', {
       tableName: 'timtam-meetings-metadata',
       partitionKey: { name: 'meetingId', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: this.node.tryGetContext('keepTables') ? undefined : RemovalPolicy.DESTROY,
+    });
+
+    // GSI for Attendee access by meetingCode (ADR 0015)
+    meetingsMetadataTable.addGlobalSecondaryIndex({
+      indexName: 'meetingCode-index',
+      partitionKey: { name: 'meetingCode', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
     });
 
     // === DynamoDB table for Orchestrator Configuration ===
@@ -150,6 +158,67 @@ export class TimtamInfraStack extends Stack {
       },
     });
 
+    // === Phase 2: Recall.ai Lambda Functions (ADR 0014, ADR 0015) ===
+    // Recall.ai Webhook handler
+    const recallWebhookFn = new NodejsFunction(this, 'RecallWebhookFn', {
+      entry: '../../services/meeting-api/recallWebhook.ts',
+      timeout: Duration.seconds(10),
+      runtime: lambda.Runtime.NODEJS_20_X,
+      environment: {
+        TRANSCRIPT_QUEUE_URL: transcriptQueue.queueUrl,
+        AI_MESSAGES_TABLE: aiMessagesTable.tableName,
+        RECALL_API_KEY: process.env.RECALL_API_KEY || '', // TODO: Secrets Managerから取得
+      },
+    });
+
+    // Recall.ai Meeting Join handler
+    const recallJoinMeetingFn = new NodejsFunction(this, 'RecallJoinMeetingFn', {
+      entry: '../../services/meeting-api/recallMeetings.ts',
+      handler: 'joinHandler',
+      timeout: Duration.seconds(15),
+      runtime: lambda.Runtime.NODEJS_20_X,
+      environment: {
+        MEETINGS_METADATA_TABLE: meetingsMetadataTable.tableName,
+        RECALL_API_KEY: process.env.RECALL_API_KEY || '', // TODO: Secrets Managerから取得
+        RECALL_WEBHOOK_URL: '', // TODO: API Gateway URLを設定（デプロイ後）
+      },
+    });
+
+    // Recall.ai Meeting Get handler
+    const recallGetMeetingFn = new NodejsFunction(this, 'RecallGetMeetingFn', {
+      entry: '../../services/meeting-api/recallMeetings.ts',
+      handler: 'getHandler',
+      timeout: Duration.seconds(10),
+      runtime: lambda.Runtime.NODEJS_20_X,
+      environment: {
+        MEETINGS_METADATA_TABLE: meetingsMetadataTable.tableName,
+        RECALL_API_KEY: process.env.RECALL_API_KEY || '',
+      },
+    });
+
+    // Recall.ai Meeting Leave handler
+    const recallLeaveMeetingFn = new NodejsFunction(this, 'RecallLeaveMeetingFn', {
+      entry: '../../services/meeting-api/recallMeetings.ts',
+      handler: 'leaveHandler',
+      timeout: Duration.seconds(15),
+      runtime: lambda.Runtime.NODEJS_20_X,
+      environment: {
+        MEETINGS_METADATA_TABLE: meetingsMetadataTable.tableName,
+        RECALL_API_KEY: process.env.RECALL_API_KEY || '',
+      },
+    });
+
+    // Attendee: Get Meeting by Code handler
+    const attendeeGetMeetingByCodeFn = new NodejsFunction(this, 'AttendeeGetMeetingByCodeFn', {
+      entry: '../../services/meeting-api/recallMeetings.ts',
+      handler: 'getMeetingByCodeHandler',
+      timeout: Duration.seconds(10),
+      runtime: lambda.Runtime.NODEJS_20_X,
+      environment: {
+        MEETINGS_METADATA_TABLE: meetingsMetadataTable.tableName,
+      },
+    });
+
     // 必要最小のIAM権限を付与（PoCのためワイルドカード。後でリソース制限へ）
     const meetingPolicies = new iam.PolicyStatement({
       actions: [
@@ -170,6 +239,13 @@ export class TimtamInfraStack extends Stack {
 
     // Grant SQS write permission to transcriptionEvents Lambda (ADR-0011)
     transcriptQueue.grantSendMessages(transcriptionEventsFn);
+
+    // Phase 2: Grant permissions for Recall.ai Lambda functions
+    transcriptQueue.grantSendMessages(recallWebhookFn);
+    meetingsMetadataTable.grantReadWriteData(recallJoinMeetingFn);
+    meetingsMetadataTable.grantReadData(recallGetMeetingFn);
+    meetingsMetadataTable.grantReadWriteData(recallLeaveMeetingFn);
+    meetingsMetadataTable.grantReadData(attendeeGetMeetingByCodeFn);
 
     // Ensure the Chime transcription service-linked role exists in this account
     // Required for Amazon Chime SDK live transcription with Amazon Transcribe
@@ -530,6 +606,82 @@ export class TimtamInfraStack extends Stack {
     });
     transcriptionEventsRoute.addDependency(transcriptionEventsInt);
 
+    // === Phase 2: Recall.ai API Routes (ADR 0014, ADR 0015) ===
+    // Recall.ai Webhook
+    const recallWebhookInt = new CfnIntegration(this, 'RecallWebhookIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(recallWebhookFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const recallWebhookRoute = new CfnRoute(this, 'RecallWebhookRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'POST /recall/webhook',
+      target: `integrations/${recallWebhookInt.ref}`,
+    });
+    recallWebhookRoute.addDependency(recallWebhookInt);
+
+    // Recall.ai Join Meeting
+    const recallJoinMeetingInt = new CfnIntegration(this, 'RecallJoinMeetingIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(recallJoinMeetingFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const recallJoinMeetingRoute = new CfnRoute(this, 'RecallJoinMeetingRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'POST /recall/meetings/join',
+      target: `integrations/${recallJoinMeetingInt.ref}`,
+    });
+    recallJoinMeetingRoute.addDependency(recallJoinMeetingInt);
+
+    // Recall.ai Get Meeting
+    const recallGetMeetingInt = new CfnIntegration(this, 'RecallGetMeetingIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(recallGetMeetingFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const recallGetMeetingRoute = new CfnRoute(this, 'RecallGetMeetingRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'GET /recall/meetings/{meetingId}',
+      target: `integrations/${recallGetMeetingInt.ref}`,
+    });
+    recallGetMeetingRoute.addDependency(recallGetMeetingInt);
+
+    // Recall.ai Leave Meeting
+    const recallLeaveMeetingInt = new CfnIntegration(this, 'RecallLeaveMeetingIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(recallLeaveMeetingFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const recallLeaveMeetingRoute = new CfnRoute(this, 'RecallLeaveMeetingRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'DELETE /recall/meetings/{meetingId}',
+      target: `integrations/${recallLeaveMeetingInt.ref}`,
+    });
+    recallLeaveMeetingRoute.addDependency(recallLeaveMeetingInt);
+
+    // Attendee: Get Meeting by Code
+    const attendeeGetMeetingByCodeInt = new CfnIntegration(this, 'AttendeeGetMeetingByCodeIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(attendeeGetMeetingByCodeFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const attendeeGetMeetingByCodeRoute = new CfnRoute(this, 'AttendeeGetMeetingByCodeRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'GET /attendee/meetings/{code}',
+      target: `integrations/${attendeeGetMeetingByCodeInt.ref}`,
+    });
+    attendeeGetMeetingByCodeRoute.addDependency(attendeeGetMeetingByCodeInt);
+
     // Allow API Gateway to invoke these Lambdas
     const sourceArn = `arn:aws:execute-api:${this.region}:${this.account}:${httpApi.ref}/*/*/*`;
     [
@@ -540,6 +692,12 @@ export class TimtamInfraStack extends Stack {
       transcriptionEventsFn,
       upsertParticipantFn,
       getParticipantsFn,
+      // Phase 2: Recall.ai Lambda functions
+      recallWebhookFn,
+      recallJoinMeetingFn,
+      recallGetMeetingFn,
+      recallLeaveMeetingFn,
+      attendeeGetMeetingByCodeFn,
     ].forEach((fn, i) => {
       fn.addPermission(`InvokeByHttpApi${i}`, {
         principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
