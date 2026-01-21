@@ -84,6 +84,16 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
       };
     }
 
+    // Validate RECALL_API_KEY
+    if (!RECALL_API_KEY) {
+      console.error('RECALL_API_KEY is not set');
+      return {
+        statusCode: 500,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'Server configuration error: RECALL_API_KEY not set' }),
+      };
+    }
+
     // Create Recall.ai bot
     const createBotRequest: CreateBotRequest = {
       meeting_url: meetingUrl,
