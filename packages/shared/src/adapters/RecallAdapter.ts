@@ -58,52 +58,71 @@ export class RecallAdapter implements MeetingServiceAdapter {
   /**
    * Recall.ai Webhook → TranscriptEvent
    *
-   * Recall形式:
+   * Recall形式 (実際のWebhook構造):
    * {
-   *   bot_id: string;
-   *   speaker: { participant_id: string, name?: string };
-   *   words: Array<{ text: string, start_time: number, end_time: number }>;
-   *   is_partial: boolean;
-   *   sequence_number: number;
+   *   event: "transcript.data",
+   *   data: {
+   *     bot: { id: string, metadata: {} },
+   *     data: {
+   *       words: Array<{
+   *         text: string,
+   *         start_timestamp: { relative: number, absolute: string },
+   *         end_timestamp: { relative: number, absolute: string }
+   *       }>,
+   *       participant: { id: number, name: string, is_host: boolean, platform: string }
+   *     },
+   *     transcript: { id: string, metadata: {} },
+   *     realtime_endpoint: { id: string, metadata: {} },
+   *     recording: { id: string, metadata: {} }
+   *   }
    * }
    *
    * @param payload - Recall.ai Webhookペイロード
    * @returns TranscriptEvent
    */
   processInboundTranscript(payload: any): TranscriptEvent {
-    const {
-      bot_id,
-      speaker,
-      words,
-      is_partial,
-      sequence_number,
-    } = payload;
+    const bot_id = payload.data?.bot?.id;
+    const words = payload.data?.data?.words;
+    const participant = payload.data?.data?.participant;
+    const transcript_id = payload.data?.transcript?.id;
 
-    if (!bot_id || !speaker || !Array.isArray(words)) {
+    if (!bot_id || !participant || !Array.isArray(words)) {
+      console.error('RecallAdapter: Invalid payload structure', {
+        hasData: !!payload.data,
+        hasBot: !!payload.data?.bot,
+        hasBotId: !!bot_id,
+        hasDataData: !!payload.data?.data,
+        hasWords: !!words,
+        isWordsArray: Array.isArray(words),
+        hasParticipant: !!participant,
+      });
       throw new Error('Invalid Recall.ai transcript payload');
     }
 
     // words配列からテキストを結合
-    const text = words.map((w: any) => w.text).join(' ');
+    // NOTE: Recallは現在language_code='ja'（日本語）のみを想定しているため、単語間にスペースを挿入しない。
+    //       英語などスペース区切りの言語をサポートする場合は、ここを言語別に処理（例: join(' ')）するよう拡張すること。
+    const text = words.map((w: any) => w.text).join('');
 
-    // 発話時刻はwords配列のstart_time/end_timeを優先的に利用し、なければ現在時刻を使用
+    // 発話時刻はwords配列のstart_timestamp/end_timestampを利用
     const firstWord = words[0];
     const lastWord = words[words.length - 1];
     let timestampFromWords: number | undefined;
 
-    if (firstWord && typeof firstWord.start_time === 'number') {
-      timestampFromWords = firstWord.start_time;
-    } else if (lastWord && typeof lastWord.end_time === 'number') {
-      timestampFromWords = lastWord.end_time;
+    // start_timestamp.absoluteをミリ秒のタイムスタンプに変換
+    if (firstWord && firstWord.start_timestamp?.absolute) {
+      timestampFromWords = new Date(firstWord.start_timestamp.absolute).getTime();
+    } else if (lastWord && lastWord.end_timestamp?.absolute) {
+      timestampFromWords = new Date(lastWord.end_timestamp.absolute).getTime();
     }
 
     return {
       meetingId: bot_id as MeetingId,
-      speakerId: speaker.participant_id || speaker.name || 'unknown',
+      speakerId: participant.id?.toString() || participant.name || 'unknown',
       text,
-      isFinal: !is_partial, // Recallはis_partialなので反転
-      timestamp: timestampFromWords ?? Date.now(), // words由来のタイムスタンプがなければ現在時刻
-      sequenceNumber: sequence_number,
+      isFinal: true, // transcript.dataイベントは常に最終結果（partialは別イベント）
+      timestamp: timestampFromWords ?? Date.now(),
+      sequenceNumber: transcript_id, // transcript.idをシーケンス番号として使用
     };
   }
 

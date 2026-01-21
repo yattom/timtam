@@ -9,7 +9,11 @@ const RECALL_API_KEY = process.env.RECALL_API_KEY || '';
 const RECALL_WEBHOOK_URL = process.env.RECALL_WEBHOOK_URL || ''; // e.g., https://api.timtam.example.com/recall/webhook
 
 const ddbClient = new DynamoDBClient({ region: REGION });
-const ddb = DynamoDBDocumentClient.from(ddbClient);
+const ddb = DynamoDBDocumentClient.from(ddbClient, {
+  marshallOptions: {
+    removeUndefinedValues: true, // Remove undefined values from items
+  },
+});
 const recallClient = new RecallAPIClient({ apiKey: RECALL_API_KEY });
 
 /**
@@ -70,30 +74,58 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
       };
     }
 
+    // Validate RECALL_WEBHOOK_URL
+    if (!RECALL_WEBHOOK_URL) {
+      console.error('RECALL_WEBHOOK_URL is not set');
+      return {
+        statusCode: 500,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'Server configuration error: RECALL_WEBHOOK_URL not set' }),
+      };
+    }
+
+    // Validate RECALL_API_KEY
+    if (!RECALL_API_KEY) {
+      console.error('RECALL_API_KEY is not set');
+      return {
+        statusCode: 500,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'Server configuration error: RECALL_API_KEY not set' }),
+      };
+    }
+
     // Create Recall.ai bot
     const createBotRequest: CreateBotRequest = {
       meeting_url: meetingUrl,
       bot_name: botName || 'Timtam AI',
-      transcription_options: {
-        provider: 'recall',
-        realtime: true,
-        partial_results: true, // Webhook側でis_partial=trueをフィルタリング
-      },
       chat: {
         on_bot_join: {
           send_to: 'everyone',
           message: 'AI facilitator has joined the meeting.',
         },
       },
-      real_time_transcription: {
-        destination_url: RECALL_WEBHOOK_URL,
+      recording_config: {
+        transcript: {
+          provider: {
+            recallai_streaming: {
+              language_code: 'ja', // Japanese transcription
+            },
+          },
+        },
+        realtime_endpoints: [
+          {
+            type: 'webhook',
+            url: RECALL_WEBHOOK_URL,
+            events: ['transcript.data'],
+          },
+        ],
       },
     };
 
     const bot = await recallClient.createBot(createBotRequest);
 
     // Generate meeting code (6桁の英数字)
-    const meetingCode = generateMeetingCode();
+    const meetingCode = await generateMeetingCode();
 
     // Save to DynamoDB
     const now = Date.now();

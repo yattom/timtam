@@ -32,6 +32,7 @@ export interface RecallAPIConfig {
 
 /**
  * ボット作成リクエスト
+ * 公式ドキュメント: https://docs.recall.ai/docs/bot-real-time-transcription
  */
 export interface CreateBotRequest {
   /** Zoom/Meet/TeamsのURL */
@@ -39,18 +40,6 @@ export interface CreateBotRequest {
 
   /** ボット名（会議に表示される名前） */
   bot_name?: string;
-
-  /** 文字起こしオプション */
-  transcription_options?: {
-    /** 文字起こしプロバイダー（デフォルト: 'recall'） */
-    provider?: 'recall' | 'assembly_ai' | 'deepgram';
-
-    /** リアルタイム配信を有効化 */
-    realtime?: boolean;
-
-    /** 部分結果を有効化（streaming） */
-    partial_results?: boolean;
-  };
 
   /** チャット設定 */
   chat?: {
@@ -61,10 +50,28 @@ export interface CreateBotRequest {
     };
   };
 
-  /** Webhookエンドポイント設定 */
-  real_time_transcription?: {
-    /** Webhook配信先URL */
-    destination_url: string;
+  /** 録音設定（リアルタイム文字起こし含む） */
+  recording_config?: {
+    /** 文字起こし設定 */
+    transcript?: {
+      /** 文字起こしプロバイダー */
+      provider?: {
+        /** Recall.ai Streaming（リアルタイム文字起こし） */
+        recallai_streaming?: {
+          /** 言語コード (e.g., "ja" for Japanese, "auto" for auto-detection) */
+          language_code?: string;
+        };
+      };
+    };
+    /** リアルタイムWebhookエンドポイント */
+    realtime_endpoints?: Array<{
+      /** エンドポイントタイプ */
+      type: 'webhook';
+      /** Webhook URL */
+      url: string;
+      /** イベントタイプ */
+      events: Array<'transcript.data' | 'transcript.partial_data'>;
+    }>;
   };
 }
 
