@@ -180,7 +180,7 @@ export class TimtamInfraStack extends Stack {
       environment: {
         MEETINGS_METADATA_TABLE: meetingsMetadataTable.tableName,
         RECALL_API_KEY: process.env.RECALL_API_KEY || '', // TODO: Secrets Managerから取得
-        RECALL_WEBHOOK_URL: '', // TODO: API Gateway URLを設定（デプロイ後）
+        RECALL_WEBHOOK_URL: process.env.RECALL_WEBHOOK_URL || '',
       },
     });
 
