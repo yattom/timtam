@@ -140,7 +140,7 @@ export class RecallAPIClient {
       throw new Error(`Recall.ai createBot failed: ${response.status} ${errorText}`);
     }
 
-    return await response.json();
+    return await response.json() as Bot;
   }
 
   /**
@@ -164,7 +164,7 @@ export class RecallAPIClient {
       throw new Error(`Recall.ai getBot failed: ${response.status} ${errorText}`);
     }
 
-    return await response.json();
+    return await response.json() as Bot;
   }
 
   /**
@@ -241,6 +241,6 @@ export class RecallAPIClient {
       throw new Error(`Recall.ai listBots failed: ${response.status} ${errorText}`);
     }
 
-    return await response.json();
+    return await response.json() as { results: Bot[] };
   }
 }

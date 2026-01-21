@@ -643,7 +643,7 @@ export class TimtamInfraStack extends Stack {
       integrationType: 'AWS_PROXY',
       integrationUri: lambdaIntegrationUri(recallGetMeetingFn),
       payloadFormatVersion: '2.0',
-      integrationMethod: 'GET',
+      integrationMethod: 'POST',
     });
     const recallGetMeetingRoute = new CfnRoute(this, 'RecallGetMeetingRoute', {
       apiId: httpApi.ref,
@@ -658,7 +658,7 @@ export class TimtamInfraStack extends Stack {
       integrationType: 'AWS_PROXY',
       integrationUri: lambdaIntegrationUri(recallLeaveMeetingFn),
       payloadFormatVersion: '2.0',
-      integrationMethod: 'DELETE',
+      integrationMethod: 'POST',
     });
     const recallLeaveMeetingRoute = new CfnRoute(this, 'RecallLeaveMeetingRoute', {
       apiId: httpApi.ref,
@@ -673,7 +673,7 @@ export class TimtamInfraStack extends Stack {
       integrationType: 'AWS_PROXY',
       integrationUri: lambdaIntegrationUri(attendeeGetMeetingByCodeFn),
       payloadFormatVersion: '2.0',
-      integrationMethod: 'GET',
+      integrationMethod: 'POST',
     });
     const attendeeGetMeetingByCodeRoute = new CfnRoute(this, 'AttendeeGetMeetingByCodeRoute', {
       apiId: httpApi.ref,
