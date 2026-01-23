@@ -293,9 +293,19 @@ export const leaveHandler: APIGatewayProxyHandlerV2 = async (event) => {
       };
     }
 
-    // Delete Recall.ai bot
+    // Remove Recall.ai bot from call
     if (result.Item.platform === 'recall' && result.Item.recallBot?.botId) {
-      await recallClient.deleteBot(result.Item.recallBot.botId);
+      try {
+        await recallClient.leaveCall(result.Item.recallBot.botId);
+      } catch (err: any) {
+        // If leaveCall fails, the bot might not be in a meeting yet - try delete instead
+        if (err?.message?.includes('405') || err?.message?.includes('400')) {
+          console.warn('leaveCall failed, attempting deleteBot', { botId: result.Item.recallBot.botId });
+          await recallClient.deleteBot(result.Item.recallBot.botId);
+        } else {
+          throw err;
+        }
+      }
     }
 
     // Update DynamoDB status
