@@ -55,12 +55,12 @@ export default function ConfigPage() {
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://your-api-gateway.amazonaws.com";
-      const response = await fetch(`${apiUrl}/config/grasp`, {
+      const response = await fetch(`${apiUrl}/grasp/config`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ config }),
+        body: JSON.stringify({ yaml: config }),
       });
 
       if (!response.ok) {
