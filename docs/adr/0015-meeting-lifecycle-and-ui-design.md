@@ -112,6 +112,69 @@ ADR 0014でランタイムアーキテクチャを定義したが、会議ライ
 - ✅ 拡張性（新プラットフォーム追加容易）
 - ✅ PoCフェーズの柔軟性
 
+### 5. リアルタイム更新方式: ポーリング over SSE
+
+**決定:**
+- Facilitator UIは2秒間隔のHTTPポーリングで更新
+- `GET /meetings/{meetingId}/messages?since={timestamp}&limit={limit}`
+- SSE（Server-Sent Events）は使用しない
+
+**理由:**
+- ✅ **実装がシンプル**: 既存GET APIを再利用、新Lambda関数不要
+- ✅ **低コスト**: Lambda実行時間が短い（SSEは接続維持で課金）
+- ✅ **インフラ変更最小**: API Gateway設定変更不要
+- ✅ **エラーハンドリング容易**: 接続切断リスクなし、リトライが簡単
+- ✅ **デバッグ容易**: 通常のHTTPリクエストなのでブラウザDevToolsで確認可能
+
+**トレードオフ:**
+- ⚠️ **2秒の遅延**: 完全なリアルタイムではない
+  - **許容理由**: Facilitator UIの用途（監視・デバッグ）では2秒遅延は問題なし
+- ⚠️ **ポーリングコスト**: 2秒ごとにLambda実行
+  - **コスト影響**: 1時間会議で約1800リクエスト、約$0.0002（無視できるレベル）
+
+**代替案（却下）:**
+- **SSE（Server-Sent Events）**
+  - ❌ Lambda実行時間課金（接続維持で高コスト）
+  - ❌ API Gateway設定が複雑（統合レスポンス設定）
+  - ❌ 新Lambda関数が必要
+  - ⚠️ 利点: リアルタイム性が高い（数百ms）
+  - **判断**: PoCフェーズではコストとシンプルさを優先
+
+**実装詳細:**
+```typescript
+// Frontend: 2秒ごとにポーリング
+useEffect(() => {
+  let lastTimestamp = 0;
+
+  const pollMessages = async () => {
+    const response = await fetch(
+      `${apiUrl}/meetings/${meetingId}/messages?since=${lastTimestamp}&limit=100`
+    );
+    const data = await response.json();
+
+    // メッセージをtype別に分類（transcript/ai_intervention/llm_call）
+    data.messages.forEach((msg) => {
+      // State更新...
+    });
+
+    // 最新タイムスタンプを更新（次回は増分取得）
+    if (data.messages.length > 0) {
+      lastTimestamp = Math.max(...data.messages.map(m => m.timestamp));
+    }
+  };
+
+  pollMessages(); // 初回取得
+  const interval = setInterval(pollMessages, 2000); // 2秒ごと
+
+  return () => clearInterval(interval);
+}, [meetingId]);
+```
+
+**将来の改善案（Phase 2）:**
+- ユーザーフィードバックに基づきポーリング間隔を調整（1秒 or 3秒）
+- 高頻度更新が必要な場合はSSE実装を検討
+- WebSocket実装（双方向通信が必要な場合）
+
 ## アーキテクチャ / Architecture
 
 ### 会議ライフサイクル（Recall.ai）
@@ -226,15 +289,19 @@ deactivate DDB
 Lambda --> UI: {meetingId, status}
 deactivate Lambda
 
-UI -> UI: SSE接続開始\nGET /attendee/meetings/{meetingId}/stream
+UI -> UI: ポーリング開始\n(2秒間隔)
 
 == AI応答受信 ==
 
 Orchestrator -> DDB: PutItem\n(AI intervention)
 activate DDB
 
-UI -> DDB: SSE polling\n(新しいメッセージ)
-DDB --> UI: {message, timestamp}
+UI -> Lambda: GET /meetings/{meetingId}/messages\n?since={lastTimestamp}
+activate Lambda
+Lambda -> DDB: Query\n(新しいメッセージ)
+DDB --> Lambda: {messages}
+Lambda --> UI: {messages, count}
+deactivate Lambda
 deactivate DDB
 
 UI -> Attendee: AI応答を表示
@@ -293,23 +360,30 @@ deactivate UI
 // 用途: AttendeeがコードでmeetingIdを取得
 ```
 
-#### AI応答テーブル（既存、変更なし）
+#### AI応答テーブル（拡張）
 
 ```typescript
 // Table: ai-messages
 {
   meetingId: string,              // PK
   timestamp: number,              // SK (Range Key)
-  message: string,                // AI応答テキスト
-  type: "ai_intervention" | "llm_call",
+  message: string,                // メッセージ内容（JSONまたはテキスト）
+  type: "transcript" | "ai_intervention" | "llm_call",
   ttl: number,                    // 24時間後に自動削除
 
-  // type="llm_call"の場合
-  nodeId?: string,
-  prompt?: string,
-  rawResponse?: string
+  // type="transcript"の場合、messageはJSON文字列:
+  // { speakerId: string, text: string, isFinal: boolean }
+
+  // type="llm_call"の場合、messageはJSON文字列:
+  // { nodeId: string, prompt: string, rawResponse: string }
+
+  // type="ai_intervention"の場合、messageはプレーンテキスト
 }
 ```
+
+**変更履歴:**
+- 2026-01-23: `type: "transcript"`を追加（Facilitator UI監視機能のため）
+- Final transcript（isFinal=true）のみ保存、TTL 24時間
 
 ### WebUI構成
 
@@ -397,16 +471,22 @@ Response: {
   status: "active" | "ended"
 }
 
-// AI応答ストリーム（SSE）
-GET /attendee/meetings/{meetingId}/stream
-Response: Server-Sent Events
-{
-  event: "message",
-  data: {
-    timestamp: number,
-    message: string
-  }
+// AI応答取得（ポーリング）
+GET /meetings/{meetingId}/messages?since={timestamp}&limit={limit}
+Response: {
+  meetingId: string,
+  messages: [
+    {
+      timestamp: number,
+      message: string,
+      type: "transcript" | "ai_intervention" | "llm_call"
+    }
+  ],
+  count: number
 }
+
+// 注: Facilitator UIと同じエンドポイントを使用
+// AttendeeはAI応答のみ表示、Facilitatorは全データ表示
 ```
 
 ## Facilitator UI機能詳細
@@ -561,7 +641,7 @@ Response: Server-Sent Events
    - `GET /recall/meetings/{meetingId}` - 状態取得
    - `DELETE /recall/meetings/{meetingId}` - ボット退出
    - `GET /attendee/meetings/{code}` - コードでmeetingId取得
-   - `GET /attendee/meetings/{meetingId}/stream` - SSE
+   - `GET /meetings/{meetingId}/messages` - メッセージ取得（ポーリング用、既存API）
 
 2. **DynamoDB**
    - `meetings-metadata`テーブル作成
@@ -584,7 +664,7 @@ Response: Server-Sent Events
 2. **実装順序**
    - ボット参加フォーム
    - 会議状態表示
-   - リアルタイム文字起こし（SSE）
+   - リアルタイム文字起こし（ポーリング、2秒間隔）
    - Grasp設定エディタ（Monaco Editor）
    - LLMログビューア
 
@@ -602,7 +682,7 @@ Response: Server-Sent Events
 
 2. **実装順序**
    - 会議コード入力フォーム
-   - AI応答表示（SSE）
+   - AI応答表示（ポーリング、2秒間隔）
    - シンプルUI
 
 3. **デプロイ**
@@ -620,7 +700,7 @@ Response: Server-Sent Events
 2. **スケーラビリティ**
    - ✅ 1 Facilitator : N Attendees
    - ✅ 会議コードで簡単参加
-   - ✅ SSEで効率的なリアルタイム更新
+   - ✅ ポーリングでシンプルかつ低コストな更新
 
 3. **柔軟性**
    - ✅ どの会議サービスでも利用可能
@@ -679,5 +759,8 @@ Response: Server-Sent Events
 ### 外部ドキュメント
 - [Recall.ai Bot Lifecycle](https://docs.recall.ai/docs/bot-lifecycle)
 - [Next.js App Router](https://nextjs.org/docs/app)
-- [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events)
 - [Monaco Editor](https://microsoft.github.io/monaco-editor/)
+
+### 技術選択の参考
+- [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) - 検討したが、PoCではポーリングを採用
+- HTTP Polling vs SSE vs WebSocket - コスト・シンプルさの観点でポーリングを選択
