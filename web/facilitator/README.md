@@ -26,7 +26,7 @@ pnpm install
 
 # 環境変数設定
 cp .env.example .env
-# .envを編集してAPI_URLを設定
+# .envを編集してNEXT_PUBLIC_API_URLを設定
 
 # 開発サーバー起動
 pnpm dev
