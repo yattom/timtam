@@ -476,6 +476,13 @@ export class TimtamInfraStack extends Stack {
                 var request = event.request;
                 var uri = request.uri;
 
+                // Special handling for /experiment (without trailing slash)
+                // Rewrite to Chime WebUI
+                if (uri === '/experiment') {
+                  request.uri = '/timtam-web/index.html';
+                  return request;
+                }
+
                 // Facilitator UI (root path)
                 // If requesting /, serve facilitator/index.html
                 if (uri === '/' || uri === '') {
