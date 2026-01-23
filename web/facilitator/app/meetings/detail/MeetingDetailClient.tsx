@@ -59,12 +59,6 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
 
         const data = await response.json();
         setMeeting(data);
-
-        // TODO: リアルタイム更新（SSE or WebSocket）
-        // 今はモックデータ
-        setTranscripts([]);
-        setAiMessages([]);
-        setLlmLogs([]);
       } catch (err) {
         setError(err instanceof Error ? err.message : "エラーが発生しました");
       } finally {
@@ -74,6 +68,78 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
 
     fetchMeeting();
   }, [meetingId]);
+
+  // 新しいuseEffectを追加: ポーリングでメッセージ取得
+  useEffect(() => {
+    if (!meeting) return;
+
+    let lastTimestamp = 0;
+
+    const pollMessages = async () => {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://your-api-gateway.amazonaws.com";
+        const response = await fetch(
+          `${apiUrl}/meetings/${meetingId}/messages?since=${lastTimestamp}&limit=100`
+        );
+
+        if (!response.ok) {
+          console.error('Failed to poll messages', response.status);
+          return;
+        }
+
+        const data = await response.json();
+
+        // メッセージをtype別に分類・追加
+        data.messages.forEach((msg: any) => {
+          if (msg.type === 'transcript') {
+            try {
+              const transcriptData = JSON.parse(msg.message);
+              setTranscripts(prev => [...prev, {
+                timestamp: msg.timestamp,
+                speakerId: transcriptData.speakerId,
+                text: transcriptData.text,
+                isFinal: transcriptData.isFinal,
+              }]);
+            } catch (e) {
+              console.error('Failed to parse transcript', e);
+            }
+          } else if (msg.type === 'ai_intervention') {
+            setAiMessages(prev => [...prev, {
+              timestamp: msg.timestamp,
+              message: msg.message,
+            }]);
+          } else if (msg.type === 'llm_call') {
+            try {
+              const logData = JSON.parse(msg.message);
+              setLlmLogs(prev => [...prev, {
+                timestamp: msg.timestamp,
+                nodeId: logData.nodeId,
+                prompt: logData.prompt,
+                rawResponse: logData.rawResponse,
+              }]);
+            } catch (e) {
+              console.error('Failed to parse LLM log', e);
+            }
+          }
+        });
+
+        // 最新タイムスタンプを更新
+        if (data.messages.length > 0) {
+          lastTimestamp = Math.max(...data.messages.map((m: any) => m.timestamp));
+        }
+      } catch (err) {
+        console.error('Failed to poll messages', err);
+      }
+    };
+
+    // 初回取得
+    pollMessages();
+
+    // 2秒ごとにポーリング
+    const interval = setInterval(pollMessages, 2000);
+
+    return () => clearInterval(interval);
+  }, [meeting, meetingId]);
 
   const handleLeave = async () => {
     if (!confirm("ボットを会議から退出させますか？")) return;

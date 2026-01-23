@@ -124,6 +124,10 @@ const notifier = new Notifier();
 const metrics = new Metrics();
 const sqs = new SQSClient({});
 
+// DynamoDB Document Client for transcript persistence
+const ddbClient = new DynamoDBClient({});
+const ddbDocClient = DynamoDBDocumentClient.from(ddbClient);
+
 // OrchestratorManager: 複数ミーティングを管理
 let orchestratorManager: OrchestratorManager;
 
@@ -206,6 +210,33 @@ async function pollControlOnce() {
   }
 }
 
+// Final transcriptをDynamoDBに保存
+async function saveTranscriptToDynamoDB(event: TranscriptEvent): Promise<void> {
+  const timestamp = event.timestamp;
+  const ttl = Math.floor(Date.now() / 1000) + 86400; // 24時間後に削除
+
+  try {
+    await ddbDocClient.send(
+      new PutCommand({
+        TableName: AI_MESSAGES_TABLE,
+        Item: {
+          meetingId: event.meetingId,
+          timestamp: timestamp,
+          message: JSON.stringify({
+            speakerId: event.speakerId,
+            text: event.text,
+            isFinal: event.isFinal,
+          }),
+          ttl: ttl,
+          type: 'transcript', // 新しいtype
+        },
+      })
+    );
+  } catch (err) {
+    console.error('[Worker] Failed to save transcript to DynamoDB', err);
+  }
+}
+
 async function processMessages(messages: Message[]) {
   // Process messages in parallel for better throughput
   await Promise.all(messages.map(async (message) => {
@@ -256,6 +287,9 @@ async function processMessages(messages: Message[]) {
       );
       return;
     }
+
+    // Final transcriptをDynamoDBに保存（Grasp実行前）
+    await saveTranscriptToDynamoDB(ev);
 
     // ミーティングIDに基づいて適切なオーケストレーターに処理を委譲
     await orchestratorManager.processTranscriptEvent(ev, notifier, metrics);
