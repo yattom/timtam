@@ -288,8 +288,8 @@ export class GraspQueue {
 
     const { grasp, timestamp } = this.queue.shift()!;
 
-    // 古すぎる場合はスキップ（1分以上経過）
-    if (now - timestamp > 60000) {
+    // 古すぎる場合はスキップ（10分以上経過）
+    if (now - timestamp > 600000) {
       console.log(JSON.stringify({
         type: 'grasp.queue.skipped',
         nodeId: grasp['config'].nodeId,
