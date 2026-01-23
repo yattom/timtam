@@ -112,7 +112,7 @@ export default function JoinMeetingPage() {
                 {[
                   { value: "zoom", label: "Zoom" },
                   { value: "google_meet", label: "Google Meet" },
-                  { value: "teams", label: "Microsoft Teams" },
+                  { value: "microsoft_teams", label: "Microsoft Teams" },
                   { value: "webex", label: "Webex" },
                 ].map((option) => (
                   <label
@@ -130,7 +130,7 @@ export default function JoinMeetingPage() {
                       checked={platform === option.value}
                       onChange={(e) =>
                         setPlatform(
-                          e.target.value as "zoom" | "google_meet" | "teams" | "webex"
+                          e.target.value as "zoom" | "google_meet" | "microsoft_teams" | "webex"
                         )
                       }
                       className="sr-only"

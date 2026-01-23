@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -37,8 +37,7 @@ interface Meeting {
   };
 }
 
-export default function MeetingDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params);
+export default function MeetingDetailClient({ meetingId }: { meetingId: string }) {
   const router = useRouter();
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
@@ -52,7 +51,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
     const fetchMeeting = async () => {
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://your-api-gateway.amazonaws.com";
-        const response = await fetch(`${apiUrl}/recall/meetings/${resolvedParams.id}`);
+        const response = await fetch(`${apiUrl}/recall/meetings/${meetingId}`);
 
         if (!response.ok) {
           throw new Error("会議情報の取得に失敗しました");
@@ -74,14 +73,14 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
     };
 
     fetchMeeting();
-  }, [resolvedParams.id]);
+  }, [meetingId]);
 
   const handleLeave = async () => {
     if (!confirm("ボットを会議から退出させますか？")) return;
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://your-api-gateway.amazonaws.com";
-      const response = await fetch(`${apiUrl}/recall/meetings/${resolvedParams.id}`, {
+      const response = await fetch(`${apiUrl}/recall/meetings/${meetingId}`, {
         method: "DELETE",
       });
 
