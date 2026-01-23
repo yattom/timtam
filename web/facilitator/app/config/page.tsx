@@ -14,14 +14,14 @@ export default function ConfigPage() {
     const fetchConfig = async () => {
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://your-api-gateway.amazonaws.com";
-        const response = await fetch(`${apiUrl}/config/grasp`);
+        const response = await fetch(`${apiUrl}/grasp/config/current`);
 
         if (!response.ok) {
           throw new Error("設定の取得に失敗しました");
         }
 
         const data = await response.json();
-        setConfig(data.config || "");
+        setConfig(data.yaml || "");
       } catch (err) {
         setError(err instanceof Error ? err.message : "エラーが発生しました");
         // フォールバック: デフォルト設定
