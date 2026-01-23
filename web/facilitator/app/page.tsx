@@ -19,6 +19,7 @@ interface Meeting {
 export default function DashboardPage() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     // TODO: 実際のAPI呼び出しに置き換え
