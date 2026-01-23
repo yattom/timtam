@@ -175,9 +175,12 @@ export class RecallAPIClient {
   }
 
   /**
-   * ボットを削除（会議から退出）
+   * ボットを削除（スケジュール済みの未参加ボットのみ）
    *
    * DELETE /api/v1/bot/{bot_id}/
+   *
+   * 注意: すでに会議に参加したボットは削除できません。
+   * 会議中のボットを退出させるには leaveCall() を使用してください。
    *
    * @param botId ボットID
    */
@@ -192,6 +195,28 @@ export class RecallAPIClient {
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`Recall.ai deleteBot failed: ${response.status} ${errorText}`);
+    }
+  }
+
+  /**
+   * ボットを会議から退出させる（すでに参加したボット用）
+   *
+   * POST /api/v1/bot/{bot_id}/leave_call/
+   *
+   * @param botId ボットID
+   * @see https://docs.recall.ai/reference/bot_leave_call_create
+   */
+  async leaveCall(botId: string): Promise<void> {
+    const response = await fetch(`${this.apiBaseUrl}/api/v1/bot/${botId}/leave_call/`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Token ${this.apiKey}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Recall.ai leaveCall failed: ${response.status} ${errorText}`);
     }
   }
 
