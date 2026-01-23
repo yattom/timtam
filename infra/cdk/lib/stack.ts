@@ -477,7 +477,7 @@ export class TimtamInfraStack extends Stack {
                 var uri = request.uri;
 
                 // Special handling for /experiment (without trailing slash)
-                // Redirect to Chime WebUI
+                // Rewrite to Chime WebUI
                 if (uri === '/experiment') {
                   request.uri = '/timtam-web/index.html';
                   return request;
