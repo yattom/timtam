@@ -488,9 +488,10 @@ export class TimtamInfraStack extends Stack {
                 if (uri === '/' || uri === '') {
                   request.uri = '/facilitator/index.html';
                 }
-                // If requesting /something without extension, serve facilitator/index.html for SPA routing
+                // If requesting /something without extension, try to serve facilitator/something.html
+                // If that file doesn't exist (404), error responses will fallback to facilitator/index.html for SPA routing
                 else if (!uri.includes('.') && !uri.startsWith('/experiment') && !uri.includes('/attendee')) {
-                  request.uri = '/facilitator/index.html';
+                  request.uri = '/facilitator' + uri + '.html';
                 }
                 // If requesting /_next/... (Next.js assets), prepend /facilitator
                 else if (uri.startsWith('/_next/')) {

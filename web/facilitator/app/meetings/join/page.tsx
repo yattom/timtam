@@ -39,7 +39,7 @@ export default function JoinMeetingPage() {
       }
 
       const data = await response.json();
-      router.push(`/meetings/${data.meetingId}`);
+      router.push(`/meetings/detail?id=${data.meetingId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "エラーが発生しました");
     } finally {
