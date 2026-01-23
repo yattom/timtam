@@ -7,7 +7,7 @@ import Link from "next/link";
 export default function JoinMeetingPage() {
   const router = useRouter();
   const [meetingUrl, setMeetingUrl] = useState("");
-  const [platform, setPlatform] = useState<"zoom" | "google_meet" | "teams" | "webex">("zoom");
+  const [platform, setPlatform] = useState<"zoom" | "google_meet" | "microsoft_teams" | "webex">("zoom");
   const [botName, setBotName] = useState("Timtam AI");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
