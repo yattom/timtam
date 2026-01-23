@@ -545,7 +545,7 @@ export class TimtamInfraStack extends Stack {
           'http://127.0.0.1:5173',
           `https://${webDistribution.distributionDomainName}`,
         ],
-        allowMethods: ['GET', 'POST', 'PUT', 'OPTIONS'],
+        allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
         allowHeaders: ['*'],
         exposeHeaders: [],
         maxAge: 3600,
