@@ -16,7 +16,7 @@ import { parseGraspGroupDefinition, GraspGroupDefinition } from './graspConfigPa
 import { ensureDefaultGraspConfig } from './selfSetup';
 import { Message } from '@aws-sdk/client-sqs';
 import { OrchestratorManager } from './orchestratorManager';
-import { ChimeAdapter, MeetingId, TranscriptEvent } from '@timtam/shared';
+import { ChimeAdapter, RecallAdapter, MeetingServiceAdapter, MeetingId, TranscriptEvent } from '@timtam/shared';
 
 // 環境変数
 const TRANSCRIPT_QUEUE_URL = process.env.TRANSCRIPT_QUEUE_URL || '';
@@ -27,6 +27,8 @@ const CONFIG_TABLE_NAME = process.env.CONFIG_TABLE_NAME || 'timtam-orchestrator-
 const CONTROL_SQS_URL = process.env.CONTROL_SQS_URL || '';
 const MAX_MEETINGS = Number(process.env.MAX_MEETINGS || '100');
 const MEETING_TIMEOUT_MS = Number(process.env.MEETING_TIMEOUT_MS || '43200000'); // 12時間
+const RECALL_API_KEY = process.env.RECALL_API_KEY || '';
+const MEETINGS_METADATA_TABLE = process.env.MEETINGS_METADATA_TABLE || 'timtam-meetings-metadata';
 
 class Metrics implements IMetrics {
   private cw = new CloudWatchClient({});
@@ -99,28 +101,37 @@ class TriggerLLM implements LLMClient {
   }
 }
 
-// Notifierは@timtam/sharedのChimeAdapterに置き換え
-// ただし、INotifierインターフェースとの互換性を保つため、ラッパークラスを定義
-class Notifier implements INotifier {
-  private adapter: ChimeAdapter;
+// Platform判別してAdapterを作成する関数
+async function createAdapterForMeeting(meetingId: MeetingId): Promise<MeetingServiceAdapter> {
+  try {
+    const result = await ddbDocClient.send(
+      new GetCommand({
+        TableName: MEETINGS_METADATA_TABLE,
+        Key: { meetingId },
+      })
+    );
 
-  constructor() {
-    this.adapter = new ChimeAdapter({
+    const platform = result.Item?.platform || 'chime';
+
+    if (platform === 'recall') {
+      return new RecallAdapter({
+        apiKey: RECALL_API_KEY,
+        aiMessagesTable: AI_MESSAGES_TABLE,
+      });
+    } else {
+      return new ChimeAdapter({
+        aiMessagesTable: AI_MESSAGES_TABLE,
+      });
+    }
+  } catch (err) {
+    console.error('Failed to get platform from DynamoDB, defaulting to Chime', err);
+    return new ChimeAdapter({
       aiMessagesTable: AI_MESSAGES_TABLE,
     });
-  }
-
-  async postChat(meetingId: MeetingId, message: string) {
-    return this.adapter.postChat(meetingId, message);
-  }
-
-  async postLlmCallLog(meetingId: MeetingId, prompt: string, rawResponse: string, nodeId: string = 'default') {
-    return this.adapter.postLlmCallLog(meetingId, prompt, rawResponse, nodeId);
   }
 }
 
 const triggerLlm = new TriggerLLM();
-const notifier = new Notifier();
 const metrics = new Metrics();
 const sqs = new SQSClient({});
 
@@ -292,7 +303,7 @@ async function processMessages(messages: Message[]) {
     await saveTranscriptToDynamoDB(ev);
 
     // ミーティングIDに基づいて適切なオーケストレーターに処理を委譲
-    await orchestratorManager.processTranscriptEvent(ev, notifier, metrics);
+    await orchestratorManager.processTranscriptEvent(ev, metrics);
 
     // 処理完了後にメッセージを削除
     await sqs.send(
@@ -391,11 +402,15 @@ async function initializeGraspConfig() {
     const graspGroupDef = parseGraspGroupDefinition(yaml);
     rebuildGrasps(graspGroupDef);
 
-    // Initialize OrchestratorManager with grasp templates
-    orchestratorManager = new OrchestratorManager(graspTemplates, {
-      maxMeetings: MAX_MEETINGS,
-      meetingTimeoutMs: MEETING_TIMEOUT_MS,
-    });
+    // Initialize OrchestratorManager with grasp templates and adapterFactory
+    orchestratorManager = new OrchestratorManager(
+      graspTemplates,
+      createAdapterForMeeting,
+      {
+        maxMeetings: MAX_MEETINGS,
+        meetingTimeoutMs: MEETING_TIMEOUT_MS,
+      }
+    );
 
     console.log(JSON.stringify({
       type: 'orchestrator.config.grasp.initialized',
@@ -417,7 +432,7 @@ console.log(JSON.stringify({
 
 // 定期的にすべてのミーティングの待機Graspを処理（完全な沈黙時でも待機中の Grasp を実行）
 setInterval(async () => {
-  const processed = await orchestratorManager.processAllWaitingGrasps(notifier, metrics);
+  const processed = await orchestratorManager.processAllWaitingGrasps(metrics);
   if (processed > 0) {
     console.log(JSON.stringify({
       type: 'orchestrator.timer.processed',
