@@ -1,6 +1,6 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { RecallAPIClient, CreateBotRequest, MeetingPlatform, VALID_PLATFORMS, isMeetingPlatform } from '@timtam/shared';
 
 const REGION = process.env.AWS_REGION || 'ap-northeast-1';
@@ -358,6 +358,63 @@ export const leaveHandler: APIGatewayProxyHandlerV2 = async (event) => {
       statusCode: 500,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ error: 'Failed to leave meeting' }),
+    };
+  }
+};
+
+/**
+ * GET /recall/meetings
+ *
+ * 全ての会議を取得（activeとendedの両方、最新順）
+ *
+ * Response:
+ * {
+ *   meetings: Array<{
+ *     meetingId: string;
+ *     platform: string;
+ *     status: string;
+ *     createdAt: number;
+ *     endedAt?: number;
+ *     meetingCode?: string;
+ *     recallBot?: { ... };
+ *   }>
+ * }
+ */
+export const listHandler: APIGatewayProxyHandlerV2 = async (event) => {
+  try {
+    // Scan all meetings from DynamoDB
+    const result = await ddb.send(
+      new ScanCommand({
+        TableName: MEETINGS_METADATA_TABLE,
+      })
+    );
+
+    if (!result.Items) {
+      return {
+        statusCode: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ meetings: [] }),
+      };
+    }
+
+    // Sort by createdAt descending (latest first)
+    const meetings = result.Items.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ meetings }),
+    };
+  } catch (err: any) {
+    console.error('Error listing meetings', {
+      error: err?.message || err,
+      stack: err?.stack,
+    });
+
+    return {
+      statusCode: 500,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'Failed to list meetings' }),
     };
   }
 };

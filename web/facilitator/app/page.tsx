@@ -9,6 +9,7 @@ interface Meeting {
   status: string;
   meetingCode?: string;
   createdAt: number;
+  endedAt?: number;
   recallBot?: {
     meetingUrl: string;
     platform: string;
@@ -21,11 +22,35 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Fetch meetings from API
+  const fetchMeetings = async () => {
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000";
+      const response = await fetch(`${apiUrl}/recall/meetings`);
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setMeetings(data.meetings || []);
+      setError(null);
+    } catch (err: any) {
+      console.error("Failed to fetch meetings:", err);
+      setError(err.message || "会議リストの取得に失敗しました");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    // TODO: 実際のAPI呼び出しに置き換え
-    // For now, mock data
-    setLoading(false);
-    setMeetings([]);
+    // Initial fetch
+    fetchMeetings();
+
+    // Poll every minute (60000ms)
+    const interval = setInterval(fetchMeetings, 60000);
+
+    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -59,10 +84,10 @@ export default function DashboardPage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            アクティブな会議
+            会議リスト
           </h2>
           <p className="text-gray-600">
-            現在進行中の会議とボットの状態を確認できる
+            全ての会議（進行中・終了済み）を最新順で表示
           </p>
         </div>
 
@@ -77,9 +102,7 @@ export default function DashboardPage() {
           </div>
         ) : meetings.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm p-8 text-center">
-            <p className="text-gray-600 mb-4">
-              アクティブな会議はありません
-            </p>
+            <p className="text-gray-600 mb-4">会議がありません</p>
             <Link
               href="/meetings/join"
               className="inline-block px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
@@ -89,45 +112,66 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="grid gap-4">
-            {meetings.map((meeting) => (
-              <div
-                key={meeting.meetingId}
-                className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center space-x-3">
-                    <div
-                      className={`w-3 h-3 rounded-full ${
-                        meeting.status === "active"
-                          ? "bg-green-500"
-                          : "bg-gray-400"
-                      }`}
-                    ></div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        Meeting ID: {meeting.meetingId}
-                      </h3>
-                      <p className="text-sm text-gray-600">
-                        Platform: {meeting.platform} | Code:{" "}
-                        {meeting.meetingCode || "N/A"}
-                      </p>
+            {meetings.map((meeting) => {
+              const createdDate = new Date(meeting.createdAt);
+              const endedDate = meeting.endedAt
+                ? new Date(meeting.endedAt)
+                : null;
+
+              return (
+                <div
+                  key={meeting.meetingId}
+                  className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center space-x-3">
+                      <div
+                        className={`w-3 h-3 rounded-full ${
+                          meeting.status === "active"
+                            ? "bg-green-500"
+                            : "bg-gray-400"
+                        }`}
+                      ></div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          {meeting.status === "active" ? "進行中" : "終了"}
+                        </h3>
+                        <p className="text-sm text-gray-600">
+                          コード: {meeting.meetingCode || "N/A"}
+                        </p>
+                      </div>
                     </div>
+                    <Link
+                      href={`/meetings/detail?id=${meeting.meetingId}`}
+                      className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"
+                    >
+                      詳細を見る
+                    </Link>
                   </div>
-                  <Link
-                    href={`/meetings/detail?id=${meeting.meetingId}`}
-                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"
-                  >
-                    詳細を見る
-                  </Link>
+                  <div className="text-sm text-gray-600 space-y-1">
+                    <p>
+                      開始: {createdDate.toLocaleString("ja-JP")}
+                    </p>
+                    {endedDate && (
+                      <p>
+                        終了: {endedDate.toLocaleString("ja-JP")}
+                      </p>
+                    )}
+                    {meeting.recallBot && (
+                      <>
+                        <p className="truncate">
+                          URL: {meeting.recallBot.meetingUrl}
+                        </p>
+                        <p>
+                          Platform: {meeting.recallBot.platform} | Bot Status:{" "}
+                          {meeting.recallBot.status}
+                        </p>
+                      </>
+                    )}
+                  </div>
                 </div>
-                {meeting.recallBot && (
-                  <div className="text-sm text-gray-600">
-                    <p>URL: {meeting.recallBot.meetingUrl}</p>
-                    <p>Status: {meeting.recallBot.status}</p>
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </main>
