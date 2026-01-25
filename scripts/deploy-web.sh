@@ -44,16 +44,16 @@ cat > "$WEB_DIST_DIR/config.js" <<EOF
 window.API_BASE_URL='$API_ENDPOINT';
 EOF
 
-# Upload to S3
+# Upload to S3 (into timtam-web/ subdirectory)
 echo "Uploading to S3..."
-aws s3 sync "$WEB_DIST_DIR/" "s3://$BUCKET_NAME/" \
+aws s3 sync "$WEB_DIST_DIR/" "s3://$BUCKET_NAME/timtam-web/" \
   --delete \
   --cache-control "public, max-age=31536000, immutable" \
   --exclude "*.html" \
   --exclude "config.js"
 
 # Upload HTML and config.js with no-cache
-aws s3 sync "$WEB_DIST_DIR/" "s3://$BUCKET_NAME/" \
+aws s3 sync "$WEB_DIST_DIR/" "s3://$BUCKET_NAME/timtam-web/" \
   --cache-control "public, max-age=0, must-revalidate" \
   --exclude "*" \
   --include "*.html" \
