@@ -12,7 +12,7 @@ const ddb = DynamoDBDocumentClient.from(ddbClient);
 /**
  * POST /grasp/configs
  * Save a named Grasp configuration
- * Body: { name: string, yaml: string }
+ * Body: { name: string, yaml: string, createdAt: number }
  */
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   try {
@@ -26,7 +26,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         body: JSON.stringify({ ok: false, error: 'Invalid JSON in request body' }),
       };
     }
-    const { name, yaml } = body;
+    const { name, yaml, createdAt } = body;
 
     // Validation
     if (typeof name !== 'string' || name.trim() === '') {
@@ -42,6 +42,14 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         statusCode: 400,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ok: false, error: 'yaml is required and must be non-empty' }),
+      };
+    }
+
+    if (typeof createdAt !== 'number' || createdAt <= 0 || !Number.isFinite(createdAt)) {
+      return {
+        statusCode: 400,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ok: false, error: 'createdAt is required and must be a valid timestamp' }),
       };
     }
 
@@ -65,7 +73,6 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
     const trimmedYaml = yaml.trim();
     const trimmedName = name.trim();
-    const createdAt = Date.now();
 
     // Generate configId with name and timestamp
     // Format: {name}_{timestamp} (e.g., "my-config_20260125_003500")

@@ -91,12 +91,13 @@ export default function ConfigPage() {
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://your-api-gateway.amazonaws.com";
+      const createdAt = Date.now(); // Generate timestamp on client-side (user's local time)
       const response = await fetch(`${apiUrl}/grasp/configs`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ name: configName, yaml: config }),
+        body: JSON.stringify({ name: configName, yaml: config, createdAt }),
       });
 
       if (!response.ok) {
