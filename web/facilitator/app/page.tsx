@@ -75,7 +75,7 @@ export default function DashboardPage() {
     // Initial fetch
     fetchMeetings();
 
-    // Poll every minute (60000ms)
+    // Poll every minute (60000ms) - only refreshes first page to show latest meetings
     const interval = setInterval(() => fetchMeetings(), 60000);
 
     return () => clearInterval(interval);

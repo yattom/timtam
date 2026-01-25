@@ -388,9 +388,20 @@ export const leaveHandler: APIGatewayProxyHandlerV2 = async (event) => {
 export const listHandler: APIGatewayProxyHandlerV2 = async (event) => {
   try {
     // Parse query parameters
-    const limit = event.queryStringParameters?.limit 
-      ? Math.min(parseInt(event.queryStringParameters.limit, 10), 100)
-      : 50;
+    const limitParam = event.queryStringParameters?.limit;
+    let limit = 50; // default
+    
+    if (limitParam) {
+      const parsedLimit = parseInt(limitParam, 10);
+      if (isNaN(parsedLimit) || parsedLimit < 1) {
+        return {
+          statusCode: 400,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Invalid limit parameter' }),
+        };
+      }
+      limit = Math.min(parsedLimit, 100);
+    }
     
     const nextToken = event.queryStringParameters?.nextToken;
     
@@ -417,16 +428,9 @@ export const listHandler: APIGatewayProxyHandlerV2 = async (event) => {
       })
     );
 
-    if (!result.Items) {
-      return {
-        statusCode: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ meetings: [] }),
-      };
-    }
-
-    // Sort by createdAt descending (latest first)
-    const meetings = result.Items.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    // Note: Sorting is done client-side for now. For better performance with large datasets,
+    // consider using a GSI with createdAt as the sort key to enable Query operations with sorted results.
+    const meetings = (result.Items || []).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
     // Encode LastEvaluatedKey as nextToken if present
     const responseBody: any = { meetings };
