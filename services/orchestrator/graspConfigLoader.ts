@@ -115,8 +115,13 @@ export async function getDefaultGraspConfig(
     }
 
     // Sort by configId (which contains timestamp) to get the latest
-    const sortedConfigs = result.Items.sort((a: any, b: any) => {
-      return (b.configId as string).localeCompare(a.configId as string);
+    interface ConfigItem {
+      configId: string;
+      yaml?: string;
+    }
+    
+    const sortedConfigs = (result.Items as ConfigItem[]).sort((a, b) => {
+      return b.configId.localeCompare(a.configId);
     });
 
     const latestConfig = sortedConfigs[0];
