@@ -206,9 +206,9 @@ async function pollControlOnce() {
             const grasps = buildGrasps(graspGroupDef);
 
             // Apply config to specific meeting
-            const meeting = manager.getMeeting(parsed.meetingId);
+            const meeting = orchestratorManager.getMeeting(parsed.meetingId);
             if (meeting) {
-              manager.rebuildMeetingGrasps(parsed.meetingId, grasps);
+              orchestratorManager.rebuildMeetingGrasps(parsed.meetingId, grasps);
               console.log(JSON.stringify({
                 type: 'orchestrator.control.meeting.grasp_config.applied',
                 meetingId: parsed.meetingId,
