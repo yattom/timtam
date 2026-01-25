@@ -201,6 +201,9 @@ fabric.properties
 docker-data/
 docker-compose.override.yml
 
+# LocalStack data
+localstack-data/
+
 # AWS CDK
 .cdk.staging/
 cdk.out/

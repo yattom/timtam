@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  # LocalStack (DynamoDB、SQS、S3)
+  localstack:
+    image: localstack/localstack:latest
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=dynamodb,sqs,s3
+      - DEBUG=1
+      - DATA_DIR=/var/lib/localstack/data
+    volumes:
+      - "./localstack-data:/var/lib/localstack/data"
+    networks:
+      - timtam-local
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Recall.ai Stub Server
+  recall-stub:
+    build: ./stub-recall-server
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - WEBHOOK_URL=http://api-server:3000/recall/webhook
+    networks:
+      - timtam-local
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # TODO: Express API Server (to be implemented)
+  # api-server:
+  #   build: ./local-api-server
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - AWS_ENDPOINT_URL=http://localstack:4566
+  #     - RECALL_API_BASE_URL=http://recall-stub:8080
+  #     - AI_MESSAGES_TABLE=timtam-ai-messages
+  #     - MEETINGS_METADATA_TABLE=timtam-meetings-metadata
+  #     - TRANSCRIPT_QUEUE_URL=http://localstack:4566/000000000000/transcript-asr.fifo
+  #   depends_on:
+  #     localstack:
+  #       condition: service_healthy
+  #     recall-stub:
+  #       condition: service_healthy
+  #   networks:
+  #     - timtam-local
+
+  # TODO: ECS Orchestrator (to be implemented)
+  # orchestrator:
+  #   build: ./services/orchestrator
+  #   environment:
+  #     - AWS_ENDPOINT_URL=http://localstack:4566
+  #     - RECALL_API_BASE_URL=http://recall-stub:8080
+  #     - TRANSCRIPT_QUEUE_URL=http://localstack:4566/000000000000/transcript-asr.fifo
+  #     - AI_MESSAGES_TABLE=timtam-ai-messages
+  #     - CONFIG_TABLE_NAME=timtam-orchestrator-config
+  #     - MEETINGS_METADATA_TABLE=timtam-meetings-metadata
+  #     - BEDROCK_REGION=ap-northeast-1
+  #     - BEDROCK_MODEL_ID=arn:aws:bedrock:ap-northeast-1:030046728177:inference-profile/global.anthropic.claude-haiku-4-5-20251001-v1:0
+  #     - BEDROCK_MOCK_MODE=false  # trueにするとBedrockもモック化
+  #     - WINDOW_LINES=5
+  #     - POLL_INTERVAL_MS=1000
+  #   volumes:
+  #     - "~/.aws:/root/.aws:ro"  # Bedrock用（MOCK_MODE=falseの場合）
+  #   depends_on:
+  #     localstack:
+  #       condition: service_healthy
+  #     recall-stub:
+  #       condition: service_healthy
+  #   networks:
+  #     - timtam-local
+
+networks:
+  timtam-local:
+    driver: bridge
