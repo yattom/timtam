@@ -22,14 +22,18 @@ const PLANT_NAMES = [
 ];
 
 /**
+ * Number of plant names to combine for generated config names
+ */
+const PLANT_NAME_COUNT = 3;
+
+/**
  * Generate a random plant-based name (e.g., "oak-corn-rose")
  */
 function generateRandomPlantName(): string {
-  const count = 3;
   const selected: string[] = [];
   const available = [...PLANT_NAMES];
   
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < PLANT_NAME_COUNT; i++) {
     const index = Math.floor(Math.random() * available.length);
     selected.push(available[index]);
     available.splice(index, 1);
