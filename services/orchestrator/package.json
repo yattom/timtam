@@ -4,11 +4,11 @@
   "private": true,
   "license": "UNLICENSED",
   "dependencies": {
-    "@aws-sdk/client-bedrock-runtime": "3.600.0",
-    "@aws-sdk/client-cloudwatch": "3.600.0",
-    "@aws-sdk/client-sqs": "3.600.0",
-    "@aws-sdk/client-dynamodb": "3.600.0",
-    "@aws-sdk/lib-dynamodb": "3.600.0",
+    "@aws-sdk/client-bedrock-runtime": "3.975.0",
+    "@aws-sdk/client-cloudwatch": "3.975.0",
+    "@aws-sdk/client-sqs": "3.975.0",
+    "@aws-sdk/client-dynamodb": "3.975.0",
+    "@aws-sdk/lib-dynamodb": "3.975.0",
     "@timtam/shared": "workspace:*",
     "js-yaml": "^4.1.0"
   },

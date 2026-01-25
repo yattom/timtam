@@ -4,11 +4,11 @@
   "private": true,
   "license": "UNLICENSED",
   "dependencies": {
-    "@aws-sdk/client-chime-sdk-media-pipelines": "^3.948.0",
-    "@aws-sdk/client-chime-sdk-meetings": "3.600.0",
-    "@aws-sdk/client-dynamodb": "^3.948.0",
-    "@aws-sdk/lib-dynamodb": "^3.948.0",
-    "@aws-sdk/client-sqs": "^3.948.0",
+    "@aws-sdk/client-chime-sdk-media-pipelines": "3.975.0",
+    "@aws-sdk/client-chime-sdk-meetings": "3.975.0",
+    "@aws-sdk/client-dynamodb": "3.975.0",
+    "@aws-sdk/lib-dynamodb": "3.975.0",
+    "@aws-sdk/client-sqs": "3.975.0",
     "@timtam/shared": "workspace:*"
   }
 }

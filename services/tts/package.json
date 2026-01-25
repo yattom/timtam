@@ -4,6 +4,6 @@
   "private": true,
   "license": "UNLICENSED",
   "dependencies": {
-    "@aws-sdk/client-polly": "3.600.0"
+    "@aws-sdk/client-polly": "3.975.0"
   }
 }

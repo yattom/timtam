@@ -4,9 +4,9 @@
   "private": true,
   "license": "UNLICENSED",
   "dependencies": {
-    "@aws-sdk/client-lambda": "^3.948.0",
-    "@aws-sdk/client-ecs": "^3.948.0",
-    "@aws-sdk/client-cloudfront": "^3.948.0",
-    "@aws-sdk/client-cloudformation": "^3.948.0"
+    "@aws-sdk/client-lambda": "3.975.0",
+    "@aws-sdk/client-ecs": "3.975.0",
+    "@aws-sdk/client-cloudfront": "3.975.0",
+    "@aws-sdk/client-cloudformation": "3.975.0"
   }
 }
