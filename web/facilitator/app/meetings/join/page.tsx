@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -11,6 +11,41 @@ export default function JoinMeetingPage() {
   const [botName, setBotName] = useState("Timtam AI");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // ミーティングURLからプラットフォームを検出する
+  const detectPlatformFromUrl = (url: string): "zoom" | "google_meet" | "microsoft_teams" | "webex" | null => {
+    if (!url) return null;
+
+    // Zoom: zoom.us または zoomgov.com
+    if (/zoom\.us|zoomgov\.com/i.test(url)) {
+      return "zoom";
+    }
+
+    // Google Meet: meet.google.com
+    if (/meet\.google\.com/i.test(url)) {
+      return "google_meet";
+    }
+
+    // Microsoft Teams: teams.microsoft.com または teams.live.com
+    if (/teams\.(microsoft|live)\.com/i.test(url)) {
+      return "microsoft_teams";
+    }
+
+    // Webex: webex.com
+    if (/webex\.com/i.test(url)) {
+      return "webex";
+    }
+
+    return null;
+  };
+
+  // URLが変更されたときにプラットフォームを自動検出
+  useEffect(() => {
+    const detectedPlatform = detectPlatformFromUrl(meetingUrl);
+    if (detectedPlatform) {
+      setPlatform(detectedPlatform);
+    }
+  }, [meetingUrl]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
