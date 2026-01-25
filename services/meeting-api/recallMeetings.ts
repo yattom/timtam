@@ -367,6 +367,10 @@ export const leaveHandler: APIGatewayProxyHandlerV2 = async (event) => {
  *
  * 全ての会議を取得（activeとendedの両方、最新順）
  *
+ * Query Parameters:
+ * - limit: 取得する会議の最大数（デフォルト: 50、最大: 100）
+ * - nextToken: ページネーション用のトークン（base64エンコードされたLastEvaluatedKey）
+ *
  * Response:
  * {
  *   meetings: Array<{
@@ -377,33 +381,67 @@ export const leaveHandler: APIGatewayProxyHandlerV2 = async (event) => {
  *     endedAt?: number;
  *     meetingCode?: string;
  *     recallBot?: { ... };
- *   }>
+ *   }>,
+ *   nextToken?: string; // 次のページがある場合のみ
  * }
  */
 export const listHandler: APIGatewayProxyHandlerV2 = async (event) => {
   try {
-    // Scan all meetings from DynamoDB
+    // Parse query parameters
+    const limitParam = event.queryStringParameters?.limit;
+    let limit = 50; // default
+    
+    if (limitParam) {
+      const parsedLimit = parseInt(limitParam, 10);
+      if (isNaN(parsedLimit) || parsedLimit < 1) {
+        return {
+          statusCode: 400,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Invalid limit parameter' }),
+        };
+      }
+      limit = Math.min(parsedLimit, 100);
+    }
+    
+    const nextToken = event.queryStringParameters?.nextToken;
+    
+    // Decode nextToken if provided
+    let exclusiveStartKey: Record<string, any> | undefined;
+    if (nextToken) {
+      try {
+        exclusiveStartKey = JSON.parse(Buffer.from(nextToken, 'base64').toString('utf-8'));
+      } catch (err) {
+        return {
+          statusCode: 400,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Invalid nextToken' }),
+        };
+      }
+    }
+
+    // Scan meetings from DynamoDB with pagination
     const result = await ddb.send(
       new ScanCommand({
         TableName: MEETINGS_METADATA_TABLE,
+        Limit: limit,
+        ExclusiveStartKey: exclusiveStartKey,
       })
     );
 
-    if (!result.Items) {
-      return {
-        statusCode: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ meetings: [] }),
-      };
-    }
+    // Note: Sorting is done client-side for now. For better performance with large datasets,
+    // consider using a GSI with createdAt as the sort key to enable Query operations with sorted results.
+    const meetings = (result.Items || []).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
-    // Sort by createdAt descending (latest first)
-    const meetings = result.Items.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    // Encode LastEvaluatedKey as nextToken if present
+    const responseBody: any = { meetings };
+    if (result.LastEvaluatedKey) {
+      responseBody.nextToken = Buffer.from(JSON.stringify(result.LastEvaluatedKey)).toString('base64');
+    }
 
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ meetings }),
+      body: JSON.stringify(responseBody),
     };
   } catch (err: any) {
     console.error('Error listing meetings', {
