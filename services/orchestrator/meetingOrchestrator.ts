@@ -11,21 +11,24 @@ import {
   Metrics,
 } from './grasp';
 import { Message } from '@aws-sdk/client-sqs';
-import { TranscriptEvent } from '@timtam/shared';
+import { TranscriptEvent, MeetingServiceAdapter } from '@timtam/shared';
 
 export interface MeetingConfig {
   meetingId: MeetingId;
+  adapter: MeetingServiceAdapter;
   windowLines?: number;
 }
 
 /**
  * Meeting: 単一ミーティング用のオーケストレーター
- * 
+ *
  * 各ミーティングは独立した状態（WindowBuffer、Notebook、waiting Grasps）を持ち、
  * 他のミーティングと干渉しない。
+ * Notifierインターフェースを実装し、内部のadapterに委譲する。
  */
-export class Meeting {
+export class Meeting implements Notifier {
   private meetingId: MeetingId;
+  private adapter: MeetingServiceAdapter;
   private window: WindowBuffer;
   private notebook: Notebook;
   private graspQueue: GraspQueue;
@@ -38,6 +41,7 @@ export class Meeting {
     grasps: Grasp[]
   ) {
     this.meetingId = config.meetingId;
+    this.adapter = config.adapter;
     this.window = new WindowBuffer();
     this.notebook = new Notebook(config.meetingId);
     this.graspQueue = new GraspQueue();
@@ -47,9 +51,19 @@ export class Meeting {
     console.log(JSON.stringify({
       type: 'meeting.created',
       meetingId: this.meetingId,
+      adapter: this.adapter.constructor.name,
       graspCount: this.grasps.length,
       ts: Date.now()
     }));
+  }
+
+  // Notifierインターフェース実装
+  async postChat(meetingId: MeetingId, message: string): Promise<void> {
+    return this.adapter.postChat(meetingId, message);
+  }
+
+  async postLlmCallLog(meetingId: MeetingId, prompt: string, rawResponse: string, nodeId?: string): Promise<void> {
+    return this.adapter.postLlmCallLog(meetingId, prompt, rawResponse, nodeId);
   }
 
   getMeetingId(): MeetingId {
@@ -69,7 +83,6 @@ export class Meeting {
    */
   async processTranscriptEvent(
     ev: TranscriptEvent,
-    notifier: Notifier,
     metrics: Metrics
   ): Promise<void> {
     this.lastActivityTime = Date.now();
@@ -100,7 +113,7 @@ export class Meeting {
     await this.graspQueue.processNext(
       this.window,
       ev.meetingId,
-      notifier,
+      this,
       metrics,
       this.notebook
     );
@@ -110,7 +123,6 @@ export class Meeting {
    * 定期的な待機Grasp処理（沈黙時でも待機中のGraspを実行）
    */
   async processWaitingGraspsPeriodically(
-    notifier: Notifier,
     metrics: Metrics
   ): Promise<boolean> {
     if (this.graspQueue.size() === 0) {
@@ -120,7 +132,7 @@ export class Meeting {
     const processed = await this.graspQueue.processNext(
       this.window,
       this.meetingId,
-      notifier,
+      this,
       metrics,
       this.notebook
     );

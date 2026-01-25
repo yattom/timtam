@@ -1,8 +1,10 @@
 // OrchestratorManager: 複数ミーティングのオーケストレーターを管理
 import { Meeting } from './meetingOrchestrator';
-import { Grasp, MeetingId, Notifier, Metrics, LLMClient } from './grasp';
-import { TranscriptEvent } from '@timtam/shared';
+import { Grasp, MeetingId, Metrics, LLMClient } from './grasp';
+import { TranscriptEvent, MeetingServiceAdapter } from '@timtam/shared';
 import { loadGraspsForMeeting } from './graspConfigLoader';
+
+export type AdapterFactory = (meetingId: MeetingId) => Promise<MeetingServiceAdapter>;
 
 export interface OrchestratorManagerConfig {
   maxMeetings?: number; // 最大同時ミーティング数
@@ -15,17 +17,20 @@ export interface OrchestratorManagerConfig {
 
 /**
  * OrchestratorManager: 複数ミーティングの管理
- * 
+ *
  * 複数のMeetingインスタンスを管理し、
  * ミーティングIDに基づいて適切なオーケストレーターに処理を振り分ける。
  */
 export class OrchestratorManager {
   private meetings: Map<MeetingId, Meeting> = new Map();
   private config: Required<OrchestratorManagerConfig>;
+  private adapterFactory: AdapterFactory;
 
   constructor(
+    adapterFactory: AdapterFactory,
     config?: OrchestratorManagerConfig
   ) {
+    this.adapterFactory = adapterFactory;
     this.config = {
       maxMeetings: config?.maxMeetings || 100,
       meetingTimeoutMs: config?.meetingTimeoutMs || 43200000, // 12時間 (12 * 60 * 60 * 1000)
@@ -48,7 +53,7 @@ export class OrchestratorManager {
    */
   async getOrCreateMeeting(meetingId: MeetingId): Promise<Meeting> {
     let meeting = this.meetings.get(meetingId);
-    
+
     if (!meeting) {
       // 最大数チェックとクリーンアップ
       if (this.meetings.size >= this.config.maxMeetings) {
@@ -64,9 +69,12 @@ export class OrchestratorManager {
         this.config.llmClient
       );
 
+      // Platform判別してAdapterを作成
+      const adapter = await this.adapterFactory(meetingId);
+
       // 新しいオーケストレーターを作成
       meeting = new Meeting(
-        { meetingId },
+        { meetingId, adapter },
         grasps
       );
       this.meetings.set(meetingId, meeting);
@@ -74,6 +82,7 @@ export class OrchestratorManager {
       console.log(JSON.stringify({
         type: 'orchestrator.manager.meeting.created',
         meetingId,
+        platform: adapter.constructor.name,
         totalMeetings: this.meetings.size,
         graspCount: grasps.length,
         ts: Date.now()
@@ -95,11 +104,10 @@ export class OrchestratorManager {
    */
   async processTranscriptEvent(
     ev: TranscriptEvent,
-    notifier: Notifier,
     metrics: Metrics
   ): Promise<void> {
     const meeting = await this.getOrCreateMeeting(ev.meetingId);
-    await meeting.processTranscriptEvent(ev, notifier, metrics);
+    await meeting.processTranscriptEvent(ev, metrics);
   }
 
   /**
@@ -107,13 +115,12 @@ export class OrchestratorManager {
    * 並列処理により効率化
    */
   async processAllWaitingGrasps(
-    notifier: Notifier,
     metrics: Metrics
   ): Promise<number> {
     // Process all meeting waiting Grasps in parallel for better performance
     const results = await Promise.all(
       Array.from(this.meetings.values()).map(async (meeting) => {
-        return await meeting.processWaitingGraspsPeriodically(notifier, metrics);
+        return await meeting.processWaitingGraspsPeriodically(metrics);
       })
     );
 

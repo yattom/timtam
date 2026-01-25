@@ -9,6 +9,33 @@ interface GraspConfig {
   name: string;
 }
 
+// ミーティングURLからプラットフォームを検出する
+const detectPlatformFromUrl = (url: string): "zoom" | "google_meet" | "microsoft_teams" | "webex" | null => {
+  if (!url) return null;
+
+  // Zoom: zoom.us または zoomgov.com （ホスト名としてのみマッチ）
+  if (/https?:\/\/(?:[a-zA-Z0-9-]+\.)*(zoom\.us|zoomgov\.com)(?=\/|:|$)/i.test(url)) {
+    return "zoom";
+  }
+
+  // Google Meet: meet.google.com （ホスト名としてのみマッチ）
+  if (/https?:\/\/(?:[a-zA-Z0-9-]+\.)*meet\.google\.com(?=\/|:|$)/i.test(url)) {
+    return "google_meet";
+  }
+
+  // Microsoft Teams: teams.microsoft.com または teams.live.com （ホスト名としてのみマッチ）
+  if (/https?:\/\/(?:[a-zA-Z0-9-]+\.)*teams\.(microsoft|live)\.com(?=\/|:|$)/i.test(url)) {
+    return "microsoft_teams";
+  }
+
+  // Webex: webex.com （ホスト名としてのみマッチ）
+  if (/https?:\/\/(?:[a-zA-Z0-9-]+\.)*webex\.com(?=\/|:|$)/i.test(url)) {
+    return "webex";
+  }
+
+  return null;
+};
+
 export default function JoinMeetingPage() {
   const router = useRouter();
   const [meetingUrl, setMeetingUrl] = useState("");
@@ -40,6 +67,14 @@ export default function JoinMeetingPage() {
 
     fetchConfigs();
   }, []);
+
+  // URLが変更されたときにプラットフォームを自動検出
+  useEffect(() => {
+    const detectedPlatform = detectPlatformFromUrl(meetingUrl);
+    if (detectedPlatform) {
+      setPlatform(detectedPlatform);
+    }
+  }, [meetingUrl]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

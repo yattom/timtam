@@ -196,6 +196,17 @@ export class TimtamInfraStack extends Stack {
       },
     });
 
+    // Recall.ai Meetings List handler
+    const recallListMeetingsFn = new NodejsFunction(this, 'RecallListMeetingsFn', {
+      entry: '../../services/meeting-api/recallMeetings.ts',
+      handler: 'listHandler',
+      timeout: Duration.seconds(10),
+      runtime: lambda.Runtime.NODEJS_20_X,
+      environment: {
+        MEETINGS_METADATA_TABLE: meetingsMetadataTable.tableName,
+      },
+    });
+
     // Recall.ai Meeting Leave handler
     const recallLeaveMeetingFn = new NodejsFunction(this, 'RecallLeaveMeetingFn', {
       entry: '../../services/meeting-api/recallMeetings.ts',
@@ -245,6 +256,7 @@ export class TimtamInfraStack extends Stack {
     meetingsMetadataTable.grantReadWriteData(recallJoinMeetingFn);
     meetingsMetadataTable.grantReadData(recallGetMeetingFn);
     meetingsMetadataTable.grantReadWriteData(recallLeaveMeetingFn);
+    meetingsMetadataTable.grantReadData(recallListMeetingsFn);
     meetingsMetadataTable.grantReadData(attendeeGetMeetingByCodeFn);
 
     // Ensure the Chime transcription service-linked role exists in this account
@@ -758,6 +770,21 @@ export class TimtamInfraStack extends Stack {
     });
     recallJoinMeetingRoute.addDependency(recallJoinMeetingInt);
 
+    // Recall.ai List Meetings
+    const recallListMeetingsInt = new CfnIntegration(this, 'RecallListMeetingsIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(recallListMeetingsFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const recallListMeetingsRoute = new CfnRoute(this, 'RecallListMeetingsRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'GET /recall/meetings',
+      target: `integrations/${recallListMeetingsInt.ref}`,
+    });
+    recallListMeetingsRoute.addDependency(recallListMeetingsInt);
+
     // Recall.ai Get Meeting
     const recallGetMeetingInt = new CfnIntegration(this, 'RecallGetMeetingIntegration', {
       apiId: httpApi.ref,
@@ -817,6 +844,7 @@ export class TimtamInfraStack extends Stack {
       recallWebhookFn,
       recallJoinMeetingFn,
       recallGetMeetingFn,
+      recallListMeetingsFn,
       recallLeaveMeetingFn,
       attendeeGetMeetingByCodeFn,
     ].forEach((fn, i) => {
@@ -1184,6 +1212,7 @@ export class TimtamInfraStack extends Stack {
     transcriptQueue.grantConsumeMessages(taskRole);  // ADR-0011: Grant SQS consume permission
     aiMessagesTable.grantWriteData(taskRole);
     graspConfigsTable.grantReadData(taskRole);
+    orchestratorConfigTable.grantReadData(taskRole);
     meetingsMetadataTable.grantReadData(taskRole);
 
     const taskDef = new ecs.FargateTaskDefinition(this, 'OrchestratorTaskDef', {
@@ -1208,6 +1237,8 @@ export class TimtamInfraStack extends Stack {
         CONTROL_SQS_URL: controlQueue.queueUrl,
         AI_MESSAGES_TABLE: aiMessagesTable.tableName,
         GRASP_CONFIGS_TABLE: graspConfigsTable.tableName,
+        CONFIG_TABLE_NAME: orchestratorConfigTable.tableName,
+        RECALL_API_KEY: process.env.RECALL_API_KEY || '',
         MEETINGS_METADATA_TABLE: meetingsMetadataTable.tableName,
       },
     });
