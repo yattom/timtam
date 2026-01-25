@@ -33,7 +33,7 @@ export default function DashboardPage() {
         setLoading(true);
       }
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000";
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
       const url = new URL(`${apiUrl}/recall/meetings`);
       url.searchParams.set('limit', '50');
       if (token) {
