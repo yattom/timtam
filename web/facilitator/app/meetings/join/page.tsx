@@ -1,16 +1,45 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+
+interface GraspConfig {
+  configId: string;
+  name: string;
+}
 
 export default function JoinMeetingPage() {
   const router = useRouter();
   const [meetingUrl, setMeetingUrl] = useState("");
   const [platform, setPlatform] = useState<"zoom" | "google_meet" | "microsoft_teams" | "webex">("zoom");
   const [botName, setBotName] = useState("Timtam AI");
+  const [graspConfigId, setGraspConfigId] = useState<string>("");
+  const [graspConfigs, setGraspConfigs] = useState<GraspConfig[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Load Grasp configs
+    const fetchConfigs = async () => {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://your-api-gateway.amazonaws.com";
+        const response = await fetch(`${apiUrl}/grasp/configs`);
+
+        if (!response.ok) {
+          console.error('Failed to load Grasp configs');
+          return;
+        }
+
+        const data = await response.json();
+        setGraspConfigs(data.configs || []);
+      } catch (err) {
+        console.error('Failed to load Grasp configs', err);
+      }
+    };
+
+    fetchConfigs();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,6 +59,7 @@ export default function JoinMeetingPage() {
           meetingUrl,
           platform,
           botName,
+          graspConfigId: graspConfigId || undefined, // Only include if selected
         }),
       });
 
@@ -158,6 +188,31 @@ export default function JoinMeetingPage() {
               />
               <p className="mt-1 text-sm text-gray-500">
                 会議に表示されるボットの名前
+              </p>
+            </div>
+
+            <div>
+              <label
+                htmlFor="graspConfig"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
+                Grasp設定（オプション）
+              </label>
+              <select
+                id="graspConfig"
+                value={graspConfigId}
+                onChange={(e) => setGraspConfigId(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">デフォルト設定を使用</option>
+                {graspConfigs.map((config) => (
+                  <option key={config.configId} value={config.configId}>
+                    {config.name}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-sm text-gray-500">
+                会議で使用するGrasp設定を選択（未選択の場合はデフォルト設定）
               </p>
             </div>
 

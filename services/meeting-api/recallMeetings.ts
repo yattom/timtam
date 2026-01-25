@@ -26,6 +26,7 @@ const recallClient = new RecallAPIClient({ apiKey: RECALL_API_KEY });
  *   meetingUrl: string;        // Zoom/Meet/Teams URL
  *   platform: "zoom" | "google_meet" | "microsoft_teams" | "webex";
  *   botName?: string;          // デフォルト: "Timtam AI"
+ *   graspConfigId?: string;    // Grasp設定ID (オプション、指定しない場合はデフォルト設定を使用)
  * }
  *
  * Response:
@@ -56,7 +57,7 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
       };
     }
 
-    const { meetingUrl, platform, botName } = parsedBody;
+    const { meetingUrl, platform, botName, graspConfigId } = parsedBody;
     // Validate inputs
     if (!meetingUrl || typeof meetingUrl !== 'string') {
       return {
@@ -138,6 +139,7 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
           status: 'active',
           createdAt: now,
           meetingCode,
+          graspConfigId: graspConfigId || undefined, // Store config ID if provided
           recallBot: {
             botId: bot.id,
             meetingUrl,
@@ -155,6 +157,7 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
       meetingId: bot.id,
       platform,
       meetingCode,
+      graspConfigId: graspConfigId || 'default',
       timestamp: now,
     }));
 
