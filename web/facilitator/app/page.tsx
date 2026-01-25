@@ -78,13 +78,13 @@ export default function DashboardPage() {
       setLoading(false);
       setLoadingMore(false);
     }
-  };
+  }, []);
 
-  const loadMoreMeetings = () => {
+  const loadMoreMeetings = useCallback(() => {
     if (nextToken && !loadingMore) {
       fetchMeetings(nextToken, true);
     }
-  }, []);
+  }, [nextToken, loadingMore, fetchMeetings]);
 
   useEffect(() => {
     // Initial fetch
