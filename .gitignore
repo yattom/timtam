@@ -40,6 +40,7 @@ out/
 coverage/
 lcov.info
 .nyc_output/
+package-lock.json
 
 # Python
 __pycache__/

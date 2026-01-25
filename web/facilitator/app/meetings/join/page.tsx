@@ -4,6 +4,33 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
+// ミーティングURLからプラットフォームを検出する
+const detectPlatformFromUrl = (url: string): "zoom" | "google_meet" | "microsoft_teams" | "webex" | null => {
+  if (!url) return null;
+
+  // Zoom: zoom.us または zoomgov.com
+  if (/zoom\.us|zoomgov\.com/i.test(url)) {
+    return "zoom";
+  }
+
+  // Google Meet: meet.google.com
+  if (/meet\.google\.com/i.test(url)) {
+    return "google_meet";
+  }
+
+  // Microsoft Teams: teams.microsoft.com または teams.live.com
+  if (/teams\.(microsoft|live)\.com/i.test(url)) {
+    return "microsoft_teams";
+  }
+
+  // Webex: webex.com
+  if (/webex\.com/i.test(url)) {
+    return "webex";
+  }
+
+  return null;
+};
+
 export default function JoinMeetingPage() {
   const router = useRouter();
   const [meetingUrl, setMeetingUrl] = useState("");
