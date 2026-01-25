@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 interface Meeting {
   meetingId: string;
@@ -25,7 +25,7 @@ export default function DashboardPage() {
   const [nextToken, setNextToken] = useState<string | null>(null);
 
   // Fetch meetings from API
-  const fetchMeetings = async (token?: string | null, append = false) => {
+  const fetchMeetings = useCallback(async (token?: string | null, append = false) => {
     try {
       if (append) {
         setLoadingMore(true);
@@ -84,7 +84,7 @@ export default function DashboardPage() {
     if (nextToken && !loadingMore) {
       fetchMeetings(nextToken, true);
     }
-  };
+  }, []);
 
   useEffect(() => {
     // Initial fetch
@@ -94,7 +94,7 @@ export default function DashboardPage() {
     const interval = setInterval(() => fetchMeetings(), 60000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchMeetings]);
 
   return (
     <div className="min-h-screen bg-gray-50">
