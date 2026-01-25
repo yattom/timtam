@@ -10,6 +10,39 @@ const ddbClient = new DynamoDBClient({ region: REGION });
 const ddb = DynamoDBDocumentClient.from(ddbClient);
 
 /**
+ * Plant names for generating random fallback names
+ */
+const PLANT_NAMES = [
+  'oak', 'pine', 'maple', 'birch', 'willow', 'cedar', 'ash', 'elm',
+  'rose', 'lily', 'tulip', 'daisy', 'iris', 'orchid', 'lotus', 'peony',
+  'corn', 'wheat', 'rice', 'barley', 'oat', 'rye', 'millet', 'soy',
+  'apple', 'cherry', 'peach', 'plum', 'pear', 'orange', 'lemon', 'lime',
+  'bamboo', 'fern', 'moss', 'ivy', 'clover', 'sage', 'mint', 'basil',
+  'lavender', 'jasmine', 'violet', 'poppy', 'sunflower', 'cosmos', 'zinnia', 'azalea'
+];
+
+/**
+ * Number of plant names to combine for generated config names
+ */
+const PLANT_NAME_COUNT = 3;
+
+/**
+ * Generate a random plant-based name (e.g., "oak-corn-rose")
+ */
+function generateRandomPlantName(): string {
+  const selected: string[] = [];
+  const available = [...PLANT_NAMES];
+  
+  for (let i = 0; i < PLANT_NAME_COUNT; i++) {
+    const index = Math.floor(Math.random() * available.length);
+    selected.push(available[index]);
+    available.splice(index, 1);
+  }
+  
+  return selected.join('-');
+}
+
+/**
  * POST /grasp/configs
  * Save a named Grasp configuration
  * Body: { name: string, yaml: string, createdAt: number }
@@ -87,7 +120,13 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
     // Sanitize name for use in ID (remove special characters)
     const sanitizedName = trimmedName.replace(/[^a-zA-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF-]/g, '-');
-    const configId = `${sanitizedName}_${timestampStr}`;
+    
+    // Check if sanitized name is recognizable (has at least one alphanumeric or Japanese character)
+    const hasValidChar = /[a-zA-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(sanitizedName);
+    
+    // If not recognizable, generate a random plant-based name
+    const finalName = hasValidChar ? sanitizedName : generateRandomPlantName();
+    const configId = `${finalName}_${timestampStr}`;
 
     // Save to DynamoDB
     await ddb.send(
