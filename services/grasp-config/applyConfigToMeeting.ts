@@ -1,0 +1,140 @@
+import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
+import { parseGraspGroupDefinition } from '../orchestrator/graspConfigParser';
+
+const REGION = process.env.AWS_REGION || 'ap-northeast-1';
+const GRASP_CONFIGS_TABLE = process.env.GRASP_CONFIGS_TABLE || 'timtam-grasp-configs';
+const CONTROL_SQS_URL = process.env.CONTROL_SQS_URL || '';
+
+const ddbClient = new DynamoDBClient({ region: REGION });
+const ddb = DynamoDBDocumentClient.from(ddbClient);
+const sqs = new SQSClient({});
+
+/**
+ * POST /meetings/{meetingId}/grasp-config
+ * Apply a Grasp configuration to a specific meeting
+ * Body: { configId: string } or { yaml: string }
+ */
+export const handler: APIGatewayProxyHandlerV2 = async (event) => {
+  try {
+    if (!CONTROL_SQS_URL) {
+      return {
+        statusCode: 500,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ok: false, error: 'CONTROL_SQS_URL is not configured' }),
+      };
+    }
+
+    const meetingId = event.pathParameters?.meetingId;
+    if (!meetingId) {
+      return {
+        statusCode: 400,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ok: false, error: 'meetingId is required' }),
+      };
+    }
+
+    const body = event.body ? JSON.parse(event.body) : {};
+    const { configId, yaml: directYaml } = body;
+
+    let yaml: string;
+    let configName: string | undefined;
+
+    if (configId) {
+      // Retrieve config from DynamoDB
+      const result = await ddb.send(
+        new GetCommand({
+          TableName: GRASP_CONFIGS_TABLE,
+          Key: { configId },
+        })
+      );
+
+      if (!result.Item) {
+        return {
+          statusCode: 404,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ok: false, error: 'Configuration not found' }),
+        };
+      }
+
+      yaml = result.Item.yaml;
+      configName = result.Item.name;
+    } else if (directYaml) {
+      // Use YAML directly from request
+      yaml = directYaml;
+    } else {
+      return {
+        statusCode: 400,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ok: false, error: 'Either configId or yaml is required' }),
+      };
+    }
+
+    // Validate YAML format
+    if (typeof yaml !== 'string' || yaml.trim() === '') {
+      return {
+        statusCode: 400,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ok: false, error: 'yaml must be non-empty' }),
+      };
+    }
+
+    try {
+      parseGraspGroupDefinition(yaml);
+    } catch (validationError: any) {
+      return {
+        statusCode: 400,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ok: false,
+          error: validationError?.message || 'YAML validation failed',
+        }),
+      };
+    }
+
+    const trimmedYaml = yaml.trim();
+
+    // Send control message to orchestrator via SQS
+    const controlMessage = {
+      type: 'apply_grasp_config',
+      meetingId,
+      yaml: trimmedYaml,
+      configName, // Optional: include config name for notification
+    };
+
+    await sqs.send(
+      new SendMessageCommand({
+        QueueUrl: CONTROL_SQS_URL,
+        MessageBody: JSON.stringify(controlMessage),
+      })
+    );
+
+    console.log(JSON.stringify({
+      type: 'grasp.config.applied.to.meeting',
+      meetingId,
+      configId,
+      configName,
+      yamlLength: trimmedYaml.length,
+    }));
+
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ok: true,
+        meetingId,
+        configId,
+        configName,
+      }),
+    };
+  } catch (err: any) {
+    console.error('[ApplyGraspConfigToMeeting] Error', err);
+    return {
+      statusCode: 500,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ok: false, error: err?.message || 'Internal server error' }),
+    };
+  }
+};

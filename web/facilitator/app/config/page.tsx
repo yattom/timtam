@@ -9,6 +9,8 @@ export default function ConfigPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [configName, setConfigName] = useState("");
 
   useEffect(() => {
     const fetchConfig = async () => {
@@ -69,6 +71,42 @@ export default function ConfigPage() {
       }
 
       setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "エラーが発生しました");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveAsNamed = async () => {
+    if (!configName.trim()) {
+      alert("設定名を入力してください");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setSuccess(false);
+
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://your-api-gateway.amazonaws.com";
+      const response = await fetch(`${apiUrl}/grasp/configs`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name: configName, yaml: config }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "設定の保存に失敗しました");
+      }
+
+      setSuccess(true);
+      setShowSaveDialog(false);
+      setConfigName("");
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "エラーが発生しました");
@@ -157,13 +195,22 @@ export default function ConfigPage() {
                 >
                   キャンセル
                 </Link>
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
-                >
-                  {saving ? "保存中..." : "保存して適用"}
-                </button>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => setShowSaveDialog(true)}
+                    disabled={saving}
+                    className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
+                  >
+                    名前を付けて保存
+                  </button>
+                  <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
+                  >
+                    {saving ? "保存中..." : "保存して適用"}
+                  </button>
+                </div>
               </div>
             </>
           )}
@@ -178,9 +225,55 @@ export default function ConfigPage() {
             <li>promptTemplateでは {"{{INPUT:past5m}}"} のような変数が使える</li>
             <li>intervalSecは秒単位で実行間隔を指定</li>
             <li>outputHandlerは通常 "chat" を指定</li>
+            <li>「名前を付けて保存」で設定を保存すると、会議ページから呼び出せる</li>
           </ul>
         </div>
       </main>
+
+      {/* Save As Dialog */}
+      {showSaveDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">
+              設定に名前を付けて保存
+            </h3>
+            <div className="mb-4">
+              <label htmlFor="configName" className="block text-sm font-medium text-gray-700 mb-2">
+                設定名
+              </label>
+              <input
+                id="configName"
+                type="text"
+                value={configName}
+                onChange={(e) => setConfigName(e.target.value)}
+                placeholder="例: 沈黙検知設定"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                タイムスタンプが自動的に付加される
+              </p>
+            </div>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowSaveDialog(false);
+                  setConfigName("");
+                }}
+                className="px-4 py-2 text-gray-700 hover:text-gray-900 transition-colors"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={handleSaveAsNamed}
+                disabled={saving || !configName.trim()}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
+              >
+                {saving ? "保存中..." : "保存"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

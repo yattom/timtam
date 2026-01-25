@@ -180,7 +180,7 @@ async function pollControlOnce() {
       try {
         const parsed = JSON.parse(body);
 
-        // Handle grasp_config update messages
+        // Handle grasp_config update messages (global update)
         if (parsed.type === 'grasp_config' && typeof parsed.yaml === 'string') {
           try {
             const graspGroupDef = parseGraspGroupDefinition(parsed.yaml);
@@ -193,6 +193,44 @@ async function pollControlOnce() {
           } catch (error) {
             console.error(JSON.stringify({
               type: 'orchestrator.control.grasp_config.error',
+              error: (error as Error).message,
+              ts: Date.now()
+            }));
+          }
+        }
+
+        // Handle apply_grasp_config messages (meeting-specific update)
+        if (parsed.type === 'apply_grasp_config' && typeof parsed.meetingId === 'string' && typeof parsed.yaml === 'string') {
+          try {
+            const graspGroupDef = parseGraspGroupDefinition(parsed.yaml);
+            const grasps = buildGrasps(graspGroupDef);
+
+            // Apply config to specific meeting
+            const meeting = manager.getMeeting(parsed.meetingId);
+            if (meeting) {
+              manager.rebuildMeetingGrasps(parsed.meetingId, grasps);
+              console.log(JSON.stringify({
+                type: 'orchestrator.control.meeting.grasp_config.applied',
+                meetingId: parsed.meetingId,
+                graspCount: grasps.length,
+                ts: Date.now()
+              }));
+
+              // Send chat notification to meeting
+              const configName = parsed.configName || 'カスタム設定';
+              const notificationMessage = `Grasp設定「${configName}」を適用しました（${grasps.length}個のGrasp）`;
+              await notifier.postChat(parsed.meetingId, notificationMessage);
+            } else {
+              console.warn(JSON.stringify({
+                type: 'orchestrator.control.meeting.grasp_config.meeting_not_found',
+                meetingId: parsed.meetingId,
+                ts: Date.now()
+              }));
+            }
+          } catch (error) {
+            console.error(JSON.stringify({
+              type: 'orchestrator.control.meeting.grasp_config.error',
+              meetingId: parsed.meetingId,
               error: (error as Error).message,
               ts: Date.now()
             }));

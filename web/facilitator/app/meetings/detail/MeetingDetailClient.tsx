@@ -24,6 +24,13 @@ interface LLMLog {
   rawResponse: string;
 }
 
+interface GraspConfig {
+  configId: string;
+  name: string;
+  yaml: string;
+  createdAt: number;
+}
+
 interface Meeting {
   meetingId: string;
   platform: string;
@@ -43,9 +50,15 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
   const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
   const [aiMessages, setAiMessages] = useState<AIMessage[]>([]);
   const [llmLogs, setLlmLogs] = useState<LLMLog[]>([]);
-  const [activeTab, setActiveTab] = useState<"transcript" | "ai" | "logs">("transcript");
+  const [activeTab, setActiveTab] = useState<"transcript" | "ai" | "logs" | "config">("transcript");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [graspConfigs, setGraspConfigs] = useState<GraspConfig[]>([]);
+  const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null);
+  const [selectedConfigYaml, setSelectedConfigYaml] = useState<string>("");
+  const [customYaml, setCustomYaml] = useState<string>("");
+  const [configLoading, setConfigLoading] = useState(false);
+  const [applySuccess, setApplySuccess] = useState(false);
 
   useEffect(() => {
     const fetchMeeting = async () => {
@@ -140,6 +153,85 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
 
     return () => clearInterval(interval);
   }, [meeting, meetingId]);
+
+  // Load Grasp configs when config tab is active
+  useEffect(() => {
+    if (activeTab !== 'config') return;
+
+    const fetchConfigs = async () => {
+      try {
+        setConfigLoading(true);
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://your-api-gateway.amazonaws.com";
+        const response = await fetch(`${apiUrl}/grasp/configs`);
+
+        if (!response.ok) {
+          throw new Error('設定の取得に失敗しました');
+        }
+
+        const data = await response.json();
+        setGraspConfigs(data.configs || []);
+      } catch (err) {
+        console.error('Failed to load Grasp configs', err);
+      } finally {
+        setConfigLoading(false);
+      }
+    };
+
+    fetchConfigs();
+  }, [activeTab]);
+
+  // Handle config selection
+  const handleSelectConfig = async (configId: string) => {
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://your-api-gateway.amazonaws.com";
+      const response = await fetch(`${apiUrl}/grasp/configs/${configId}`);
+
+      if (!response.ok) {
+        throw new Error('設定の取得に失敗しました');
+      }
+
+      const data = await response.json();
+      setSelectedConfigId(configId);
+      setSelectedConfigYaml(data.config.yaml);
+      setCustomYaml('');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '設定の取得に失敗しました');
+    }
+  };
+
+  // Handle applying Grasp config to meeting
+  const handleApplyConfig = async () => {
+    try {
+      setConfigLoading(true);
+      setApplySuccess(false);
+
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://your-api-gateway.amazonaws.com";
+
+      const body = selectedConfigId
+        ? { configId: selectedConfigId }
+        : { yaml: customYaml };
+
+      const response = await fetch(`${apiUrl}/meetings/${meetingId}/grasp-config`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '設定の適用に失敗しました');
+      }
+
+      setApplySuccess(true);
+      setTimeout(() => setApplySuccess(false), 3000);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '設定の適用に失敗しました');
+    } finally {
+      setConfigLoading(false);
+    }
+  };
 
   const handleLeave = async () => {
     if (!confirm("ボットを会議から退出させますか？")) return;
@@ -258,6 +350,7 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
                 { id: "transcript", label: "文字起こし" },
                 { id: "ai", label: "AI応答" },
                 { id: "logs", label: "LLMログ" },
+                { id: "config", label: "Grasp設定" },
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -389,6 +482,120 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+
+            {activeTab === "config" && (
+              <div className="space-y-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                  Grasp設定
+                </h2>
+
+                {applySuccess && (
+                  <div className="mb-4 bg-green-50 border border-green-200 rounded-md p-4">
+                    <p className="text-green-800">設定を適用しました</p>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* 左側: 保存済み設定の一覧 */}
+                  <div className="border border-gray-200 rounded-lg p-4">
+                    <h3 className="text-md font-medium text-gray-900 mb-3">
+                      保存済み設定
+                    </h3>
+                    {configLoading ? (
+                      <div className="text-center py-8">
+                        <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
+                      </div>
+                    ) : graspConfigs.length === 0 ? (
+                      <p className="text-gray-500 text-center py-8">
+                        保存済み設定がありません
+                      </p>
+                    ) : (
+                      <div className="space-y-2 max-h-96 overflow-y-auto">
+                        {graspConfigs.map((config) => (
+                          <button
+                            key={config.configId}
+                            onClick={() => handleSelectConfig(config.configId)}
+                            className={`w-full text-left px-3 py-2 rounded border transition-colors ${
+                              selectedConfigId === config.configId
+                                ? 'border-blue-500 bg-blue-50'
+                                : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                            }`}
+                          >
+                            <div className="font-medium text-gray-900">
+                              {config.name}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {new Date(config.createdAt).toLocaleString('ja-JP')}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 右側: 設定プレビュー・編集 */}
+                  <div className="border border-gray-200 rounded-lg p-4">
+                    <h3 className="text-md font-medium text-gray-900 mb-3">
+                      設定内容
+                    </h3>
+                    {selectedConfigId ? (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            選択中の設定（YAML）
+                          </label>
+                          <pre className="text-xs bg-gray-50 p-3 rounded border border-gray-200 overflow-x-auto max-h-64 overflow-y-auto font-mono">
+                            {selectedConfigYaml}
+                          </pre>
+                        </div>
+                        <button
+                          onClick={handleApplyConfig}
+                          disabled={configLoading}
+                          className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
+                        >
+                          {configLoading ? '適用中...' : 'この設定を適用'}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            カスタムYAML設定
+                          </label>
+                          <textarea
+                            value={customYaml}
+                            onChange={(e) => setCustomYaml(e.target.value)}
+                            rows={10}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                            spellCheck={false}
+                            placeholder="grasps:&#10;  - nodeId: example&#10;    promptTemplate: |&#10;      プロンプト内容&#10;    intervalSec: 30&#10;    outputHandler: chat"
+                          />
+                        </div>
+                        <button
+                          onClick={handleApplyConfig}
+                          disabled={configLoading || !customYaml.trim()}
+                          className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
+                        >
+                          {configLoading ? '適用中...' : 'カスタム設定を適用'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+                  <h4 className="text-sm font-medium text-blue-900 mb-2">
+                    使い方
+                  </h4>
+                  <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
+                    <li>左側から保存済み設定を選択してプレビュー・適用できる</li>
+                    <li>右側でカスタムYAMLを直接入力して適用することもできる</li>
+                    <li>設定を適用すると、この会議のGraspが更新される</li>
+                    <li>チャットにて設定適用の通知が表示される</li>
+                  </ul>
+                </div>
               </div>
             )}
           </div>
