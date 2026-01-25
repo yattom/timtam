@@ -12,7 +12,7 @@ const ddb = DynamoDBDocumentClient.from(ddbClient);
 /**
  * POST /grasp/configs
  * Save a named Grasp configuration
- * Body: { name: string, yaml: string }
+ * Body: { name: string, yaml: string, createdAt: number }
  */
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   try {
