@@ -358,6 +358,52 @@ export class TimtamInfraStack extends Stack {
     });
     graspConfigsTable.grantWriteData(saveGraspPresetFn);
 
+    // Save Grasp Config with Auto-Generated ID (POST /grasp/configs)
+    const saveGraspConfigFn = new NodejsFunction(this, 'SaveGraspConfigFn', {
+      entry: '../../services/grasp-config/saveConfig.ts',
+      timeout: Duration.seconds(10),
+      runtime: lambda.Runtime.NODEJS_20_X,
+      environment: {
+        GRASP_CONFIGS_TABLE: graspConfigsTable.tableName,
+      },
+      bundling: {
+        nodeModules: ['js-yaml'],
+        externalModules: ['aws-sdk'],
+        target: 'node20',
+        platform: 'node',
+      },
+    });
+    graspConfigsTable.grantWriteData(saveGraspConfigFn);
+
+    // Get Specific Grasp Config (GET /grasp/configs/{configId})
+    const getGraspConfigByIdFn = new NodejsFunction(this, 'GetGraspConfigByIdFn', {
+      entry: '../../services/grasp-config/getConfig.ts',
+      timeout: Duration.seconds(10),
+      runtime: lambda.Runtime.NODEJS_20_X,
+      environment: {
+        GRASP_CONFIGS_TABLE: graspConfigsTable.tableName,
+      },
+    });
+    graspConfigsTable.grantReadData(getGraspConfigByIdFn);
+
+    // Apply Grasp Config to Meeting (POST /meetings/{meetingId}/grasp-config)
+    const applyGraspConfigToMeetingFn = new NodejsFunction(this, 'ApplyGraspConfigToMeetingFn', {
+      entry: '../../services/grasp-config/applyConfigToMeeting.ts',
+      timeout: Duration.seconds(10),
+      runtime: lambda.Runtime.NODEJS_20_X,
+      environment: {
+        GRASP_CONFIGS_TABLE: graspConfigsTable.tableName,
+        CONTROL_SQS_URL: '', // Will be set after controlQueue is created
+      },
+      bundling: {
+        nodeModules: ['@aws-sdk/client-sqs', 'js-yaml'],
+        externalModules: ['aws-sdk'],
+        target: 'node20',
+        platform: 'node',
+      },
+    });
+    graspConfigsTable.grantReadData(applyGraspConfigToMeetingFn);
+
     // === Admin API Lambdas ===
     // Read ADMIN_PASSWORD from context (passed via --context or cdk.json)
     const adminPassword = this.node.tryGetContext('adminPassword') || process.env.ADMIN_PASSWORD || '';
@@ -443,6 +489,10 @@ export class TimtamInfraStack extends Stack {
     // Update updateGraspConfigFn with SQS URL and grant permissions
     updateGraspConfigFn.addEnvironment('CONTROL_SQS_URL', controlQueue.queueUrl);
     controlQueue.grantSendMessages(updateGraspConfigFn);
+
+    // Update applyGraspConfigToMeetingFn with SQS URL and grant permissions
+    applyGraspConfigToMeetingFn.addEnvironment('CONTROL_SQS_URL', controlQueue.queueUrl);
+    controlQueue.grantSendMessages(applyGraspConfigToMeetingFn);
 
     const startMeetingFn = new NodejsFunction(this, 'StartMeetingOrchestratorFn', {
       entry: '../../services/orchestrator/startMeeting.ts',
@@ -1042,6 +1092,66 @@ export class TimtamInfraStack extends Stack {
       action: 'lambda:InvokeFunction',
     });
 
+    // Save Grasp Config (POST /grasp/configs)
+    const saveGraspConfigInt = new CfnIntegration(this, 'SaveGraspConfigIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(saveGraspConfigFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const saveGraspConfigRoute = new CfnRoute(this, 'SaveGraspConfigRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'POST /grasp/configs',
+      target: `integrations/${saveGraspConfigInt.ref}`,
+    });
+    saveGraspConfigRoute.addDependency(saveGraspConfigInt);
+    saveGraspConfigFn.addPermission('InvokeByHttpApiSaveGraspConfig', {
+      principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+      sourceArn,
+      action: 'lambda:InvokeFunction',
+    });
+
+    // Get Grasp Config by ID (GET /grasp/configs/{configId})
+    const getGraspConfigByIdInt = new CfnIntegration(this, 'GetGraspConfigByIdIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(getGraspConfigByIdFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const getGraspConfigByIdRoute = new CfnRoute(this, 'GetGraspConfigByIdRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'GET /grasp/configs/{configId}',
+      target: `integrations/${getGraspConfigByIdInt.ref}`,
+    });
+    getGraspConfigByIdRoute.addDependency(getGraspConfigByIdInt);
+    getGraspConfigByIdFn.addPermission('InvokeByHttpApiGetGraspConfigById', {
+      principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+      sourceArn,
+      action: 'lambda:InvokeFunction',
+    });
+
+    // Apply Grasp Config to Meeting (POST /meetings/{meetingId}/grasp-config)
+    const applyGraspConfigToMeetingInt = new CfnIntegration(this, 'ApplyGraspConfigToMeetingIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(applyGraspConfigToMeetingFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const applyGraspConfigToMeetingRoute = new CfnRoute(this, 'ApplyGraspConfigToMeetingRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'POST /meetings/{meetingId}/grasp-config',
+      target: `integrations/${applyGraspConfigToMeetingInt.ref}`,
+    });
+    applyGraspConfigToMeetingRoute.addDependency(applyGraspConfigToMeetingInt);
+    applyGraspConfigToMeetingFn.addPermission('InvokeByHttpApiApplyGraspConfigToMeeting', {
+      principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+      sourceArn,
+      action: 'lambda:InvokeFunction',
+    });
+
     // Admin API routes
     const adminCloseInt = new CfnIntegration(this, 'AdminCloseIntegration', {
       apiId: httpApi.ref,
@@ -1101,6 +1211,7 @@ export class TimtamInfraStack extends Stack {
     controlQueue.grantConsumeMessages(taskRole);
     transcriptQueue.grantConsumeMessages(taskRole);  // ADR-0011: Grant SQS consume permission
     aiMessagesTable.grantWriteData(taskRole);
+    graspConfigsTable.grantReadData(taskRole);
     orchestratorConfigTable.grantReadData(taskRole);
     meetingsMetadataTable.grantReadData(taskRole);
 
@@ -1125,6 +1236,7 @@ export class TimtamInfraStack extends Stack {
         POLL_INTERVAL_MS: '1000', // 1 second polling interval
         CONTROL_SQS_URL: controlQueue.queueUrl,
         AI_MESSAGES_TABLE: aiMessagesTable.tableName,
+        GRASP_CONFIGS_TABLE: graspConfigsTable.tableName,
         CONFIG_TABLE_NAME: orchestratorConfigTable.tableName,
         RECALL_API_KEY: process.env.RECALL_API_KEY || '',
         MEETINGS_METADATA_TABLE: meetingsMetadataTable.tableName,

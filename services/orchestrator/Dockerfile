@@ -43,6 +43,7 @@ COPY services/orchestrator/graspConfigParser.ts ./services/orchestrator/
 COPY services/orchestrator/selfSetup.ts ./services/orchestrator/
 COPY services/orchestrator/orchestratorManager.ts ./services/orchestrator/
 COPY services/orchestrator/meetingOrchestrator.ts ./services/orchestrator/
+COPY services/orchestrator/graspConfigLoader.ts ./services/orchestrator/
 
 # Build shared library first (required for orchestrator)
 RUN pnpm --filter @timtam/shared build

@@ -1,13 +1,18 @@
 // OrchestratorManager: 複数ミーティングのオーケストレーターを管理
 import { Meeting } from './meetingOrchestrator';
-import { Grasp, MeetingId, Metrics } from './grasp';
+import { Grasp, MeetingId, Metrics, LLMClient } from './grasp';
 import { TranscriptEvent, MeetingServiceAdapter } from '@timtam/shared';
+import { loadGraspsForMeeting } from './graspConfigLoader';
 
 export type AdapterFactory = (meetingId: MeetingId) => Promise<MeetingServiceAdapter>;
 
 export interface OrchestratorManagerConfig {
   maxMeetings?: number; // 最大同時ミーティング数
   meetingTimeoutMs?: number; // ミーティングの非アクティブタイムアウト
+  region?: string; // AWS region
+  graspConfigsTable?: string; // Grasp configs table name
+  meetingsMetadataTable?: string; // Meetings metadata table name
+  llmClient?: LLMClient; // LLM client for building Grasps
 }
 
 /**
@@ -19,19 +24,20 @@ export interface OrchestratorManagerConfig {
 export class OrchestratorManager {
   private meetings: Map<MeetingId, Meeting> = new Map();
   private config: Required<OrchestratorManagerConfig>;
-  private graspsTemplate: Grasp[];
   private adapterFactory: AdapterFactory;
 
   constructor(
-    graspsTemplate: Grasp[],
     adapterFactory: AdapterFactory,
     config?: OrchestratorManagerConfig
   ) {
-    this.graspsTemplate = graspsTemplate;
     this.adapterFactory = adapterFactory;
     this.config = {
       maxMeetings: config?.maxMeetings || 100,
       meetingTimeoutMs: config?.meetingTimeoutMs || 43200000, // 12時間 (12 * 60 * 60 * 1000)
+      region: config?.region || 'ap-northeast-1',
+      graspConfigsTable: config?.graspConfigsTable || 'timtam-grasp-configs',
+      meetingsMetadataTable: config?.meetingsMetadataTable || 'timtam-meetings-metadata',
+      llmClient: config?.llmClient as any, // Will be set by worker
     };
 
     console.log(JSON.stringify({
@@ -54,13 +60,22 @@ export class OrchestratorManager {
         this.cleanupInactiveMeetings();
       }
 
+      // Load Grasp configuration for this meeting
+      const grasps = await loadGraspsForMeeting(
+        meetingId,
+        this.config.region,
+        this.config.graspConfigsTable,
+        this.config.meetingsMetadataTable,
+        this.config.llmClient
+      );
+
       // Platform判別してAdapterを作成
       const adapter = await this.adapterFactory(meetingId);
 
       // 新しいオーケストレーターを作成
       meeting = new Meeting(
         { meetingId, adapter },
-        this.graspsTemplate
+        grasps
       );
       this.meetings.set(meetingId, meeting);
 
@@ -69,6 +84,7 @@ export class OrchestratorManager {
         meetingId,
         platform: adapter.constructor.name,
         totalMeetings: this.meetings.size,
+        graspCount: grasps.length,
         ts: Date.now()
       }));
     }
@@ -180,17 +196,11 @@ export class OrchestratorManager {
   }
 
   /**
-   * すべての新規ミーティングのためのGraspテンプレートを更新（設定変更時）
-   * 既存のミーティングには影響しない
+   * Set LLM client for building Grasps
+   * Must be called before any meetings are created
    */
-  updateGraspsTemplate(grasps: Grasp[]): void {
-    this.graspsTemplate = grasps;
-
-    console.log(JSON.stringify({
-      type: 'orchestrator.manager.grasps.template.updated',
-      graspCount: grasps.length,
-      ts: Date.now()
-    }));
+  setLLMClient(llmClient: LLMClient): void {
+    this.config.llmClient = llmClient;
   }
 
   /**

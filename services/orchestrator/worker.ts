@@ -13,7 +13,6 @@ import {
   Metrics as IMetrics
 } from './grasp';
 import { parseGraspGroupDefinition, GraspGroupDefinition } from './graspConfigParser';
-import { ensureDefaultGraspConfig } from './selfSetup';
 import { Message } from '@aws-sdk/client-sqs';
 import { OrchestratorManager } from './orchestratorManager';
 import { ChimeAdapter, RecallAdapter, MeetingServiceAdapter, MeetingId, TranscriptEvent } from '@timtam/shared';
@@ -23,7 +22,8 @@ const TRANSCRIPT_QUEUE_URL = process.env.TRANSCRIPT_QUEUE_URL || '';
 const BEDROCK_REGION = process.env.BEDROCK_REGION || 'us-east-1';
 const BEDROCK_MODEL_ID = process.env.BEDROCK_MODEL_ID || 'anthropic.claude-haiku-4.5';
 const AI_MESSAGES_TABLE = process.env.AI_MESSAGES_TABLE || 'timtam-ai-messages';
-const CONFIG_TABLE_NAME = process.env.CONFIG_TABLE_NAME || 'timtam-orchestrator-config';
+const GRASP_CONFIGS_TABLE = process.env.GRASP_CONFIGS_TABLE || 'timtam-grasp-configs';
+const MEETINGS_METADATA_TABLE = process.env.MEETINGS_METADATA_TABLE || 'timtam-meetings-metadata';
 const CONTROL_SQS_URL = process.env.CONTROL_SQS_URL || '';
 const MAX_MEETINGS = Number(process.env.MAX_MEETINGS || '100');
 const MEETING_TIMEOUT_MS = Number(process.env.MEETING_TIMEOUT_MS || '43200000'); // 12時間
@@ -31,7 +31,6 @@ const RECALL_API_KEY = process.env.RECALL_API_KEY || '';
 if (!RECALL_API_KEY) {
   console.error('RECALL_API_KEY is not set');
 }
-const MEETINGS_METADATA_TABLE = process.env.MEETINGS_METADATA_TABLE || 'timtam-meetings-metadata';
 
 class Metrics implements IMetrics {
   private cw = new CloudWatchClient({});
@@ -145,15 +144,10 @@ const ddbDocClient = DynamoDBDocumentClient.from(ddbClient);
 // OrchestratorManager: 複数ミーティングを管理
 let orchestratorManager: OrchestratorManager;
 
-// Grasp テンプレートのリスト（YAML設定から動的に構築される）
-const graspTemplates: Grasp[] = [];
-
-// Grasp グループを動的に再構築
-function rebuildGrasps(graspGroupDef: GraspGroupDefinition): void {
-  // 既存 Grasp テンプレートをクリア
-  graspTemplates.length = 0;
-
-  // YAML から新しい Grasp インスタンスを生成
+// GraspGroupDefinitionからGrasp配列を生成するヘルパー関数
+export function buildGraspsFromDefinition(graspGroupDef: GraspGroupDefinition, llmClient: LLMClient): Grasp[] {
+  const grasps: Grasp[] = [];
+  
   for (const graspDef of graspGroupDef.grasps) {
     const config: GraspConfig = {
       nodeId: graspDef.nodeId,
@@ -162,21 +156,11 @@ function rebuildGrasps(graspGroupDef: GraspGroupDefinition): void {
       outputHandler: graspDef.outputHandler as 'chat' | 'note' | 'both',
       noteTag: graspDef.noteTag,
     };
-    const grasp = new Grasp(config, triggerLlm);
-    graspTemplates.push(grasp);
+    const grasp = new Grasp(config, llmClient);
+    grasps.push(grasp);
   }
-
-  // すべての新規ミーティングのためのGraspテンプレートを更新
-  // 既存のミーティングには影響しない
-  if (orchestratorManager) {
-    orchestratorManager.updateGraspsTemplate(graspTemplates);
-  }
-
-  console.log(JSON.stringify({
-    type: 'orchestrator.grasps.template.rebuilt',
-    graspCount: graspTemplates.length,
-    ts: Date.now()
-  }));
+  
+  return grasps;
 }
 
 async function pollControlOnce() {
@@ -194,19 +178,38 @@ async function pollControlOnce() {
       try {
         const parsed = JSON.parse(body);
 
-        // Handle grasp_config update messages
-        if (parsed.type === 'grasp_config' && typeof parsed.yaml === 'string') {
+        // Handle apply_grasp_config messages (meeting-specific update)
+        if (parsed.type === 'apply_grasp_config' && typeof parsed.meetingId === 'string' && typeof parsed.yaml === 'string') {
           try {
             const graspGroupDef = parseGraspGroupDefinition(parsed.yaml);
-            rebuildGrasps(graspGroupDef);
-            console.log(JSON.stringify({
-              type: 'orchestrator.control.grasp_config.applied',
-              graspCount: graspGroupDef.grasps.length,
-              ts: Date.now()
-            }));
+            const grasps = buildGraspsFromDefinition(graspGroupDef, triggerLlm);
+
+            // Apply config to specific meeting
+            const meeting = orchestratorManager.getMeeting(parsed.meetingId);
+            if (meeting) {
+              orchestratorManager.rebuildMeetingGrasps(parsed.meetingId, grasps);
+              console.log(JSON.stringify({
+                type: 'orchestrator.control.meeting.grasp_config.applied',
+                meetingId: parsed.meetingId,
+                graspCount: grasps.length,
+                ts: Date.now()
+              }));
+
+              // Send chat notification to meeting
+              const configName = parsed.configName || 'カスタム設定';
+              const notificationMessage = `Grasp設定「${configName}」を適用しました（${grasps.length}個のGrasp）`;
+              await meeting.postChat(parsed.meetingId, notificationMessage);
+            } else {
+              console.warn(JSON.stringify({
+                type: 'orchestrator.control.meeting.grasp_config.meeting_not_found',
+                meetingId: parsed.meetingId,
+                ts: Date.now()
+              }));
+            }
           } catch (error) {
             console.error(JSON.stringify({
-              type: 'orchestrator.control.grasp_config.error',
+              type: 'orchestrator.control.meeting.grasp_config.error',
+              meetingId: parsed.meetingId,
               error: (error as Error).message,
               ts: Date.now()
             }));
@@ -395,33 +398,30 @@ async function runLoop() {
   }
 }
 
-// Initialize Grasp configuration from DynamoDB
-async function initializeGraspConfig() {
+// Initialize OrchestratorManager
+async function initializeOrchestratorManager() {
   try {
-    // Ensure default config exists, or get existing config
-    const yaml = await ensureDefaultGraspConfig(BEDROCK_REGION, CONFIG_TABLE_NAME);
-
-    // Parse and rebuild grasps
-    const graspGroupDef = parseGraspGroupDefinition(yaml);
-    rebuildGrasps(graspGroupDef);
-
-    // Initialize OrchestratorManager with grasp templates and adapterFactory
+    // Initialize OrchestratorManager
     orchestratorManager = new OrchestratorManager(
-      graspTemplates,
       createAdapterForMeeting,
       {
         maxMeetings: MAX_MEETINGS,
         meetingTimeoutMs: MEETING_TIMEOUT_MS,
+        region: BEDROCK_REGION,
+        graspConfigsTable: GRASP_CONFIGS_TABLE,
+        meetingsMetadataTable: MEETINGS_METADATA_TABLE,
       }
     );
 
+    // Set LLM client
+    orchestratorManager.setLLMClient(triggerLlm);
+
     console.log(JSON.stringify({
-      type: 'orchestrator.config.grasp.initialized',
-      graspCount: graspGroupDef.grasps.length,
+      type: 'orchestrator.manager.initialized',
       ts: Date.now()
     }));
   } catch (e) {
-    console.error('Failed to initialize grasp config', (e as any)?.message);
+    console.error('Failed to initialize orchestrator manager', (e as any)?.message);
     throw e; // Fail fast if we can't initialize
   }
 }
@@ -430,7 +430,7 @@ async function initializeGraspConfig() {
 console.log(JSON.stringify({
   type: 'orchestrator.worker.start',
   ts: Date.now(),
-  env: { BEDROCK_REGION, BEDROCK_MODEL_ID, MAX_MEETINGS, MEETING_TIMEOUT_MS, CONTROL_SQS_URL, CONFIG_TABLE_NAME }
+  env: { BEDROCK_REGION, BEDROCK_MODEL_ID, MAX_MEETINGS, MEETING_TIMEOUT_MS, CONTROL_SQS_URL, GRASP_CONFIGS_TABLE, MEETINGS_METADATA_TABLE }
 }));
 
 // 定期的にすべてのミーティングの待機Graspを処理（完全な沈黙時でも待機中の Grasp を実行）
@@ -446,7 +446,7 @@ setInterval(async () => {
 }, 3000); // 3秒ごと
 
 (async () => {
-  await initializeGraspConfig();
+  await initializeOrchestratorManager();
   await runLoop();
 })().catch((e) => {
   console.error('worker fatal', e);
