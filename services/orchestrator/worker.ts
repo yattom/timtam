@@ -135,7 +135,7 @@ let orchestratorManager: OrchestratorManager;
 const graspTemplates: Grasp[] = [];
 
 // GraspGroupDefinitionからGrasp配列を生成するヘルパー関数
-function buildGraspsFromDefinition(graspGroupDef: GraspGroupDefinition): Grasp[] {
+export function buildGraspsFromDefinition(graspGroupDef: GraspGroupDefinition, llmClient: LLMClient): Grasp[] {
   const grasps: Grasp[] = [];
   
   for (const graspDef of graspGroupDef.grasps) {
@@ -146,7 +146,7 @@ function buildGraspsFromDefinition(graspGroupDef: GraspGroupDefinition): Grasp[]
       outputHandler: graspDef.outputHandler as 'chat' | 'note' | 'both',
       noteTag: graspDef.noteTag,
     };
-    const grasp = new Grasp(config, triggerLlm);
+    const grasp = new Grasp(config, llmClient);
     grasps.push(grasp);
   }
   
@@ -159,7 +159,7 @@ function rebuildGrasps(graspGroupDef: GraspGroupDefinition): void {
   graspTemplates.length = 0;
 
   // YAML から新しい Grasp インスタンスを生成
-  const grasps = buildGraspsFromDefinition(graspGroupDef);
+  const grasps = buildGraspsFromDefinition(graspGroupDef, triggerLlm);
   graspTemplates.push(...grasps);
 
   // すべての新規ミーティングのためのGraspテンプレートを更新
@@ -213,7 +213,7 @@ async function pollControlOnce() {
         if (parsed.type === 'apply_grasp_config' && typeof parsed.meetingId === 'string' && typeof parsed.yaml === 'string') {
           try {
             const graspGroupDef = parseGraspGroupDefinition(parsed.yaml);
-            const grasps = buildGraspsFromDefinition(graspGroupDef);
+            const grasps = buildGraspsFromDefinition(graspGroupDef, triggerLlm);
 
             // Apply config to specific meeting
             const meeting = orchestratorManager.getMeeting(parsed.meetingId);
