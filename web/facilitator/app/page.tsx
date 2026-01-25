@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 interface Meeting {
   meetingId: string;
@@ -23,7 +23,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Fetch meetings from API
-  const fetchMeetings = async () => {
+  const fetchMeetings = useCallback(async () => {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000";
       const response = await fetch(`${apiUrl}/recall/meetings`);
@@ -41,7 +41,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     // Initial fetch
@@ -51,7 +51,7 @@ export default function DashboardPage() {
     const interval = setInterval(fetchMeetings, 60000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchMeetings]);
 
   return (
     <div className="min-h-screen bg-gray-50">
