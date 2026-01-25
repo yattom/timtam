@@ -2,7 +2,7 @@ import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedroc
 import { CloudWatchClient, PutMetricDataCommand } from '@aws-sdk/client-cloudwatch';
 import { SQSClient, ReceiveMessageCommand, DeleteMessageCommand } from '@aws-sdk/client-sqs';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 import {
   Grasp,
   GraspConfig,
@@ -13,7 +13,6 @@ import {
   Metrics as IMetrics
 } from './grasp';
 import { parseGraspGroupDefinition, GraspGroupDefinition } from './graspConfigParser';
-import { ensureDefaultGraspConfig } from './selfSetup';
 import { Message } from '@aws-sdk/client-sqs';
 import { OrchestratorManager } from './orchestratorManager';
 import { ChimeAdapter, MeetingId, TranscriptEvent } from '@timtam/shared';
@@ -23,7 +22,8 @@ const TRANSCRIPT_QUEUE_URL = process.env.TRANSCRIPT_QUEUE_URL || '';
 const BEDROCK_REGION = process.env.BEDROCK_REGION || 'us-east-1';
 const BEDROCK_MODEL_ID = process.env.BEDROCK_MODEL_ID || 'anthropic.claude-haiku-4.5';
 const AI_MESSAGES_TABLE = process.env.AI_MESSAGES_TABLE || 'timtam-ai-messages';
-const CONFIG_TABLE_NAME = process.env.CONFIG_TABLE_NAME || 'timtam-orchestrator-config';
+const GRASP_CONFIGS_TABLE = process.env.GRASP_CONFIGS_TABLE || 'timtam-grasp-configs';
+const MEETINGS_METADATA_TABLE = process.env.MEETINGS_METADATA_TABLE || 'timtam-meetings-metadata';
 const CONTROL_SQS_URL = process.env.CONTROL_SQS_URL || '';
 const MAX_MEETINGS = Number(process.env.MAX_MEETINGS || '100');
 const MEETING_TIMEOUT_MS = Number(process.env.MEETING_TIMEOUT_MS || '43200000'); // 12時間
@@ -131,9 +131,6 @@ const ddbDocClient = DynamoDBDocumentClient.from(ddbClient);
 // OrchestratorManager: 複数ミーティングを管理
 let orchestratorManager: OrchestratorManager;
 
-// Grasp テンプレートのリスト（YAML設定から動的に構築される）
-const graspTemplates: Grasp[] = [];
-
 // GraspGroupDefinitionからGrasp配列を生成するヘルパー関数
 export function buildGraspsFromDefinition(graspGroupDef: GraspGroupDefinition, llmClient: LLMClient): Grasp[] {
   const grasps: Grasp[] = [];
@@ -153,28 +150,6 @@ export function buildGraspsFromDefinition(graspGroupDef: GraspGroupDefinition, l
   return grasps;
 }
 
-// Grasp グループを動的に再構築
-function rebuildGrasps(graspGroupDef: GraspGroupDefinition): void {
-  // 既存 Grasp テンプレートをクリア
-  graspTemplates.length = 0;
-
-  // YAML から新しい Grasp インスタンスを生成
-  const grasps = buildGraspsFromDefinition(graspGroupDef, triggerLlm);
-  graspTemplates.push(...grasps);
-
-  // すべての新規ミーティングのためのGraspテンプレートを更新
-  // 既存のミーティングには影響しない
-  if (orchestratorManager) {
-    orchestratorManager.updateGraspsTemplate(graspTemplates);
-  }
-
-  console.log(JSON.stringify({
-    type: 'orchestrator.grasps.template.rebuilt',
-    graspCount: graspTemplates.length,
-    ts: Date.now()
-  }));
-}
-
 async function pollControlOnce() {
   if (!CONTROL_SQS_URL) return;
   try {
@@ -189,25 +164,6 @@ async function pollControlOnce() {
       const body = m.Body || '';
       try {
         const parsed = JSON.parse(body);
-
-        // Handle grasp_config update messages (global update)
-        if (parsed.type === 'grasp_config' && typeof parsed.yaml === 'string') {
-          try {
-            const graspGroupDef = parseGraspGroupDefinition(parsed.yaml);
-            rebuildGrasps(graspGroupDef);
-            console.log(JSON.stringify({
-              type: 'orchestrator.control.grasp_config.applied',
-              graspCount: graspGroupDef.grasps.length,
-              ts: Date.now()
-            }));
-          } catch (error) {
-            console.error(JSON.stringify({
-              type: 'orchestrator.control.grasp_config.error',
-              error: (error as Error).message,
-              ts: Date.now()
-            }));
-          }
-        }
 
         // Handle apply_grasp_config messages (meeting-specific update)
         if (parsed.type === 'apply_grasp_config' && typeof parsed.meetingId === 'string' && typeof parsed.yaml === 'string') {
@@ -429,29 +385,27 @@ async function runLoop() {
   }
 }
 
-// Initialize Grasp configuration from DynamoDB
-async function initializeGraspConfig() {
+// Initialize OrchestratorManager
+async function initializeOrchestratorManager() {
   try {
-    // Ensure default config exists, or get existing config
-    const yaml = await ensureDefaultGraspConfig(BEDROCK_REGION, CONFIG_TABLE_NAME);
-
-    // Parse and rebuild grasps
-    const graspGroupDef = parseGraspGroupDefinition(yaml);
-    rebuildGrasps(graspGroupDef);
-
-    // Initialize OrchestratorManager with grasp templates
-    orchestratorManager = new OrchestratorManager(graspTemplates, {
+    // Initialize OrchestratorManager without global template
+    orchestratorManager = new OrchestratorManager({
       maxMeetings: MAX_MEETINGS,
       meetingTimeoutMs: MEETING_TIMEOUT_MS,
+      region: BEDROCK_REGION,
+      graspConfigsTable: GRASP_CONFIGS_TABLE,
+      meetingsMetadataTable: MEETINGS_METADATA_TABLE,
     });
 
+    // Set LLM client
+    orchestratorManager.setLLMClient(triggerLlm);
+
     console.log(JSON.stringify({
-      type: 'orchestrator.config.grasp.initialized',
-      graspCount: graspGroupDef.grasps.length,
+      type: 'orchestrator.manager.initialized',
       ts: Date.now()
     }));
   } catch (e) {
-    console.error('Failed to initialize grasp config', (e as any)?.message);
+    console.error('Failed to initialize orchestrator manager', (e as any)?.message);
     throw e; // Fail fast if we can't initialize
   }
 }
@@ -460,7 +414,7 @@ async function initializeGraspConfig() {
 console.log(JSON.stringify({
   type: 'orchestrator.worker.start',
   ts: Date.now(),
-  env: { BEDROCK_REGION, BEDROCK_MODEL_ID, MAX_MEETINGS, MEETING_TIMEOUT_MS, CONTROL_SQS_URL, CONFIG_TABLE_NAME }
+  env: { BEDROCK_REGION, BEDROCK_MODEL_ID, MAX_MEETINGS, MEETING_TIMEOUT_MS, CONTROL_SQS_URL, GRASP_CONFIGS_TABLE, MEETINGS_METADATA_TABLE }
 }));
 
 // 定期的にすべてのミーティングの待機Graspを処理（完全な沈黙時でも待機中の Grasp を実行）
@@ -476,7 +430,7 @@ setInterval(async () => {
 }, 3000); // 3秒ごと
 
 (async () => {
-  await initializeGraspConfig();
+  await initializeOrchestratorManager();
   await runLoop();
 })().catch((e) => {
   console.error('worker fatal', e);

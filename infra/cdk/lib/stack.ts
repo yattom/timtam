@@ -1183,7 +1183,8 @@ export class TimtamInfraStack extends Stack {
     controlQueue.grantConsumeMessages(taskRole);
     transcriptQueue.grantConsumeMessages(taskRole);  // ADR-0011: Grant SQS consume permission
     aiMessagesTable.grantWriteData(taskRole);
-    orchestratorConfigTable.grantReadData(taskRole);
+    graspConfigsTable.grantReadData(taskRole);
+    meetingsMetadataTable.grantReadData(taskRole);
 
     const taskDef = new ecs.FargateTaskDefinition(this, 'OrchestratorTaskDef', {
       cpu: 512,
@@ -1206,7 +1207,8 @@ export class TimtamInfraStack extends Stack {
         POLL_INTERVAL_MS: '1000', // 1 second polling interval
         CONTROL_SQS_URL: controlQueue.queueUrl,
         AI_MESSAGES_TABLE: aiMessagesTable.tableName,
-        CONFIG_TABLE_NAME: orchestratorConfigTable.tableName,
+        GRASP_CONFIGS_TABLE: graspConfigsTable.tableName,
+        MEETINGS_METADATA_TABLE: meetingsMetadataTable.tableName,
       },
     });
     container.addPortMappings({ containerPort: 3000 });
