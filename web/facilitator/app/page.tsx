@@ -29,7 +29,22 @@ export default function DashboardPage() {
       const response = await fetch(`${apiUrl}/recall/meetings`);
 
       if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
+        let errorMessage = `API error: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          if (errorData && typeof errorData === "object") {
+            if (typeof (errorData as any).error === "string") {
+              errorMessage += ` - ${(errorData as any).error}`;
+            } else if (typeof (errorData as any).message === "string") {
+              errorMessage += ` - ${(errorData as any).message}`;
+            }
+          } else if (typeof errorData === "string") {
+            errorMessage += ` - ${errorData}`;
+          }
+        } catch {
+          // Ignore JSON parsing errors and fall back to status-only message
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
