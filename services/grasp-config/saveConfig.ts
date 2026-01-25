@@ -16,7 +16,16 @@ const ddb = DynamoDBDocumentClient.from(ddbClient);
  */
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   try {
-    const body = event.body ? JSON.parse(event.body) : {};
+    let body: any;
+    try {
+      body = event.body ? JSON.parse(event.body) : {};
+    } catch (parseError: any) {
+      return {
+        statusCode: 400,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ok: false, error: 'Invalid JSON in request body' }),
+      };
+    }
     const { name, yaml } = body;
 
     // Validation
