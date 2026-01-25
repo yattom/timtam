@@ -1,6 +1,6 @@
 // OrchestratorManager: 複数ミーティングのオーケストレーターを管理
 import { Meeting } from './meetingOrchestrator';
-import { Grasp, MeetingId, Notifier, Metrics } from './grasp';
+import { Grasp, MeetingId, Metrics } from './grasp';
 import { TranscriptEvent, MeetingServiceAdapter } from '@timtam/shared';
 
 export type AdapterFactory = (meetingId: MeetingId) => Promise<MeetingServiceAdapter>;

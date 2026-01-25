@@ -28,6 +28,9 @@ const CONTROL_SQS_URL = process.env.CONTROL_SQS_URL || '';
 const MAX_MEETINGS = Number(process.env.MAX_MEETINGS || '100');
 const MEETING_TIMEOUT_MS = Number(process.env.MEETING_TIMEOUT_MS || '43200000'); // 12時間
 const RECALL_API_KEY = process.env.RECALL_API_KEY || '';
+if (!RECALL_API_KEY) {
+  console.error('RECALL_API_KEY is not set');
+}
 const MEETINGS_METADATA_TABLE = process.env.MEETINGS_METADATA_TABLE || 'timtam-meetings-metadata';
 
 class Metrics implements IMetrics {
