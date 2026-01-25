@@ -82,6 +82,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
           name: trimmedName,
           yaml: trimmedYaml,
           createdAt,
+          updatedAt: createdAt,
         },
       })
     );
@@ -92,6 +93,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       name: trimmedName,
       yamlLength: trimmedYaml.length,
       createdAt,
+      updatedAt: createdAt,
     }));
 
     return {
@@ -103,6 +105,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         name: trimmedName,
         yaml: trimmedYaml,
         createdAt,
+        updatedAt: createdAt,
       }),
     };
   } catch (err: any) {
