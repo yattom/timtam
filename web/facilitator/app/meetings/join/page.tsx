@@ -16,23 +16,23 @@ export default function JoinMeetingPage() {
   const detectPlatformFromUrl = (url: string): "zoom" | "google_meet" | "microsoft_teams" | "webex" | null => {
     if (!url) return null;
 
-    // Zoom: zoom.us または zoomgov.com
-    if (/zoom\.us|zoomgov\.com/i.test(url)) {
+    // Zoom: zoom.us または zoomgov.com （ホスト名としてのみマッチ）
+    if (/https?:\/\/(?:[a-zA-Z0-9-]+\.)*(zoom\.us|zoomgov\.com)(?=\/|:|$)/i.test(url)) {
       return "zoom";
     }
 
-    // Google Meet: meet.google.com
-    if (/meet\.google\.com/i.test(url)) {
+    // Google Meet: meet.google.com （ホスト名としてのみマッチ）
+    if (/https?:\/\/(?:[a-zA-Z0-9-]+\.)*meet\.google\.com(?=\/|:|$)/i.test(url)) {
       return "google_meet";
     }
 
-    // Microsoft Teams: teams.microsoft.com または teams.live.com
-    if (/teams\.(microsoft|live)\.com/i.test(url)) {
+    // Microsoft Teams: teams.microsoft.com または teams.live.com （ホスト名としてのみマッチ）
+    if (/https?:\/\/(?:[a-zA-Z0-9-]+\.)*teams\.(microsoft|live)\.com(?=\/|:|$)/i.test(url)) {
       return "microsoft_teams";
     }
 
-    // Webex: webex.com
-    if (/webex\.com/i.test(url)) {
+    // Webex: webex.com （ホスト名としてのみマッチ）
+    if (/https?:\/\/(?:[a-zA-Z0-9-]+\.)*webex\.com(?=\/|:|$)/i.test(url)) {
       return "webex";
     }
 
