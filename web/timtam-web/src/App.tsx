@@ -598,7 +598,7 @@ export function App() {
             onChange={(e) => setDisplayName(e.target.value)}
             placeholder="ひらがなで入力（未入力ならランダム動物名）"
             maxLength={50}
-            style={{ padding: 8, borderRadius: 4, border: '1px solid #ccc', minWidth: 220 }}
+            style={{ padding: 8, borderRadius: 4, border: '1px solid #ccc', minWidth: 220, color: '#000' }}
             data-testid="display-name-input"
           />
           <button onClick={onSaveDisplayName} data-testid="save-name-button">保存</button>
@@ -642,7 +642,7 @@ export function App() {
                   placeholder="meetingId"
                   value={joinMeetingId}
                   onChange={(e) => setJoinMeetingId(e.target.value)}
-                  style={{ minWidth: 260 }}
+                  style={{ minWidth: 260, color: '#000' }}
                   data-testid="join-meeting-id-input"
                 />
                 <button onClick={onJoinExisting} disabled={!apiBaseUrl} data-testid="join-existing-button">このIDで入室</button>

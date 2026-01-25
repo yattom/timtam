@@ -155,7 +155,8 @@ export function GraspConfigPanel() {
                   borderRadius: 4,
                   border: '1px solid #ccc',
                   resize: 'vertical',
-                  background: '#fff'
+                  background: '#fff',
+                  color: '#000'
                 }}
                 disabled={yamlSaving}
                 placeholder="YAML 設定を入力してください"
