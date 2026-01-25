@@ -118,7 +118,7 @@ export class RecallAdapter implements MeetingServiceAdapter {
 
     return {
       meetingId: bot_id as MeetingId,
-      speakerId: participant.name || participant.id?.toString() || 'unknown',
+      speakerId: participant?.name || participant?.id?.toString() || 'unknown',
       text,
       isFinal: true, // transcript.dataイベントは常に最終結果（partialは別イベント）
       timestamp: timestampFromWords ?? Date.now(),
