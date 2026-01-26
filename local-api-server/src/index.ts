@@ -3,7 +3,8 @@ import cors from 'cors';
 import { APIGatewayProxyEventV2 } from 'aws-lambda';
 
 // Import Lambda handlers directly
-import { listHandler, getHandler } from '../../services/meeting-api/recallMeetings';
+import { listHandler, getHandler, joinHandler, leaveHandler } from '../../services/meeting-api/recallMeetings';
+import { getMessages } from '../../services/ai-messages/handler';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -21,6 +22,9 @@ const MEETINGS_METADATA_TABLE = process.env.MEETINGS_METADATA_TABLE || 'timtam-m
 process.env.AWS_ENDPOINT_URL = LOCALSTACK_ENDPOINT;
 process.env.AWS_REGION = AWS_REGION;
 process.env.MEETINGS_METADATA_TABLE = MEETINGS_METADATA_TABLE;
+process.env.AI_MESSAGES_TABLE = process.env.AI_MESSAGES_TABLE || 'timtam-ai-messages';
+process.env.RECALL_API_KEY = 'test-key';
+process.env.RECALL_WEBHOOK_URL = 'http://localhost:3000/recall/webhook';
 
 // Dummy credentials for LocalStack
 process.env.AWS_ACCESS_KEY_ID = 'test';
@@ -115,10 +119,10 @@ function sendLambdaResponse(res: express.Response, lambdaResponse: any) {
  * Uses the ACTUAL Lambda handler from services/meeting-api/recallMeetings.ts
  */
 function addRoure(
-    method: "get" | "post",
+    method: "get" | "post" | "delete",
     path: string,
     handler: Function,
-    extractor) {
+    extractor: Function) {
   const defineRoute = {
     'get': app.get.bind(app),
     'post': app.post.bind(app),
@@ -127,7 +131,7 @@ function addRoure(
   }[method];
   defineRoute(path, async (req, res) => {
     try {
-      console.log('[GET ' + path + '] Request received', {
+      console.log('[' + method + ' ' + path + '] Request received', {
         query: req.query,
         timestamp: new Date().toISOString(),
       });
@@ -136,19 +140,19 @@ function addRoure(
       console.log('event parameters: ', extractor(req));
       const event = createApiGatewayEvent(req, extractor(req));
 
-      console.log('[GET ' + path + '] Calling Lambda handler (' + handler.name + ')');
+      console.log('[' + method + ' ' + path + '] Calling Lambda handler (' + handler.name + ')');
 
       // Call the ACTUAL Lambda handler
       const lambdaResponse = await handler(event, {} as any, () => {});
 
-      console.log('[GET ' + path + '] Lambda handler returned', {
+      console.log('[' + method + ' ' + path + '] Lambda handler returned', {
         statusCode: lambdaResponse?.statusCode,
       });
 
       // Send Lambda response via Express
       sendLambdaResponse(res, lambdaResponse);
     } catch (err: any) {
-      console.error('[GET ' + path + '] Error', {
+      console.error('[' + method + ' ' + path + '] Error', {
         error: err?.message || err,
         stack: err?.stack,
       });
@@ -156,10 +160,18 @@ function addRoure(
       res.status(500).json({ error: 'Failed to ' + handler.name + ' at ' + path });
     }
   })
+
+  // Log registered endpoint
+  console.log(`  ${method.toUpperCase().padEnd(6)} ${path}`);
 };
 
-addRoure('get', '/recall/meetings', listHandler, (req) => { } );
+console.log('Available endpoints:');
+console.log('  GET    /health');
+addRoure('get', '/recall/meetings', listHandler, (req) => ({}) );
 addRoure('get', '/recall/meetings/:meetingId', getHandler, (req) => ({ meetingId: req.params.meetingId }) );
+addRoure('post', '/recall/meetings/join', joinHandler, (req) => ({}) );
+addRoure('delete', '/recall/meetings/:meetingId', leaveHandler, (req) => ({ meetingId: req.params.meetingId }) );
+addRoure('get', '/meetings/:meetingId/messages', getMessages, (req) => ({ meetingId: req.params.meetingId }) );
 
 /**
  * Health check endpoint
@@ -190,10 +202,5 @@ app.use((req, res) => {
 app.listen(PORT, () => {
   console.log('');
   console.log(`✓ Server is running on http://localhost:${PORT}`);
-  console.log('');
-  console.log('Available endpoints:');
-  console.log('  GET  /health');
-  console.log('  GET  /recall/meetings');
-  console.log('  GET  /recall/meetings/:meetingId');
   console.log('');
 });
