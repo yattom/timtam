@@ -4,6 +4,7 @@
 # ==============================
 
 /branches/
+/.playwright-mcp/
 
 # OS files
 .DS_Store
