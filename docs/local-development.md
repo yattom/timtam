@@ -60,7 +60,41 @@ chmod +x scripts/setup-localstack.sh
 - SQS FIFOキュー: `transcript-asr.fifo`
 - S3バケット: `timtam-local-dev`
 
-### 5. 環境変数を設定
+### 5. 環境のテスト（推奨）
+
+セットアップが正しく完了したか確認するため、テストスクリプトを実行:
+
+```bash
+./scripts/test-local-dev-env.sh
+```
+
+このスクリプトは以下をテストする:
+
+- Dockerデーモンの起動確認
+- LocalStackとRecall stubのコンテナ起動確認
+- ヘルスエンドポイントの応答確認
+- DynamoDBテーブル、SQSキュー、S3バケットの作成確認
+- Recall stub API（ボット作成、情報取得、メッセージ送信）の動作確認
+- Web UIのアクセス確認
+
+全てのテストがパスすれば、ローカル開発環境は正常に動作している。
+
+**期待される出力:**
+
+```
+=========================================
+Test Summary
+=========================================
+Total tests: 13
+Passed: 13
+Failed: 0
+
+✓ All tests passed! Local development environment is working correctly.
+```
+
+テストが失敗した場合は、エラーメッセージを確認して修正する。
+
+### 6. 環境変数を設定
 
 Webフロントエンド用の環境変数を設定:
 
@@ -79,7 +113,7 @@ cp .env.example .env.local
 VITE_API_BASE_URL=https://your-api-gateway-url.execute-api.ap-northeast-1.amazonaws.com
 ```
 
-### 6. Webフロントエンドを起動
+### 7. Webフロントエンドを起動
 
 ```bash
 cd web/facilitator
@@ -175,6 +209,16 @@ aws sqs list-queues --endpoint-url http://localhost:4566 --region ap-northeast-1
 ```
 
 ## トラブルシューティング
+
+### 環境の動作確認
+
+問題が発生した場合、まずテストスクリプトを実行して何が問題かを特定する:
+
+```bash
+./scripts/test-local-dev-env.sh
+```
+
+このスクリプトが失敗したテストを表示し、どのコンポーネントに問題があるか教えてくれる。
 
 ### LocalStackが起動しない
 

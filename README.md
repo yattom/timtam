@@ -51,6 +51,9 @@ docker-compose up
 # LocalStackにリソースを作成
 ./scripts/setup-localstack.sh
 
+# 環境のテスト（推奨）
+./scripts/test-local-dev-env.sh
+
 # Webフロントエンドを起動
 cd web/facilitator
 pnpm dev
