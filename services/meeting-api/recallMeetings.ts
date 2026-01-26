@@ -309,23 +309,39 @@ export const leaveHandler: APIGatewayProxyHandlerV2 = async (event) => {
           throw err;
         }
       }
+
+      // Delete media (recordings, transcripts) to avoid storage costs (Phase 1.2)
+      try {
+        await recallClient.deleteMedia(result.Item.recallBot.botId);
+        console.log('Successfully deleted Recall.ai media', { botId: result.Item.recallBot.botId });
+      } catch (err: any) {
+        // Log error but don't fail the request - media deletion is best-effort
+        console.error('Failed to delete Recall.ai media', {
+          botId: result.Item.recallBot.botId,
+          error: err?.message || err,
+        });
+      }
     }
 
     // Update DynamoDB status
     const now = Date.now();
+    // Set TTL to 7 days from now (Phase 1.1)
+    const ttl = Math.floor(now / 1000) + (7 * 24 * 60 * 60);
     try {
       await ddb.send(
         new UpdateCommand({
           TableName: MEETINGS_METADATA_TABLE,
           Key: { meetingId },
-          UpdateExpression: 'SET #status = :status, #endedAt = :endedAt',
+          UpdateExpression: 'SET #status = :status, #endedAt = :endedAt, #ttl = :ttl',
           ExpressionAttributeNames: {
             '#status': 'status',
             '#endedAt': 'endedAt',
+            '#ttl': 'ttl',
           },
           ExpressionAttributeValues: {
             ':status': 'ended',
             ':endedAt': now,
+            ':ttl': ttl,
           },
         })
       );

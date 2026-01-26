@@ -221,6 +221,28 @@ export class RecallAPIClient {
   }
 
   /**
+   * ボットのメディアを削除（レコーディング、文字起こし等）
+   *
+   * POST /api/v1/bot/{bot_id}/delete_media/
+   *
+   * @param botId ボットID
+   * @see https://docs.recall.ai/reference/bot_delete_media_create
+   */
+  async deleteMedia(botId: string): Promise<void> {
+    const response = await fetch(`${this.apiBaseUrl}/api/v1/bot/${botId}/delete_media/`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Token ${this.apiKey}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Recall.ai deleteMedia failed: ${response.status} ${errorText}`);
+    }
+  }
+
+  /**
    * 会議チャットにメッセージを送信
    *
    * POST /api/v1/bot/{bot_id}/send_chat_message/
