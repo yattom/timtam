@@ -3,7 +3,7 @@ import cors from 'cors';
 import { APIGatewayProxyEventV2 } from 'aws-lambda';
 
 // Import Lambda handlers directly
-import { listHandler } from '../../services/meeting-api/recallMeetings';
+import { listHandler, getHandler } from '../../services/meeting-api/recallMeetings';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -108,42 +108,58 @@ function sendLambdaResponse(res: express.Response, lambdaResponse: any) {
   }
 }
 
+
 /**
- * GET /recall/meetings
+ * GET /recall/meetings/:meetingId
  *
  * Uses the ACTUAL Lambda handler from services/meeting-api/recallMeetings.ts
  */
-app.get('/recall/meetings', async (req, res) => {
-  try {
-    console.log('[GET /recall/meetings] Request received', {
-      query: req.query,
-      timestamp: new Date().toISOString(),
-    });
+function addRoure(
+    method: "get" | "post",
+    path: string,
+    handler: Function,
+    extractor) {
+  const defineRoute = {
+    'get': app.get.bind(app),
+    'post': app.post.bind(app),
+    'put': app.put.bind(app),
+    'delete': app.delete.bind(app),
+  }[method];
+  defineRoute(path, async (req, res) => {
+    try {
+      console.log('[GET ' + path + '] Request received', {
+        query: req.query,
+        timestamp: new Date().toISOString(),
+      });
 
-    // Create API Gateway event from Express request
-    const event = createApiGatewayEvent(req);
+      // Create API Gateway event with path parameters
+      console.log('event parameters: ', extractor(req));
+      const event = createApiGatewayEvent(req, extractor(req));
 
-    console.log('[GET /recall/meetings] Calling Lambda handler (listHandler)');
+      console.log('[GET ' + path + '] Calling Lambda handler (' + handler.name + ')');
 
-    // Call the ACTUAL Lambda handler
-    const lambdaResponse = await listHandler(event, {} as any, () => {});
+      // Call the ACTUAL Lambda handler
+      const lambdaResponse = await handler(event, {} as any, () => {});
 
-    console.log('[GET /recall/meetings] Lambda handler returned', {
-      statusCode: lambdaResponse?.statusCode,
-      hasBody: !!lambdaResponse?.body,
-    });
+      console.log('[GET ' + path + '] Lambda handler returned', {
+        statusCode: lambdaResponse?.statusCode,
+      });
 
-    // Send Lambda response via Express
-    sendLambdaResponse(res, lambdaResponse);
-  } catch (err: any) {
-    console.error('[GET /recall/meetings] Error', {
-      error: err?.message || err,
-      stack: err?.stack,
-    });
+      // Send Lambda response via Express
+      sendLambdaResponse(res, lambdaResponse);
+    } catch (err: any) {
+      console.error('[GET ' + path + '] Error', {
+        error: err?.message || err,
+        stack: err?.stack,
+      });
 
-    res.status(500).json({ error: 'Failed to list meetings' });
-  }
-});
+      res.status(500).json({ error: 'Failed to ' + handler.name + ' at ' + path });
+    }
+  })
+};
+
+addRoure('get', '/recall/meetings', listHandler, (req) => { } );
+addRoure('get', '/recall/meetings/:meetingId', getHandler, (req) => ({ meetingId: req.params.meetingId }) );
 
 /**
  * Health check endpoint
@@ -178,5 +194,6 @@ app.listen(PORT, () => {
   console.log('Available endpoints:');
   console.log('  GET  /health');
   console.log('  GET  /recall/meetings');
+  console.log('  GET  /recall/meetings/:meetingId');
   console.log('');
 });
