@@ -47,12 +47,12 @@ app.post('/api/v1/bot/', (req, res) => {
 
   const { meeting_url, bot_name, recording_mode, recording_mode_options } = req.body;
 
-  // Validate meeting URL - only localhost is supported in stub mode
-  if (!meeting_url || (!meeting_url.includes('localhost') && !meeting_url.includes('127.0.0.1'))) {
-    console.log('[STUB MODE] Rejected: Only localhost meetings are supported');
+  // Validate meeting URL - only http://localhost is supported in stub mode
+  if (!meeting_url || !meeting_url.includes('http://localhost')) {
+    console.log('[STUB MODE] Rejected: Only http://localhost meetings are supported');
     return res.status(400).json({
-      error: 'Only localhost meetings are supported in stub mode',
-      detail: 'Please use "localhost" as the meeting URL when creating a meeting in local dev mode'
+      error: 'Only http://localhost meetings are supported in stub mode',
+      detail: 'Please use "http://localhost" as the meeting URL when creating a meeting in local dev mode'
     });
   }
 

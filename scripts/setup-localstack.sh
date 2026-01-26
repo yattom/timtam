@@ -41,8 +41,11 @@ aws dynamodb create-table \
   --table-name timtam-meetings-metadata \
   --attribute-definitions \
     AttributeName=meetingId,AttributeType=S \
+    AttributeName=meetingCode,AttributeType=S \
   --key-schema \
     AttributeName=meetingId,KeyType=HASH \
+  --global-secondary-indexes \
+    '[{"IndexName":"meetingCode-index","KeySchema":[{"AttributeName":"meetingCode","KeyType":"HASH"}],"Projection":{"ProjectionType":"ALL"}}]' \
   --billing-mode PAY_PER_REQUEST \
   > /dev/null 2>&1 || echo "  → timtam-meetings-metadata already exists"
 
@@ -55,7 +58,7 @@ aws dynamodb create-table \
   --table-name timtam-ai-messages \
   --attribute-definitions \
     AttributeName=meetingId,AttributeType=S \
-    AttributeName=timestamp,AttributeType=S \
+    AttributeName=timestamp,AttributeType=N \
   --key-schema \
     AttributeName=meetingId,KeyType=HASH \
     AttributeName=timestamp,KeyType=RANGE \
