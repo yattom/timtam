@@ -274,7 +274,6 @@ app.post('/api/send-transcript', async (req, res) => {
 
   // Send webhook to local API server
   try {
-    const fetch = (await import('node-fetch')).default;
     const webhookRes = await fetch(WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
