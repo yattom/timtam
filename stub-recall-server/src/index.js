@@ -33,7 +33,7 @@ const bots = new Map(); // botId -> bot object
 const chatMessages = new Map(); // botId -> messages array
 
 const PORT = process.env.PORT || 8080;
-const WEBHOOK_URL = process.env.WEBHOOK_URL || 'http://localhost:3000/recall/webhook';
+const WEBHOOK_URL = process.env.WEBHOOK_URL || 'http://api-server:3000/recall/webhook';
 
 /**
  * POST /api/v1/bot/
@@ -286,7 +286,7 @@ app.post('/api/send-transcript', async (req, res) => {
       res.status(200).json({ ok: true, message: 'Transcript sent to webhook' });
     } else {
       const errorText = await webhookRes.text();
-      console.error(`[STUB MODE] Webhook failed: ${webhookRes.status} ${errorText}`);
+      console.error(`[STUB MODE] Webhook failed: ${WEBHOOK_URL} ${webhookRes.status} ${errorText}`);
       res.status(500).json({
         error: 'Webhook failed',
         detail: `Status: ${webhookRes.status}, ${errorText}`

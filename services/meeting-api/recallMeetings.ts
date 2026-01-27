@@ -80,11 +80,11 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
     const clientToUse = isLocalDevelopment
       ? new RecallAPIClient({
           apiKey: RECALL_API_KEY,
-          apiBaseUrl: 'http://localhost:8080', // Local stub server
+          apiBaseUrl: 'http://recall-stub:8080', // Local stub server
         })
       : recallClient;
     if (isLocalDevelopment) {
-      console.log('[LOCAL DEV] Using local Recall.ai stub server at http://localhost:8080');
+      console.log('[LOCAL DEV] Using local Recall.ai stub server at http://recall-stub:8080');
     }
 
 
@@ -131,7 +131,7 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
         realtime_endpoints: [
           {
             type: 'webhook',
-            url: isLocalDevelopment ? 'http://localhost:3000' : RECALL_WEBHOOK_URL,
+            url: isLocalDevelopment ? 'http://api-server:3000' : RECALL_WEBHOOK_URL,
             events: ['transcript.data'],
           },
         ],
