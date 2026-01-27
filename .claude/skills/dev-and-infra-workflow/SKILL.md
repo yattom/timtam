@@ -21,7 +21,12 @@ allowed-tools: Bash
 
 ## 利用可能なコマンドカテゴリ
 
-### 0. ローカル開発環境（LocalStack）
+### 0. ローカル開発環境（LocalStack + Docker Compose）
+
+ローカル開発環境は以下のサービスで構成されています：
+- **LocalStack**: AWS互換サービス（DynamoDB、SQS、S3）をローカルでエミュレート
+- **api-server**: 実際のLambdaハンドラーをExpressで実行するAPIサーバー
+- **recall-stub**: Recall.aiのモックサーバー
 
 #### sync-schema - CDKスキーマと同期 ⭐ **初回セットアップ必須**
 
@@ -260,7 +265,7 @@ CDKの合成とデプロイを連続実行。
 #### 初回セットアップ
 
 ```bash
-# 1. コンテナを起動
+# 1. コンテナを起動（localstack、api-server、recall-stubが起動）
 docker-compose up -d
 
 # 2. LocalStackが起動するまで待つ（約5-10秒）
@@ -272,6 +277,7 @@ pnpm run sync-schema
 # 4. 状態確認
 docker-compose ps
 aws dynamodb list-tables --endpoint-url http://localhost:4566 --region ap-northeast-1
+curl http://localhost:3000/health  # api-server確認
 ```
 
 #### 日常的な作業開始
@@ -325,6 +331,12 @@ docker-compose down -v
 # コンテナ状態確認
 docker-compose ps
 
+# api-server health check
+curl http://localhost:3000/health
+
+# recall-stub health check
+curl http://localhost:8080/health
+
 # LocalStack health check
 curl http://localhost:4566/_localstack/health
 
@@ -333,12 +345,49 @@ aws dynamodb list-tables --endpoint-url http://localhost:4566 --region ap-northe
 
 # SQSキュー確認
 aws sqs list-queues --endpoint-url http://localhost:4566 --region ap-northeast-1
+
+# api-serverのエンドポイントテスト
+curl http://localhost:3000/recall/meetings
 ```
 
 **ローカル環境で作成されるリソース**:
-- DynamoDB Tables（5つ）: media-pipelines, ai-messages（TTL設定）, meetings-metadata（GSI）, orchestrator-config（PK: configKey）, grasp-configs
+- DynamoDB Tables（4つ）: ai-messages（TTL設定）, meetings-metadata（GSI）, orchestrator-config（PK: configKey）, grasp-configs
 - SQS Queues（3つ）: transcript-asr.fifo（DLQ設定）, transcript-asr-dlq.fifo, OrchestratorControlQueue
 - S3 Bucket（1つ）: timtam-local-dev
+
+**ローカル環境のサービス構成**:
+```
+┌─────────────────┐
+│  Facilitator UI │ (localhost:3000 from web/facilitator)
+└────────┬────────┘
+         │
+┌────────▼────────┐
+│  api-server     │ (Express + actual Lambda handlers)
+│  :3000          │ docker-composeで実行
+└────┬────────┬───┘
+     │        │
+     │        └──────┐
+     │               │
+┌────▼─────────┐  ┌─▼──────────┐
+│ LocalStack   │  │ recall-stub│
+│ :4566        │  │ :8080      │
+│ - DynamoDB   │  └────────────┘
+│ - SQS        │
+│ - S3         │
+└──────────────┘
+```
+
+**api-server（Express API Server）**:
+- 実際のLambdaハンドラーをExpressラッパーで実行
+- 本番環境に近い動作テストが可能
+- LocalStackとrecall-stubと連携
+- エンドポイント: `http://localhost:3000`
+  - GET `/health` - ヘルスチェック
+  - GET `/recall/meetings` - ミーティング一覧
+  - GET `/recall/meetings/:meetingId` - ミーティング詳細
+  - POST `/recall/meetings/join` - ミーティング参加
+  - DELETE `/recall/meetings/:meetingId` - ミーティング退出
+  - GET `/meetings/:meetingId/messages` - AIメッセージ取得
 
 ### 🔐 AWS認証（必須の初回ステップ）
 
@@ -433,6 +482,8 @@ pnpm run infra:open
 - 🔧 スキーマが古い → `sync-schema`
 - 🔧 コンテナが起動しない → `docker-compose logs`で確認
 - 🔧 リソースが作成されない → LocalStackのhealth checkを確認
+- 🔧 api-serverのエラー確認 → `docker-compose logs api-server`
+- 🔧 recall-stubのエラー確認 → `docker-compose logs recall-stub`
 
 #### エラーハンドリング
 
@@ -533,10 +584,12 @@ aws dynamodb list-tables --region ap-northeast-1
 ### ローカル開発環境（LocalStack）
 
 - ワーキングディレクトリ: `/home/yattom/work/timtam/branches/wt1`
-- LocalStack Endpoint: `http://localhost:4566`
-- Recall.ai Stub Endpoint: `http://localhost:8080`
+- API Server Endpoint: `http://localhost:3000` (docker-compose)
+- LocalStack Endpoint: `http://localhost:4566` (docker-compose)
+- Recall.ai Stub Endpoint: `http://localhost:8080` (docker-compose)
 - AWS Region: `ap-northeast-1`
 - docker-compose file: `./docker-compose.yml`
+- api-server Dockerfile: `./local-api-server/Dockerfile`
 - セットアップスクリプト: `./scripts/setup-localstack.sh`（自動生成）
 - スキーマ同期スクリプト: `./scripts/sync-localstack-schema.sh`
 - スキーマ生成スクリプト: `./scripts/generate-localstack-setup.ts`
