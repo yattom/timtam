@@ -72,7 +72,7 @@ pnpm run local:reset
 
 LocalStackを完全にリセットしてスキーマを再同期。以下を順次実行：
 
-1. `docker-compose down -v` - コンテナとボリューム削除
+1. `docker-compose down` - コンテナ停止・削除
 2. `docker-compose up -d` - 再起動
 3. `pnpm run sync-schema` - スキーマ同期
 
@@ -80,7 +80,7 @@ LocalStackを完全にリセットしてスキーマを再同期。以下を順�
 
 - LocalStackの状態が不整合になった時
 - 完全にクリーンな状態から始めたい時
-- データを全て削除してやり直したい時
+- リソースを全て削除してやり直したい時
 
 ### 1. 統合デプロイ
 
@@ -283,13 +283,16 @@ curl http://localhost:3000/health  # api-server確認
 #### 日常的な作業開始
 
 ```bash
-# 1. コンテナを起動（既に起動している場合はスキップ）
+# 1. コンテナを起動
 docker-compose up -d
 
-# 2. リソースをセットアップ（既存のスクリプトを実行）
+# 2. LocalStackが起動するまで待つ（約5-10秒）
+sleep 10
+
+# 3. リソースをセットアップ（既存のスクリプトを実行）
 pnpm run local:setup
 
-# 3. アプリケーション開発・テストを開始
+# 4. アプリケーション開発・テストを開始
 ```
 
 #### スキーマ変更の適用
@@ -310,7 +313,7 @@ pnpm run sync-schema
 pnpm run local:reset
 
 # または手動で実行
-docker-compose down -v
+docker-compose down
 docker-compose up -d
 pnpm run sync-schema
 ```
@@ -318,12 +321,11 @@ pnpm run sync-schema
 #### 作業終了
 
 ```bash
-# データを保持する場合（推奨）
+# コンテナを停止
 docker-compose down
-
-# データを完全に削除する場合
-docker-compose down -v
 ```
+
+**注**: LocalStackはフリーティアのためデータ永続化なし。次回起動時は`pnpm run local:setup`でリソースを再作成。
 
 #### ローカル環境の状態確認
 
@@ -466,9 +468,9 @@ pnpm run infra:open
 
 #### 日常的な開発
 
-- ✅ 作業開始時は`local:setup`で既存スクリプトを実行（高速）
-- ✅ スキーマ変更時のみ`sync-schema`を実行（CDKと同期）
-- ✅ 作業終了時は`docker-compose down`でリソースを停止（データは保持）
+- ✅ 作業開始時は`docker-compose up -d`後に`local:setup`でリソースを作成
+- ✅ スキーマ変更時は`sync-schema`を実行（CDKと同期）
+- ✅ 作業終了時は`docker-compose down`でコンテナを停止
 
 #### スキーマ管理
 
@@ -513,7 +515,6 @@ pnpm run infra:open
 - 「LocalStackの状態を確認して」 → `docker-compose ps` + health check
 - 「ローカル環境をリセットして」 → `local:reset`
 - 「ローカルの作業を終了したい」 → `docker-compose down`
-- 「全部削除してクリーンアップ」 → `docker-compose down -v`
 
 ## 注意事項
 
@@ -542,12 +543,12 @@ pnpm run infra:open
 - `docker-compose up -d` - 5-10秒
 - `sync-schema` - 20-30秒（CDK synth + スクリプト生成 + LocalStack作成）
 - `local:setup` - 5秒（既存スクリプト実行のみ）
-- `local:reset` - 30-40秒（削除 + 起動 + スキーマ同期）
+- `local:reset` - 30-40秒（停止 + 起動 + スキーマ同期）
 
 ### データの永続性（ローカル開発環境）
 
-- `docker-compose down`: データは保持される（`localstack-data`ボリューム）
-- `docker-compose down -v`: **すべてのデータが削除される**
+- LocalStackはフリーティアのため、データ永続化機能は使用不可
+- `docker-compose down`または`docker-compose restart`後は`pnpm run local:setup`でリソースを再作成する必要がある
 
 ### AWS CLI Endpoint（ローカル開発環境）
 

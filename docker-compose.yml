@@ -9,9 +9,6 @@ services:
     environment:
       - SERVICES=dynamodb,sqs,s3
       - DEBUG=1
-      - DATA_DIR=/var/lib/localstack/data
-    volumes:
-      - "./localstack-data:/var/lib/localstack/data"
     networks:
       - timtam-local
     healthcheck:
