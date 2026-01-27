@@ -132,6 +132,15 @@ app.post('/api/v1/bot/:bot_id/send_chat_message/', (req, res) => {
   console.log(`[STUB MODE] POST /api/v1/bot/${bot_id}/send_chat_message/`);
   console.log('Message:', message);
 
+  // Validate message parameter
+  if (typeof message !== 'string' || message.trim() === '') {
+    console.log(`[STUB MODE] Invalid message parameter: ${typeof message}, value: ${message}`);
+    return res.status(400).json({
+      error: 'Bad Request',
+      detail: 'message must be a non-empty string'
+    });
+  }
+
   const bot = bots.get(bot_id);
   if (!bot) {
     console.log(`[STUB MODE] Bot not found: ${bot_id}`);
