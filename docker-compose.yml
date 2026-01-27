@@ -36,24 +36,24 @@ services:
       timeout: 5s
       retries: 5
 
-  # TODO: Express API Server (to be implemented)
-  # api-server:
-  #   build: ./local-api-server
-  #   ports:
-  #     - "3000:3000"
-  #   environment:
-  #     - AWS_ENDPOINT_URL=http://localstack:4566
-  #     - RECALL_API_BASE_URL=http://recall-stub:8080
-  #     - AI_MESSAGES_TABLE=timtam-ai-messages
-  #     - MEETINGS_METADATA_TABLE=timtam-meetings-metadata
-  #     - TRANSCRIPT_QUEUE_URL=http://localstack:4566/000000000000/transcript-asr.fifo
-  #   depends_on:
-  #     localstack:
-  #       condition: service_healthy
-  #     recall-stub:
-  #       condition: service_healthy
-  #   networks:
-  #     - timtam-local
+  # Express API Server
+  api-server:
+    build: ./local-api-server
+    ports:
+      - "3000:3000"
+    environment:
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - RECALL_API_BASE_URL=http://recall-stub:8080
+      - AI_MESSAGES_TABLE=timtam-ai-messages
+      - MEETINGS_METADATA_TABLE=timtam-meetings-metadata
+      - TRANSCRIPT_QUEUE_URL=http://localstack:4566/000000000000/transcript-asr.fifo
+    depends_on:
+      localstack:
+        condition: service_healthy
+      recall-stub:
+        condition: service_healthy
+    networks:
+      - timtam-local
 
   # TODO: ECS Orchestrator (to be implemented)
   # orchestrator:
