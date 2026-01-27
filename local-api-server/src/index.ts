@@ -4,6 +4,7 @@ import { APIGatewayProxyEventV2 } from 'aws-lambda';
 
 // Import Lambda handlers directly
 import { listHandler, getHandler, joinHandler, leaveHandler } from '../../services/meeting-api/recallMeetings';
+import { handler as webhookHandler } from '../../services/meeting-api/recallWebhook';
 import { getMessages } from '../../services/ai-messages/handler';
 
 const app = express();
@@ -25,6 +26,7 @@ process.env.MEETINGS_METADATA_TABLE = MEETINGS_METADATA_TABLE;
 process.env.AI_MESSAGES_TABLE = process.env.AI_MESSAGES_TABLE || 'timtam-ai-messages';
 process.env.RECALL_API_KEY = 'test-key';
 process.env.RECALL_WEBHOOK_URL = 'http://localhost:3000/recall/webhook';
+process.env.TRANSCRIPT_QUEUE_URL = process.env.TRANSCRIPT_QUEUE_URL || 'http://localhost:4566/000000000000/transcript-asr.fifo';
 
 // Dummy credentials for LocalStack
 process.env.AWS_ACCESS_KEY_ID = 'test';
@@ -118,7 +120,7 @@ function sendLambdaResponse(res: express.Response, lambdaResponse: any) {
  *
  * Uses the ACTUAL Lambda handler from services/meeting-api/recallMeetings.ts
  */
-function addRoure(
+function addRoute(
     method: "get" | "post" | "delete",
     path: string,
     handler: Function,
@@ -167,11 +169,12 @@ function addRoure(
 
 console.log('Available endpoints:');
 console.log('  GET    /health');
-addRoure('get', '/recall/meetings', listHandler, (req) => ({}) );
-addRoure('get', '/recall/meetings/:meetingId', getHandler, (req) => ({ meetingId: req.params.meetingId }) );
-addRoure('post', '/recall/meetings/join', joinHandler, (req) => ({}) );
-addRoure('delete', '/recall/meetings/:meetingId', leaveHandler, (req) => ({ meetingId: req.params.meetingId }) );
-addRoure('get', '/meetings/:meetingId/messages', getMessages, (req) => ({ meetingId: req.params.meetingId }) );
+addRoute('get', '/recall/meetings', listHandler, (req) => ({}) );
+addRoute('get', '/recall/meetings/:meetingId', getHandler, (req) => ({ meetingId: req.params.meetingId }) );
+addRoute('post', '/recall/meetings/join', joinHandler, (req) => ({}) );
+addRoute('post', '/recall/webhook', webhookHandler, (req) => ({}) );
+addRoute('delete', '/recall/meetings/:meetingId', leaveHandler, (req) => ({ meetingId: req.params.meetingId }) );
+addRoute('get', '/meetings/:meetingId/messages', getMessages, (req) => ({ meetingId: req.params.meetingId }) );
 
 /**
  * Health check endpoint
