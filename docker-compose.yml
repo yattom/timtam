@@ -36,13 +36,19 @@ services:
       timeout: 5s
       retries: 5
 
-  # Express API Server
+  # Express API Server (runs actual Lambda handlers in Express wrapper)
   api-server:
-    build: ./local-api-server
+    build:
+      context: .
+      dockerfile: ./local-api-server/Dockerfile
     ports:
       - "3000:3000"
     environment:
+      - PORT=3000
       - AWS_ENDPOINT_URL=http://localstack:4566
+      - AWS_REGION=ap-northeast-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
       - RECALL_API_BASE_URL=http://recall-stub:8080
       - AI_MESSAGES_TABLE=timtam-ai-messages
       - MEETINGS_METADATA_TABLE=timtam-meetings-metadata
@@ -54,6 +60,11 @@ services:
         condition: service_healthy
     networks:
       - timtam-local
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # TODO: ECS Orchestrator (to be implemented)
   # orchestrator:

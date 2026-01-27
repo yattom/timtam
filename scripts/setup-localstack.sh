@@ -35,19 +35,6 @@ echo ""
 echo "Creating DynamoDB tables..."
 echo ""
 
-# timtam-media-pipelines
-aws dynamodb create-table \
-  --endpoint-url "$ENDPOINT" \
-  --region "$REGION" \
-  --table-name timtam-media-pipelines \
-  --attribute-definitions \
-    AttributeName=meetingId,AttributeType=S \
-  --key-schema \
-    AttributeName=meetingId,KeyType=HASH \
-  --billing-mode PAY_PER_REQUEST \
-  > /dev/null 2>&1 || echo "  → timtam-media-pipelines already exists"
-echo "✓ timtam-media-pipelines"
-
 # timtam-ai-messages
 aws dynamodb create-table \
   --endpoint-url "$ENDPOINT" \
