@@ -4,7 +4,8 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install pnpm
+# Install curl for health checks and pnpm
+RUN apk add --no-cache curl
 RUN npm install -g pnpm
 
 # Copy workspace configuration
