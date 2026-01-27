@@ -8,6 +8,13 @@ set -e
 ENDPOINT="http://localhost:4566"
 REGION="ap-northeast-1"
 
+# Set dummy AWS credentials for LocalStack if not already configured
+if [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then
+  export AWS_ACCESS_KEY_ID="test"
+fi
+if [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+  export AWS_SECRET_ACCESS_KEY="test"
+fi
 echo "========================================="
 echo "LocalStack Setup for Timtam"
 echo "========================================="
