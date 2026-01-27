@@ -273,8 +273,8 @@ app.post('/api/send-transcript', async (req, res) => {
   chatMessages.get(bot_id).push(userMessage);
 
   // Send webhook to local API server
+  // Note: Using Node.js 18+ built-in fetch (requires Node.js >=18.0.0)
   try {
-    const fetch = (await import('node-fetch')).default;
     const webhookRes = await fetch(WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
