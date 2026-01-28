@@ -190,9 +190,6 @@ importers:
       express:
         specifier: ^4.18.2
         version: 4.22.1
-      node-fetch:
-        specifier: ^3.3.2
-        version: 3.3.2
       socket.io:
         specifier: ^4.6.1
         version: 4.8.3
