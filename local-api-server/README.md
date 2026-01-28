@@ -1,6 +1,6 @@
 # Local API Server
 
-ローカル開発環境用のAPI Server。Lambda関数のロジックをExpressで実装し、LocalStackのDynamoDB/SQS/S3に接続する。
+ローカル開発環境用のAPI Server。既存のLambda関数をExpressでラップし、LocalStackのDynamoDB/SQS/S3に接続する。
 
 ## セットアップ
 
@@ -41,8 +41,13 @@ GET /health
 GET /recall/meetings?limit=50&nextToken=xxx
 ```
 
-## 開発のヒント
+## アーキテクチャ
 
-- Lambda関数のロジックを `src/` 以下に移植
+このサーバーは `services/` 配下の既存のLambdaハンドラーを直接ラップして呼び出す。
+
+- ExpressのリクエストをAPI Gateway Eventに変換
+- 既存のLambdaハンドラー（`services/meeting-api/recallMeetings.ts` など）を直接実行
 - LocalStackへの接続は環境変数で設定
 - CORS有効化済み（Facilitator UIから呼び出し可能）
+
+変更を加える場合は、`services/` 配下のLambdaハンドラーを直接編集する。ルーティングは `src/index.ts` で定義されている。
