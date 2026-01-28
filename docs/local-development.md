@@ -19,6 +19,7 @@
 
 - Docker Desktop (または Docker + Docker Compose)
 - AWS CLI
+- jq
 - Node.js 18以上
 - pnpm
 
