@@ -128,7 +128,7 @@ pnpm dev
 
 1. Facilitator UI (http://localhost:5173) を開く
 2. 「新しい会議を作成」をクリック
-3. **ミーティングURL**: `localhost` と入力（重要！）
+3. **ミーティングURL**: `http://localhost` と入力（重要！）
 4. プラットフォーム: `zoom` を選択（任意）
 5. ボット名: 任意の名前を入力
 
