@@ -23,7 +23,7 @@ RECALL_STUB_ENDPOINT="http://localhost:8080"
 AWS_REGION="ap-northeast-1"
 
 # Expected resources
-EXPECTED_TABLES=("timtam-ai-messages" "timtam-meetings-metadata" "timtam-orchestrator-config")
+EXPECTED_TABLES=("timtam-ai-messages" "timtam-meetings-metadata" "timtam-orchestrator-config" "timtam-grasp-configs")
 EXPECTED_QUEUE_NAME="transcript-asr.fifo"
 EXPECTED_BUCKET="timtam-local-dev"
 
