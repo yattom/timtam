@@ -160,7 +160,7 @@ fi
 test_start "Recall stub API - Create bot"
 BOT_RESPONSE=$(curl -s -X POST "$RECALL_STUB_ENDPOINT/api/v1/bot/" \
     -H "Content-Type: application/json" \
-    -d '{"meeting_url":"localhost","bot_name":"Test Bot"}' || echo "ERROR")
+    -d '{"meeting_url":"http://localhost","bot_name":"Test Bot"}' || echo "ERROR")
 
 BOT_ID=$(echo "$BOT_RESPONSE" | jq -r '.id' 2>/dev/null || echo "")
 if [[ "$BOT_ID" =~ ^bot_ ]]; then
