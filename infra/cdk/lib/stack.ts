@@ -21,16 +21,6 @@ export class TimtamInfraStack extends Stack {
 
     // HTTP API は Web Distribution 作成後に定義して、CORS に CF ドメインを含める
 
-    // === DynamoDB table for Media Pipeline ARNs ===
-    // DEPRECATED: Will be removed once transcriptionStart/Stop are updated
-    // Currently kept to avoid breaking existing deployments
-    const mediaPipelineTable = new dynamodb.Table(this, 'MediaPipelineTable', {
-      tableName: 'timtam-media-pipelines',
-      partitionKey: { name: 'meetingId', type: dynamodb.AttributeType.STRING },
-      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: this.node.tryGetContext('keepTables') ? undefined : RemovalPolicy.DESTROY,
-    });
-
     // === DynamoDB table for AI Messages (for web UI polling) ===
     const aiMessagesTable = new dynamodb.Table(this, 'AiMessagesTable', {
       tableName: 'timtam-ai-messages',
