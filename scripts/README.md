@@ -16,9 +16,9 @@ LocalStackにDynamoDB、SQS、S3のリソースを作成する。
 
 **作成されるリソース:**
 
-- DynamoDBテーブル: `timtam-meetings-metadata`, `timtam-ai-messages`, `timtam-orchestrator-config`
-- SQS FIFOキュー: `transcript-asr.fifo`
-- S3バケット: `timtam-local-dev`
+- DynamoDBテーブル
+- SQSキュー
+- S3バケット
 
 **前提条件:**
 
