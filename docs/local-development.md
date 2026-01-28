@@ -8,7 +8,7 @@
 
 - **LocalStack**: DynamoDB、SQS、S3をローカルで実行
 - **Recall.ai Stub Server**: Recall.ai APIをモックし、Web UIから文字起こしを送信
-- **Express API Server**: Lambda関数をローカルで実行（TODO）
+- **Express API Server**: Lambda関数をローカルで実行（localhost:3000）
 - **ECS Orchestrator**: Dockerコンテナで実行（TODO）
 
 詳細な設計については [ADR 0016](./adr/0016-local-development-environment-recall-stub.md) を参照。
@@ -107,11 +107,11 @@ cp .env.example .env.local
 `.env.local` を編集:
 
 ```env
-# ローカルAPI Server（TODO: 実装後に有効化）
-# VITE_API_BASE_URL=http://localhost:3000
+# ローカルAPI Server
+VITE_API_BASE_URL=http://localhost:3000
 
-# 現在は本番APIを使用
-VITE_API_BASE_URL=https://your-api-gateway-url.execute-api.ap-northeast-1.amazonaws.com
+# 本番APIを使用する場合はこちら
+# VITE_API_BASE_URL=https://your-api-gateway-url.execute-api.ap-northeast-1.amazonaws.com
 ```
 
 ### 7. Webフロントエンドを起動
@@ -165,7 +165,7 @@ pnpm dev
                │
                ↓ Webhook
 ┌─────────────────────────────────────────────┐
-│ Express API Server (localhost:3000) [TODO]  │
+│ Express API Server (localhost:3000)         │
 │ - Lambda関数をローカル実行                   │
 └──────────────┬──────────────────────────────┘
                │
@@ -250,7 +250,7 @@ docker-compose up recall-stub
 
 ### Webhookが送信されない
 
-1. API Serverが起動しているか確認（現在は未実装）
+1. API Serverが起動しているか確認: `docker-compose ps api-server`
 2. Stub Serverのログでエラーを確認
 3. WEBHOOK_URL環境変数が正しく設定されているか確認
 
@@ -309,7 +309,7 @@ npm run dev
 | Recall.ai | Stub Server | 本番クラウドサービス |
 | 会議サービス | 不要（Stubで代替） | Zoom/Meet/Teams |
 | DynamoDB/SQS | LocalStack | AWS |
-| Lambda | Express（TODO） | AWS Lambda |
+| Lambda | Express (localhost:3000) | AWS Lambda |
 | Orchestrator | Docker | ECS |
 | コスト | $0（Bedrock除く） | 従量課金 |
 
@@ -317,8 +317,7 @@ npm run dev
 
 現在、以下のコンポーネントが未実装:
 
-1. **Express API Server**: Lambda関数をローカルで実行
-2. **Orchestratorのローカル化**: Docker Composeに統合
+1. **Orchestratorのローカル化**: Docker Composeに統合
 
 これらの実装については、Issue #21 を参照。
 
