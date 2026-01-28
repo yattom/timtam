@@ -32,7 +32,7 @@ docker-compose up
 ## 使い方
 
 1. Facilitator UIで会議を作成
-   - ミーティングURL: `localhost`
+   - ミーティングURL: `http://localhost`
    - ボット名: 任意
 
 2. Stub Server UI (http://localhost:8080) を開く
