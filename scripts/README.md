@@ -42,8 +42,8 @@ LocalStackにDynamoDB、SQS、S3のリソースを作成する。
 3. Recall stubコンテナの起動確認
 4. LocalStackヘルスエンドポイントの応答確認
 5. Recall stubヘルスエンドポイントの応答確認
-6. DynamoDBテーブルの作成確認（3つ）
-7. SQS FIFOキューの作成確認
+6. DynamoDBテーブルの作成確認
+7. SQSキューの作成確認
 8. S3バケットの作成確認
 9. Recall stub API - ボット作成テスト
 10. Recall stub API - ボット情報取得テスト
