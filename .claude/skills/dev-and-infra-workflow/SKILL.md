@@ -1,0 +1,645 @@
+---
+name: dev-and-infra-workflow
+description: |
+  開発用およびインフラ作業用のワークフローコマンドを実行します。
+  本番環境: CDKデプロイ、インフラ管理(open/close)、Webビルド・デプロイ
+  ローカル開発環境: LocalStackセットアップ、スキーマ同期、docker-compose操作
+  ユーザーがデプロイ、ビルド、インフラ操作、ローカル開発を依頼したときに使用してください。
+allowed-tools: Bash
+---
+
+# pnpm Workflowスキル
+
+このスキルはプロジェクトのpnpmワークフローコマンドを実行します。
+
+## 環境の選択
+
+このプロジェクトは2つの開発環境をサポートしています：
+
+- **本番環境（AWS）**: 実際のAWSリソースにデプロイ・管理
+- **ローカル開発環境（LocalStack）**: 完全にオフラインで動作する開発環境
+
+## 利用可能なコマンドカテゴリ
+
+### 0. ローカル開発環境（LocalStack + Docker Compose）
+
+ローカル開発環境は以下のサービスで構成されています：
+- **LocalStack**: AWS互換サービス（DynamoDB、SQS、S3）をローカルでエミュレート
+- **api-server**: 実際のLambdaハンドラーをExpressで実行するAPIサーバー
+- **recall-stub**: Recall.aiのモックサーバー
+
+#### sync-schema - CDKスキーマと同期 ⭐ **初回セットアップ必須**
+
+```bash
+pnpm run sync-schema
+```
+
+CDKからスキーマを抽出してLocalStackに同期。以下を順次実行：
+
+1. `cdk synth` - CloudFormationテンプレート生成
+2. `generate-localstack-setup.ts` - AWS CLIスクリプト自動生成
+3. `setup-localstack.sh` - LocalStackにリソースを作成（DynamoDB、SQS、S3）
+
+**使用ケース**:
+
+- 初回セットアップ時
+- CDKでスキーマ変更後
+- LocalStackとCDKのスキーマがずれている時
+
+#### local:setup - LocalStackセットアップ（クイック起動）
+
+```bash
+pnpm run local:setup
+```
+
+既に生成済みの`setup-localstack.sh`を実行してLocalStackにリソースを作成。
+
+**使用ケース**:
+
+- 日常的な作業開始時（スキーマ変更がない場合）
+- docker-compose起動後のリソース作成
+
+**sync-schema vs local:setup**:
+
+- `sync-schema`: CDKから再生成（遅い、スキーマ変更時に使用）
+- `local:setup`: 既存スクリプト実行（速い、日常的に使用）
+
+#### local:reset - LocalStack完全リセット
+
+```bash
+pnpm run local:reset
+```
+
+LocalStackを完全にリセットしてスキーマを再同期。以下を順次実行：
+
+1. `docker-compose down` - コンテナ停止・削除
+2. `docker-compose up -d` - 再起動
+3. `pnpm run sync-schema` - スキーマ同期
+
+**使用ケース**:
+
+- LocalStackの状態が不整合になった時
+- 完全にクリーンな状態から始めたい時
+- リソースを全て削除してやり直したい時
+
+### 1. 統合デプロイ
+
+#### deploy:all - すべてをビルド＆デプロイ ⭐ **推奨**
+
+```bash
+pnpm run deploy:all
+```
+
+インフラとWebアプリを一括でデプロイする。以下を順次実行：
+
+1. CDKデプロイ（インフラ）
+2. Webビルド
+3. Webデプロイ
+
+**ユーザーの介入なしで完全なデプロイが完了**します。通常はこのコマンドを使用してください。
+
+### 2. CDK操作
+
+#### cdk:synth - CloudFormationテンプレート生成（デバッグ用）
+
+```bash
+pnpm run cdk:synth
+```
+
+CDKスタックをCloudFormationテンプレートに変換して確認する。
+**注**: `cdk:deploy`は内部で自動的にsynthを実行するため、通常のデプロイでは不要。
+デプロイせずにテンプレートだけ確認したい場合や、構文エラーのデバッグ時に使用。
+
+#### cdk:deploy - インフラデプロイ
+
+```bash
+pnpm run cdk:deploy
+```
+
+CDKスタックをAWSにデプロイする（内部でsynthも実行）。承認なしで自動デプロイ。
+
+#### cdk:destroy - インフラ削除
+
+```bash
+pnpm run cdk:destroy
+```
+
+デプロイされたCDKスタックを削除する。**慎重に使用**。
+
+#### cdk:diff - 変更差分確認
+
+```bash
+pnpm run cdk:diff
+```
+
+現在のCDKコードとデプロイ済みスタックの差分を表示。
+
+#### cdk:bootstrap - CDK初期セットアップ
+
+```bash
+pnpm run cdk:bootstrap
+```
+
+AWS環境でCDKを使用するための初期セットアップ。初回のみ実行。
+
+#### cdk:info - CloudFront情報確認
+
+```bash
+pnpm run cdk:info
+```
+
+CloudFrontディストリビューションの情報を表示。
+
+### 3. インフラ管理（コスト最適化）
+
+#### infra:close - すべてのインフラを停止
+
+```bash
+pnpm run infra:close
+```
+
+Lambda、ECS、CloudFrontをすべて停止してコストを削減。
+
+個別に停止する場合:
+
+```bash
+pnpm run infra:close:lambda      # Lambda関数の同時実行数を0に
+pnpm run infra:close:ecs         # ECSサービスのタスク数を0に
+pnpm run infra:close:cloudfront  # CloudFrontを無効化
+```
+
+#### infra:open - すべてのインフラを再開
+
+```bash
+pnpm run infra:open
+```
+
+停止していたLambda、ECS、CloudFrontを再開。
+
+個別に再開する場合:
+
+```bash
+pnpm run infra:open:lambda       # Lambda関数の同時実行制限を解除
+pnpm run infra:open:ecs          # ECSサービスのタスク数を1に
+pnpm run infra:open:cloudfront   # CloudFrontを有効化
+```
+
+### 4. Web操作
+
+#### web:build - Webアプリケーションビルド
+
+```bash
+pnpm run web:build
+```
+
+timtam-webパッケージをビルド。
+
+#### web:deploy - Webアプリケーションデプロイ
+
+```bash
+pnpm run web:deploy
+```
+
+ビルドしたWebアプリをS3にアップロードしてCloudFrontで配信。
+
+### 5. Orchestratorビルド
+
+#### orchestrator:build - Orchestratorサービスビルド
+
+```bash
+pnpm run orchestrator:build
+```
+
+orchestratorサービスをビルド。自動的に依存する`@timtam/shared`パッケージも先にビルドされる。
+
+**注**:
+
+- shared パッケージに変更があった場合でも、このコマンド一つで両方ビルドされる
+- ビルドが高速なため、毎回 shared を含めてビルドしても問題ない
+
+### 6. テスト
+
+#### test - ユニットテスト実行
+
+```bash
+pnpm run test
+```
+
+orchestratorのテストを実行（Vitest使用）。
+
+**注**:
+
+- 現在、テストはorchestratorサービスにのみ存在します
+- `test:watch` と `test:ui` はpackage.jsonに定義されていますが、継続的に実行されるため、Claude Codeでは使用しません（手動実行用）
+
+#### e2e:test:local - ローカル環境E2Eテスト ⭐ **ローカル開発確認**
+
+```bash
+pnpm run e2e:test:local
+```
+
+ローカル開発環境のサニティチェックテストを実行。
+
+**前提条件**:
+- `docker-compose up -d` ですべてのサービスが起動している
+- `pnpm run local:setup` でLocalStackリソースが作成されている
+- `web/facilitator` で `pnpm run dev` が起動している（ポート3001）
+
+**テスト内容**:
+1. Facilitator UIにアクセス（http://localhost:3001）
+2. エラーが表示されないことを確認
+3. 新しいミーティングを開始
+4. stub-recallai（http://localhost:8080）でミーティングが表示されることを確認
+5. stub-recallaiから文字起こしテキストを送信
+6. Facilitator UIに文字起こしが表示されることを確認
+7. 会議を終了
+
+**ブラウザを表示して実行**:
+
+```bash
+pnpm run e2e:test:local:headed
+```
+
+### 7. その他
+
+#### sso:admin - AWS SSO管理者権限取得 ⚠️ **重要**
+
+```bash
+pnpm run sso:admin
+```
+
+AWS SSO経由で管理者権限を取得。
+
+**すべてのAWS操作の前に実行が必要**:
+
+- CDK操作（deploy, diff, info等）
+- インフラ管理（open/close）
+- Web deploy
+
+認証エラーが出た場合は、このコマンドを実行してから再試行する。
+
+#### infra:synth-deploy - 合成とデプロイを一括実行
+
+```bash
+pnpm run infra:synth-deploy
+```
+
+CDKの合成とデプロイを連続実行。
+
+## 使用シナリオ
+
+### 🏠 ローカル開発環境
+
+#### 初回セットアップ
+
+```bash
+# 1. コンテナを起動（localstack、api-server、recall-stubが起動）
+docker-compose up -d
+
+# 2. LocalStackが起動するまで待つ（約5-10秒）
+sleep 10
+
+# 3. スキーマを同期（DynamoDB、SQS、S3リソースを作成）
+pnpm run sync-schema
+
+# 4. 状態確認
+docker-compose ps
+aws dynamodb list-tables --endpoint-url http://localhost:4566 --region ap-northeast-1
+curl http://localhost:3000/health  # api-server確認
+```
+
+#### 日常的な作業開始
+
+```bash
+# 1. コンテナを起動
+docker-compose up -d
+
+# 2. LocalStackが起動するまで待つ（約5-10秒）
+sleep 10
+
+# 3. リソースをセットアップ（既存のスクリプトを実行）
+pnpm run local:setup
+
+# 4. アプリケーション開発・テストを開始
+```
+
+#### スキーマ変更の適用
+
+```bash
+# 1. infra/cdk/lib/stack.tsでDynamoDB/SQSスキーマを変更
+
+# 2. スキーマを同期（自動的にCDKと同期）
+pnpm run sync-schema
+
+# 3. アプリケーションで動作確認
+```
+
+#### トラブルシューティング（完全リセット）
+
+```bash
+# LocalStack完全リセット
+pnpm run local:reset
+
+# または手動で実行
+docker-compose down
+docker-compose up -d
+pnpm run sync-schema
+```
+
+#### 作業終了
+
+```bash
+# コンテナを停止
+docker-compose down
+```
+
+**注**: LocalStackはフリーティアのためデータ永続化なし。次回起動時は`pnpm run local:setup`でリソースを再作成。
+
+#### ローカル環境の状態確認
+
+```bash
+# コンテナ状態確認
+docker-compose ps
+
+# api-server health check
+curl http://localhost:3000/health
+
+# recall-stub health check
+curl http://localhost:8080/health
+
+# LocalStack health check
+curl http://localhost:4566/_localstack/health
+
+# DynamoDBテーブル確認
+aws dynamodb list-tables --endpoint-url http://localhost:4566 --region ap-northeast-1
+
+# SQSキュー確認
+aws sqs list-queues --endpoint-url http://localhost:4566 --region ap-northeast-1
+
+# api-serverのエンドポイントテスト
+curl http://localhost:3000/recall/meetings
+```
+
+**ローカル環境で作成されるリソース**:
+- DynamoDB Tables（4つ）: ai-messages（TTL設定）, meetings-metadata（GSI）, orchestrator-config（PK: configKey）, grasp-configs
+- SQS Queues（3つ）: transcript-asr.fifo（DLQ設定）, transcript-asr-dlq.fifo, OrchestratorControlQueue
+- S3 Bucket（1つ）: timtam-local-dev
+
+**ローカル環境のサービス構成**:
+```
+┌─────────────────┐
+│  Facilitator UI │ (localhost:3001 from web/facilitator)
+└────────┬────────┘
+         │
+┌────────▼────────┐
+│  api-server     │ (Express + actual Lambda handlers)
+│  :3000          │ docker-composeで実行
+└────┬────────┬───┘
+     │        │
+     │        └──────┐
+     │               │
+┌────▼─────────┐  ┌─▼──────────┐
+│ LocalStack   │  │ recall-stub│
+│ :4566        │  │ :8080      │
+│ - DynamoDB   │  └────────────┘
+│ - SQS        │
+│ - S3         │
+│ - CloudWatch │
+└──────────────┘
+```
+
+**api-server（Express API Server）**:
+- 実際のLambdaハンドラーをExpressラッパーで実行
+- 本番環境に近い動作テストが可能
+- LocalStackとrecall-stubと連携
+- エンドポイント: `http://localhost:3000`
+  - GET `/health` - ヘルスチェック
+  - GET `/recall/meetings` - ミーティング一覧
+  - GET `/recall/meetings/:meetingId` - ミーティング詳細
+  - POST `/recall/meetings/join` - ミーティング参加
+  - POST `/recall/webhook` - Recall.aiからのWebhook受信
+  - DELETE `/recall/meetings/:meetingId` - ミーティング退出
+  - GET `/meetings/:meetingId/messages` - AIメッセージ取得
+
+**recall-stub（Recall.ai Stub Server）**:
+- Recall.ai APIのモックサーバー
+- Web UI: `http://localhost:8080`
+  - ボット一覧表示
+  - 文字起こしテキストの手動送信
+  - AIレスポンスの確認
+
+**facilitator UI（Next.js Dev Server）**:
+- 会議ファシリテーター向けWeb UI
+- URL: `http://localhost:3001`
+
+### 🔐 AWS認証（必須の初回ステップ）
+
+**すべてのワークフローの最初に実行**:
+
+```bash
+pnpm run sso:admin
+```
+
+このコマンドでAWS管理者権限を取得してから、以降の操作を実行する。
+
+### デプロイの基本フロー
+
+#### 推奨：一括デプロイ
+
+```bash
+pnpm run deploy:all
+```
+
+インフラとWebアプリを一度にデプロイ。**通常はこれを使用**。
+
+#### 個別デプロイ（トラブルシューティング時）
+
+1. **インフラのみデプロイ**
+   ```bash
+   pnpm run cdk:deploy
+   ```
+
+2. **Webアプリのみビルド・デプロイ**
+   ```bash
+   pnpm run web:build
+   pnpm run web:deploy
+   ```
+
+### コスト削減フロー（開発中断時）
+
+```bash
+pnpm run infra:close
+```
+
+### 開発再開フロー
+
+```bash
+pnpm run infra:open
+```
+
+## ベストプラクティス
+
+### 本番環境（AWS）
+
+#### デプロイ前の確認
+
+- ✅ `cdk:diff`で変更内容を確認してからデプロイ
+- ✅ 本番環境への変更は慎重に
+- ✅ CloudFrontの変更は反映に時間がかかることを認識
+
+#### コスト管理
+
+- ✅ 開発を中断する時は`infra:close`でリソースを停止
+- ✅ 長期間使わない場合は`cdk:destroy`を検討
+- ⚠️ `infra:close:cloudfront`は反映に15-20分かかる
+
+#### トラブルシューティング
+
+- 🔧 デプロイエラーが出たら`cdk:synth`で構文確認
+- 🔧 CloudFront情報が必要なら`cdk:info`
+- 🔧 AWS認証エラーが出たら`sso:admin`で再認証
+
+### ローカル開発環境（LocalStack）
+
+#### 初回セットアップ
+
+- ✅ `sync-schema`を実行してCDKスキーマと同期
+- ✅ LocalStackが完全に起動するまで待つ（約5-10秒）
+- ✅ 状態確認コマンドでリソースが正しく作成されたか確認
+
+#### 日常的な開発
+
+- ✅ 作業開始時は`docker-compose up -d`後に`local:setup`でリソースを作成
+- ✅ スキーマ変更時は`sync-schema`を実行（CDKと同期）
+- ✅ 作業終了時は`docker-compose down`でコンテナを停止
+
+#### スキーマ管理
+
+- ✅ **CDKがSingle Source of Truth** - スキーマ変更は常にCDKで行う
+- ✅ `setup-localstack.sh`は自動生成ファイル - 手動編集しない
+- ✅ スキーマドリフトを防ぐため、定期的に`sync-schema`を実行
+
+#### トラブルシューティング
+
+- 🔧 LocalStackの状態が不整合 → `local:reset`
+- 🔧 スキーマが古い → `sync-schema`
+- 🔧 コンテナが起動しない → `docker-compose logs`で確認
+- 🔧 リソースが作成されない → LocalStackのhealth checkを確認
+- 🔧 api-serverのエラー確認 → `docker-compose logs api-server`
+- 🔧 recall-stubのエラー確認 → `docker-compose logs recall-stub`
+
+#### エラーハンドリング
+
+- ℹ️ LocalStackログの`ResourceInUseException`（400）は正常動作（冪等性のため）
+- ℹ️ `|| echo "already exists"`でキャッチされているため無視してOK
+
+## ユーザー依頼例
+
+### 本番環境（AWS）
+
+- 「すべてデプロイして」 → `deploy:all` ⭐ **推奨**
+- 「インフラだけデプロイして」 → `cdk:deploy`
+- 「Webアプリだけデプロイ」 → `web:build` → `web:deploy`
+- 「orchestratorをビルドして」 → `orchestrator:build`
+- 「テストを実行して」 → `test`
+- 「今日の作業は終了」 → `infra:close`
+- 「開発を再開したい」 → `infra:open`
+- 「変更内容を確認したい」 → `cdk:diff`
+- 「CloudFrontの情報を見せて」 → `cdk:info`
+- 「すべて削除したい」 → `cdk:destroy` (**要確認**)
+
+### ローカル開発環境（LocalStack）
+
+- 「ローカル環境をセットアップして」 → `docker-compose up -d` → `sync-schema` ⭐ **初回**
+- 「ローカルで作業を始めたい」 → `docker-compose up -d` → `local:setup` ⭐ **日常**
+- 「スキーマを変更したから反映して」 → `sync-schema`
+- 「LocalStackの状態を確認して」 → `docker-compose ps` + health check
+- 「ローカル環境をリセットして」 → `local:reset`
+- 「ローカルの作業を終了したい」 → `docker-compose down`
+- 「ローカル環境が動作しているか確認して」 → `e2e:test:local` ⭐ **E2Eテスト**
+
+## 注意事項
+
+### AWS Profile
+
+すべてのコマンドは`--profile admin`を使用しています。AWS SSO設定が必要です。
+
+### 破壊的な操作
+
+以下のコマンドは元に戻せないので注意:
+
+- `cdk:destroy` - スタック全体を削除
+- `infra:close` - リソースを停止（データは保持）
+
+### 実行時間
+
+#### 本番環境（AWS）
+
+- `deploy:all` - 7-12分程度（CDK + Webビルド + デプロイ）
+- `cdk:deploy` - 5-10分程度
+- `web:deploy` - 1-2分程度
+- `infra:close:cloudfront` / `infra:open:cloudfront` - 15-20分程度
+
+#### ローカル開発環境（LocalStack）
+
+- `docker-compose up -d` - 5-10秒
+- `sync-schema` - 20-30秒（CDK synth + スクリプト生成 + LocalStack作成）
+- `local:setup` - 5秒（既存スクリプト実行のみ）
+- `local:reset` - 30-40秒（停止 + 起動 + スキーマ同期）
+
+### データの永続性（ローカル開発環境）
+
+- LocalStackはフリーティアのため、データ永続化機能は使用不可
+- `docker-compose down`または`docker-compose restart`後は`pnpm run local:setup`でリソースを再作成する必要がある
+
+### AWS CLI Endpoint（ローカル開発環境）
+
+ローカル開発時は必ず`--endpoint-url http://localhost:4566`を指定：
+
+```bash
+# 正しい
+aws dynamodb list-tables --endpoint-url http://localhost:4566 --region ap-northeast-1
+
+# 間違い（本番AWSに接続してしまう）
+aws dynamodb list-tables --region ap-northeast-1
+```
+
+## コマンド実行時の注意
+
+1. **AWS認証の確認**: AWS操作の前に必ず `pnpm run sso:admin` で認証されていることを確認。認証エラーが出た場合は、まず `sso:admin` を実行してから再試行
+2. **エラーハンドリング**: コマンド失敗時は出力を確認してユーザーに報告
+3. **進捗報告**: 長時間かかるコマンドは実行中であることをユーザーに伝える
+4. **確認**: 破壊的な操作は実行前にユーザーに確認を求める
+5. **日本語出力**: 実行結果は日本語で要約してユーザーに報告
+
+## パス・環境情報
+
+### 本番環境（AWS）
+
+- ワーキングディレクトリ: `/home/yattom/work/timtam/branches/wt1`
+- AWS Profile: `admin`
+- AWS Region: `ap-northeast-1`
+- インフラパッケージ: `timtam-infra`
+- Webパッケージ: `timtam-web`
+- Orchestratorサービス: `services/orchestrator`
+- Sharedパッケージ: `packages/shared`
+
+### ローカル開発環境（LocalStack）
+
+- ワーキングディレクトリ: `/home/yattom/work/timtam/branches/wt1`
+- API Server Endpoint: `http://localhost:3000` (docker-compose)
+- LocalStack Endpoint: `http://localhost:4566` (docker-compose)
+- Recall.ai Stub Endpoint: `http://localhost:8080` (docker-compose)
+- AWS Region: `ap-northeast-1`
+- docker-compose file: `./docker-compose.yml`
+- api-server Dockerfile: `./local-api-server/Dockerfile`
+- セットアップスクリプト: `./scripts/setup-localstack.sh`（自動生成）
+- スキーマ同期スクリプト: `./scripts/sync-localstack-schema.sh`
+- スキーマ生成スクリプト: `./scripts/generate-localstack-setup.ts`
+
+## 関連ドキュメント
+
+- [README.md](../../README.md) - プロジェクト概要
+- [docs/local-development.md](../../docs/local-development.md) - ローカル開発環境詳細ガイド
+- [docs/adr/0016-local-development-environment-recall-stub.md](../../docs/adr/0016-local-development-environment-recall-stub.md) - ADR 0016
+

@@ -6,6 +6,7 @@ import { RecallAPIClient, CreateBotRequest, MeetingPlatform, VALID_PLATFORMS, is
 const REGION = process.env.AWS_REGION || 'ap-northeast-1';
 const MEETINGS_METADATA_TABLE = process.env.MEETINGS_METADATA_TABLE || 'timtam-meetings-metadata';
 const RECALL_API_KEY = process.env.RECALL_API_KEY || '';
+const RECALL_API_BASE_URL = process.env.RECALL_API_BASE_URL; // Optional: for local dev, use http://stub-recall:8080
 const RECALL_WEBHOOK_URL = process.env.RECALL_WEBHOOK_URL || ''; // e.g., https://api.timtam.example.com/recall/webhook
 
 const ddbClient = new DynamoDBClient({ region: REGION });
@@ -14,7 +15,10 @@ const ddb = DynamoDBDocumentClient.from(ddbClient, {
     removeUndefinedValues: true, // Remove undefined values from items
   },
 });
-const recallClient = new RecallAPIClient({ apiKey: RECALL_API_KEY });
+const recallClient = new RecallAPIClient({
+  apiKey: RECALL_API_KEY,
+  ...(RECALL_API_BASE_URL && { apiBaseUrl: RECALL_API_BASE_URL })
+});
 
 /**
  * POST /recall/meetings/join
@@ -75,24 +79,39 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
       };
     }
 
-    // Validate RECALL_WEBHOOK_URL
-    if (!RECALL_WEBHOOK_URL) {
-      console.error('RECALL_WEBHOOK_URL is not set');
-      return {
-        statusCode: 500,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: 'Server configuration error: RECALL_WEBHOOK_URL not set' }),
-      };
+    // For local development: use local Recall.ai stub server
+    const isLocalDevelopment = meetingUrl === 'http://localhost';
+    const clientToUse = isLocalDevelopment
+      ? new RecallAPIClient({
+          apiKey: RECALL_API_KEY,
+          apiBaseUrl: 'http://recall-stub:8080', // Local stub server
+        })
+      : recallClient;
+    if (isLocalDevelopment) {
+      console.log('[LOCAL DEV] Using local Recall.ai stub server at http://recall-stub:8080');
     }
 
-    // Validate RECALL_API_KEY
-    if (!RECALL_API_KEY) {
-      console.error('RECALL_API_KEY is not set');
-      return {
-        statusCode: 500,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: 'Server configuration error: RECALL_API_KEY not set' }),
-      };
+
+    if(!isLocalDevelopment) {
+      // Validate RECALL_WEBHOOK_URL
+      if (!RECALL_WEBHOOK_URL) {
+        console.error('RECALL_WEBHOOK_URL is not set');
+        return {
+          statusCode: 500,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Server configuration error: RECALL_WEBHOOK_URL not set' }),
+        };
+      }
+
+      // Validate RECALL_API_KEY
+      if (!RECALL_API_KEY) {
+        console.error('RECALL_API_KEY is not set');
+        return {
+          statusCode: 500,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Server configuration error: RECALL_API_KEY not set' }),
+        };
+      }
     }
 
     // Create Recall.ai bot
@@ -116,14 +135,14 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
         realtime_endpoints: [
           {
             type: 'webhook',
-            url: RECALL_WEBHOOK_URL,
+            url: isLocalDevelopment ? 'http://api-server:3000' : RECALL_WEBHOOK_URL,
             events: ['transcript.data'],
           },
         ],
       },
     };
 
-    const bot = await recallClient.createBot(createBotRequest);
+    const bot = await clientToUse.createBot(createBotRequest);
 
     // Generate meeting code (6桁の英数字)
     const meetingCode = await generateMeetingCode();

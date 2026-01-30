@@ -4,3 +4,5 @@ packages:
   - services/*
   - web/*
   - e2e
+  - local-api-server
+  - stub-recall-server

@@ -67,9 +67,37 @@ BASE_URL=https://your-timtam-deployment.com npm test
 
 ## テストケース
 
+### local-sanity.spec.ts
+
+ローカル開発環境のサニティチェックテストです：
+
+**前提条件：**
+- `docker-compose up -d` ですべてのサービスが起動している
+- `pnpm run local:setup` でLocalStackリソースが作成されている
+- `web/facilitator` で `pnpm run dev` が起動している（ポート3001）
+
+**テスト内容：**
+1. Facilitator UIにアクセス（http://localhost:5173）
+2. エラーが表示されないことを確認
+3. 新しいミーティングを開始
+4. stub-recallai（http://localhost:8080）でミーティングが表示されることを確認
+5. stub-recallaiから文字起こしテキストを送信
+6. Facilitator UIに文字起こしが表示されることを確認
+7. 会議を終了
+
+**実行方法：**
+```bash
+cd e2e
+npm test -- local-sanity.spec.ts
+```
+
+**環境変数：**
+- `FACILITATOR_URL`: Facilitator UIのURL（デフォルト: `http://localhost:3001`）
+- `STUB_RECALL_URL`: stub-recallaiのURL（デフォルト: `http://localhost:8080`）
+
 ### golden-path.spec.ts
 
-会議の基本的なゴールデンパステストを実行します：
+会議の基本的なゴールデンパステストを実行します（本番環境用）：
 
 1. ページを開く
 2. 自分の名前を設定する

@@ -158,6 +158,7 @@ export default function JoinMeetingPage() {
               <input
                 type="url"
                 id="meetingUrl"
+                data-testid="meeting-url-input"
                 value={meetingUrl}
                 onChange={(e) => setMeetingUrl(e.target.value)}
                 placeholder="https://zoom.us/j/123456789"
@@ -253,6 +254,7 @@ export default function JoinMeetingPage() {
 
             <button
               type="submit"
+              data-testid="join-meeting-button"
               disabled={loading || !meetingUrl}
               className="w-full px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
             >

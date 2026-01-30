@@ -109,6 +109,7 @@ export default function DashboardPage() {
             <div className="flex items-center space-x-4">
               <Link
                 href="/meetings/join"
+                data-testid="join-new-meeting-link"
                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
               >
                 新しい会議に参加
