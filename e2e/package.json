@@ -8,7 +8,10 @@
     "test:ci": "playwright test --reporter=list",
     "test:headed": "playwright test --headed",
     "test:debug": "playwright test --debug",
-    "test:ui": "playwright test --ui"
+    "test:ui": "playwright test --ui",
+    "test:local": "playwright test local-sanity.spec.ts",
+    "test:local:headed": "playwright test local-sanity.spec.ts --headed",
+    "test:local:debug": "playwright test local-sanity.spec.ts --debug"
   },
   "devDependencies": {
     "@playwright/test": "^1.48.2",

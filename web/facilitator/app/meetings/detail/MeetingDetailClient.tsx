@@ -336,6 +336,7 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
             </div>
             <button
               onClick={handleLeave}
+              data-testid="leave-meeting-button"
               className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
             >
               ボット退出
@@ -369,7 +370,7 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
 
           <div className="p-6">
             {activeTab === "transcript" && (
-              <div className="space-y-3">
+              <div className="space-y-3" data-testid="transcription-section">
                 <h2 className="text-lg font-semibold text-gray-900 mb-4">
                   リアルタイム文字起こし
                 </h2>
@@ -378,7 +379,7 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
                     まだ文字起こしがありません
                   </p>
                 ) : (
-                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                  <div className="space-y-2 max-h-96 overflow-y-auto" data-testid="transcription-output">
                     {transcripts.map((entry, index) => (
                       <div
                         key={index}
@@ -401,7 +402,7 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
             )}
 
             {activeTab === "ai" && (
-              <div className="space-y-4">
+              <div className="space-y-4" data-testid="ai-assistant-section">
                 <h2 className="text-lg font-semibold text-gray-900 mb-4">
                   AI介入
                 </h2>
@@ -410,7 +411,7 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
                     まだAI介入がありません
                   </p>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="space-y-4" data-testid="ai-assistant-output">
                     {aiMessages.map((msg, index) => (
                       <div
                         key={index}

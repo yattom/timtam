@@ -219,7 +219,7 @@ orchestratorサービスをビルド。自動的に依存する`@timtam/shared`�
 
 ### 6. テスト
 
-#### test - テスト実行
+#### test - ユニットテスト実行
 
 ```bash
 pnpm run test
@@ -231,6 +231,34 @@ orchestratorのテストを実行（Vitest使用）。
 
 - 現在、テストはorchestratorサービスにのみ存在します
 - `test:watch` と `test:ui` はpackage.jsonに定義されていますが、継続的に実行されるため、Claude Codeでは使用しません（手動実行用）
+
+#### e2e:test:local - ローカル環境E2Eテスト ⭐ **ローカル開発確認**
+
+```bash
+pnpm run e2e:test:local
+```
+
+ローカル開発環境のサニティチェックテストを実行。
+
+**前提条件**:
+- `docker-compose up -d` ですべてのサービスが起動している
+- `pnpm run local:setup` でLocalStackリソースが作成されている
+- `web/facilitator` で `pnpm run dev` が起動している（ポート3001）
+
+**テスト内容**:
+1. Facilitator UIにアクセス（http://localhost:3001）
+2. エラーが表示されないことを確認
+3. 新しいミーティングを開始
+4. stub-recallai（http://localhost:8080）でミーティングが表示されることを確認
+5. stub-recallaiから文字起こしテキストを送信
+6. Facilitator UIに文字起こしが表示されることを確認
+7. 会議を終了
+
+**ブラウザを表示して実行**:
+
+```bash
+pnpm run e2e:test:local:headed
+```
 
 ### 7. その他
 
@@ -360,7 +388,7 @@ curl http://localhost:3000/recall/meetings
 **ローカル環境のサービス構成**:
 ```
 ┌─────────────────┐
-│  Facilitator UI │ (localhost:3000 from web/facilitator)
+│  Facilitator UI │ (localhost:3001 from web/facilitator)
 └────────┬────────┘
          │
 ┌────────▼────────┐
@@ -376,6 +404,7 @@ curl http://localhost:3000/recall/meetings
 │ - DynamoDB   │  └────────────┘
 │ - SQS        │
 │ - S3         │
+│ - CloudWatch │
 └──────────────┘
 ```
 
@@ -388,8 +417,20 @@ curl http://localhost:3000/recall/meetings
   - GET `/recall/meetings` - ミーティング一覧
   - GET `/recall/meetings/:meetingId` - ミーティング詳細
   - POST `/recall/meetings/join` - ミーティング参加
+  - POST `/recall/webhook` - Recall.aiからのWebhook受信
   - DELETE `/recall/meetings/:meetingId` - ミーティング退出
   - GET `/meetings/:meetingId/messages` - AIメッセージ取得
+
+**recall-stub（Recall.ai Stub Server）**:
+- Recall.ai APIのモックサーバー
+- Web UI: `http://localhost:8080`
+  - ボット一覧表示
+  - 文字起こしテキストの手動送信
+  - AIレスポンスの確認
+
+**facilitator UI（Next.js Dev Server）**:
+- 会議ファシリテーター向けWeb UI
+- URL: `http://localhost:3001`
 
 ### 🔐 AWS認証（必須の初回ステップ）
 
@@ -515,6 +556,7 @@ pnpm run infra:open
 - 「LocalStackの状態を確認して」 → `docker-compose ps` + health check
 - 「ローカル環境をリセットして」 → `local:reset`
 - 「ローカルの作業を終了したい」 → `docker-compose down`
+- 「ローカル環境が動作しているか確認して」 → `e2e:test:local` ⭐ **E2Eテスト**
 
 ## 注意事項
 
