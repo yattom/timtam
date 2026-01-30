@@ -1,13 +1,13 @@
 version: '3.8'
 
 services:
-  # LocalStack (DynamoDB、SQS、S3)
+  # LocalStack (DynamoDB、SQS、S3、CloudWatch)
   localstack:
     image: localstack/localstack:latest
     ports:
       - "4566:4566"
     environment:
-      - SERVICES=dynamodb,sqs,s3
+      - SERVICES=dynamodb,sqs,s3,cloudwatch
       - DEBUG=1
     networks:
       - timtam-local
@@ -63,30 +63,35 @@ services:
       timeout: 5s
       retries: 5
 
-  # TODO: ECS Orchestrator (to be implemented)
-  # orchestrator:
-  #   build: ./services/orchestrator
-  #   environment:
-  #     - AWS_ENDPOINT_URL=http://localstack:4566
-  #     - RECALL_API_BASE_URL=http://recall-stub:8080
-  #     - TRANSCRIPT_QUEUE_URL=http://localstack:4566/000000000000/transcript-asr.fifo
-  #     - AI_MESSAGES_TABLE=timtam-ai-messages
-  #     - CONFIG_TABLE_NAME=timtam-orchestrator-config
-  #     - MEETINGS_METADATA_TABLE=timtam-meetings-metadata
-  #     - BEDROCK_REGION=ap-northeast-1
-  #     - BEDROCK_MODEL_ID=arn:aws:bedrock:ap-northeast-1:030046728177:inference-profile/global.anthropic.claude-haiku-4-5-20251001-v1:0
-  #     - BEDROCK_MOCK_MODE=false  # trueにするとBedrockもモック化
-  #     - WINDOW_LINES=5
-  #     - POLL_INTERVAL_MS=1000
-  #   volumes:
-  #     - "~/.aws:/root/.aws:ro"  # Bedrock用（MOCK_MODE=falseの場合）
-  #   depends_on:
-  #     localstack:
-  #       condition: service_healthy
-  #     recall-stub:
-  #       condition: service_healthy
-  #   networks:
-  #     - timtam-local
+  # ECS Orchestrator - Processes transcripts and generates AI messages
+  orchestrator:
+    build:
+      context: .
+      dockerfile: ./services/orchestrator/Dockerfile
+    environment:
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - AWS_REGION=ap-northeast-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - RECALL_API_BASE_URL=http://recall-stub:8080
+      - TRANSCRIPT_QUEUE_URL=http://localstack:4566/000000000000/transcript-asr.fifo
+      - AI_MESSAGES_TABLE=timtam-ai-messages
+      - CONFIG_TABLE_NAME=timtam-orchestrator-config
+      - MEETINGS_METADATA_TABLE=timtam-meetings-metadata
+      - BEDROCK_REGION=ap-northeast-1
+      - BEDROCK_MODEL_ID=arn:aws:bedrock:ap-northeast-1:030046728177:inference-profile/global.anthropic.claude-haiku-4-5-20251001-v1:0
+      - BEDROCK_MOCK_MODE=false  # trueにするとBedrockもモック化
+      - WINDOW_LINES=5
+      - POLL_INTERVAL_MS=1000
+    volumes:
+      - "~/.aws:/root/.aws:ro"  # Bedrock用（MOCK_MODE=falseの場合）
+    depends_on:
+      localstack:
+        condition: service_healthy
+      api-server:
+        condition: service_healthy
+    networks:
+      - timtam-local
 
 networks:
   timtam-local:
