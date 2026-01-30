@@ -206,15 +206,19 @@ test.describe('ローカル環境サニティチェック', () => {
     // ========================================
     console.log('Step 7: 会議を終了');
 
-    // 確認ダイアログを自動承認
-    page.on('dialog', dialog => dialog.accept());
-
     const leaveButton = page.locator('[data-testid="leave-meeting-button"]');
     if (await leaveButton.isVisible().catch(() => false)) {
+      // ダイアログハンドラーを設定
+      page.once('dialog', async dialog => {
+        console.log(`  Dialog: ${dialog.message()}`);
+        await dialog.accept();
+      });
+
       await leaveButton.click();
 
       // ダッシュボードに戻ることを確認
       await page.waitForURL('**/', { timeout: 10000 });
+      console.log('  ✓ ダッシュボードに戻りました');
     }
 
     await stubPage.close();

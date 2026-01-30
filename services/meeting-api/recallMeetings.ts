@@ -6,6 +6,7 @@ import { RecallAPIClient, CreateBotRequest, MeetingPlatform, VALID_PLATFORMS, is
 const REGION = process.env.AWS_REGION || 'ap-northeast-1';
 const MEETINGS_METADATA_TABLE = process.env.MEETINGS_METADATA_TABLE || 'timtam-meetings-metadata';
 const RECALL_API_KEY = process.env.RECALL_API_KEY || '';
+const RECALL_API_BASE_URL = process.env.RECALL_API_BASE_URL; // Optional: for local dev, use http://stub-recall:8080
 const RECALL_WEBHOOK_URL = process.env.RECALL_WEBHOOK_URL || ''; // e.g., https://api.timtam.example.com/recall/webhook
 
 const ddbClient = new DynamoDBClient({ region: REGION });
@@ -14,7 +15,10 @@ const ddb = DynamoDBDocumentClient.from(ddbClient, {
     removeUndefinedValues: true, // Remove undefined values from items
   },
 });
-const recallClient = new RecallAPIClient({ apiKey: RECALL_API_KEY });
+const recallClient = new RecallAPIClient({
+  apiKey: RECALL_API_KEY,
+  ...(RECALL_API_BASE_URL && { apiBaseUrl: RECALL_API_BASE_URL })
+});
 
 /**
  * POST /recall/meetings/join

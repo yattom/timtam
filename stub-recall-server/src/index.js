@@ -202,6 +202,38 @@ app.post('/api/v1/bot/:bot_id/leave_call/', (req, res) => {
 });
 
 /**
+ * DELETE /api/v1/bot/:bot_id/
+ * Delete a bot (scheduled bots that haven't joined yet)
+ *
+ * Reference: https://docs.recall.ai/reference/delete-bot
+ */
+app.delete('/api/v1/bot/:bot_id/', (req, res) => {
+  const { bot_id } = req.params;
+
+  console.log(`[STUB MODE] DELETE /api/v1/bot/${bot_id}/`);
+
+  const bot = bots.get(bot_id);
+  if (!bot) {
+    console.log(`[STUB MODE] Bot not found: ${bot_id}`);
+    return res.status(404).json({
+      error: 'Bot not found',
+      detail: `No bot found with id: ${bot_id}`
+    });
+  }
+
+  // Remove bot and associated data
+  bots.delete(bot_id);
+  chatMessages.delete(bot_id);
+
+  console.log(`[STUB MODE] Bot ${bot_id} deleted`);
+
+  // Notify UI
+  io.emit('bot_deleted', { bot_id });
+
+  res.status(204).send();
+});
+
+/**
  * GET /api/chat/:bot_id
  * Get chat messages for a bot (stub-specific endpoint for UI)
  */
