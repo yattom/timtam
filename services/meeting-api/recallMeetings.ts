@@ -328,23 +328,31 @@ export const leaveHandler: APIGatewayProxyHandlerV2 = async (event) => {
           throw err;
         }
       }
+
+      // Delete media with retry logic (Phase 1.2)
+      // Note: deletion is handled asynchronously and does not block the response
+      deleteMeetingMedia(result.Item.recallBot.botId);
     }
 
     // Update DynamoDB status
     const now = Date.now();
+    // Set TTL to 7 days from now (Phase 1.1)
+    const ttl = Math.floor(now / 1000) + (7 * 24 * 60 * 60);
     try {
       await ddb.send(
         new UpdateCommand({
           TableName: MEETINGS_METADATA_TABLE,
           Key: { meetingId },
-          UpdateExpression: 'SET #status = :status, #endedAt = :endedAt',
+          UpdateExpression: 'SET #status = :status, #endedAt = :endedAt, #ttl = :ttl',
           ExpressionAttributeNames: {
             '#status': 'status',
             '#endedAt': 'endedAt',
+            '#ttl': 'ttl',
           },
           ExpressionAttributeValues: {
             ':status': 'ended',
             ':endedAt': now,
+            ':ttl': ttl,
           },
         })
       );
@@ -549,6 +557,65 @@ export const getMeetingByCodeHandler: APIGatewayProxyHandlerV2 = async (event) =
     };
   }
 };
+
+/**
+ * メディア削除処理（リトライ付き）
+ *
+ * Recall.aiのleaving processに時間がかかる可能性があるため、
+ * 初回は10分待機してから削除を試行し、失敗した場合は10分間隔で2回リトライする。
+ *
+ * @param botId ボットID
+ */
+async function deleteMeetingMedia(botId: string): Promise<void> {
+  const INITIAL_DELAY_MS = 10 * 60 * 1000; // 10分
+  const RETRY_DELAY_MS = 10 * 60 * 1000;   // 10分
+  const MAX_RETRIES = 2;
+
+  // 非同期で実行（leaveHandlerをブロックしない）
+  (async () => {
+    try {
+      // 初回10分待機
+      console.log('Waiting 10 minutes before deleting Recall.ai media', { botId });
+      await new Promise(resolve => setTimeout(resolve, INITIAL_DELAY_MS));
+
+      // リトライロジック
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          await recallClient.deleteMedia(botId);
+          console.log('Successfully deleted Recall.ai media', { botId, attempt });
+          return; // 成功したら終了
+        } catch (err: any) {
+          const isLastAttempt = attempt === MAX_RETRIES;
+          if (isLastAttempt) {
+            // 最後の試行でも失敗したらログを出して終了
+            console.error('Failed to delete Recall.ai media after all retries', {
+              botId,
+              totalAttempts: attempt + 1,
+              error: err?.message || err,
+            });
+            return;
+          }
+
+          // リトライ前に待機
+          console.warn('Failed to delete Recall.ai media, will retry', {
+            botId,
+            attempt,
+            nextRetryIn: `${RETRY_DELAY_MS / 1000}s`,
+            error: err?.message || err,
+          });
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+        }
+      }
+    } catch (err: any) {
+      // 予期しないエラー
+      console.error('Unexpected error in deleteMeetingMedia', {
+        botId,
+        error: err?.message || err,
+        stack: err?.stack,
+      });
+    }
+  })();
+}
 
 /**
  * 会議コード生成（6桁の英数字）

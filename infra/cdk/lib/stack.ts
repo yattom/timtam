@@ -38,6 +38,7 @@ export class TimtamInfraStack extends Stack {
       partitionKey: { name: 'meetingId', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: this.node.tryGetContext('keepTables') ? undefined : RemovalPolicy.DESTROY,
+      timeToLiveAttribute: 'ttl', // Auto-delete old meetings (Phase 1.1)
     });
 
     // GSI for Attendee access by meetingCode (ADR 0015)
