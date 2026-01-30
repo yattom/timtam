@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { execSync } from 'child_process';
 
 /**
  * E2Eテスト: ローカル環境サニティチェック
@@ -23,6 +24,16 @@ const STUB_RECALL_URL = process.env.STUB_RECALL_URL || 'http://localhost:8080';
 
 test.describe('ローカル環境サニティチェック', () => {
   test.setTimeout(120000); // 2分のタイムアウト
+
+  // 各テストケースの前にDynamoDBテーブルとSQSキューのデータをクリア
+  test.beforeEach(async () => {
+    console.log('Clearing LocalStack data...');
+    execSync('pnpm run local:clear-data', {
+      cwd: '/home/yattom/work/timtam/branches/wt1',
+      stdio: 'inherit',
+    });
+    console.log('LocalStack data cleared');
+  });
 
   test('完全なローカル開発フローの動作確認', async ({ page, context }) => {
     // ========================================

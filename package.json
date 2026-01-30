@@ -16,6 +16,7 @@
     "sso:admin": "pnpm --filter timtam-infra run sso:admin",
     "sync-schema": "bash scripts/sync-localstack-schema.sh",
     "local:setup": "bash scripts/setup-localstack.sh",
+    "local:clear-data": "bash scripts/clear-localstack-data.sh",
     "local:reset": "docker-compose down && docker-compose up -d && pnpm run sync-schema",
     "infra:close": "pnpm run infra:close:lambda && pnpm run infra:close:ecs && pnpm run infra:close:cloudfront",
     "infra:close:lambda": "aws lambda list-functions --query \"Functions[?starts_with(FunctionName, 'TimtamInfraStack-')].FunctionName\" --output text --profile admin | tr '\\t' '\\n' | xargs -I {} aws lambda put-function-concurrency --function-name {} --profile admin --reserved-concurrent-executions 0 > /dev/null",
