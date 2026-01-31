@@ -9,6 +9,10 @@ const RECALL_API_KEY = process.env.RECALL_API_KEY || '';
 const RECALL_API_BASE_URL = process.env.RECALL_API_BASE_URL; // Optional: for local dev, use http://stub-recall:8080
 const RECALL_WEBHOOK_URL = process.env.RECALL_WEBHOOK_URL || ''; // e.g., https://api.timtam.example.com/recall/webhook
 
+// Recall.ai transcription provider configuration
+const RECALL_TRANSCRIPTION_PROVIDER = process.env.RECALL_TRANSCRIPTION_PROVIDER || 'deepgram_streaming';
+const RECALL_TRANSCRIPTION_LANGUAGE = process.env.RECALL_TRANSCRIPTION_LANGUAGE || 'auto';
+
 const ddbClient = new DynamoDBClient({ region: REGION });
 const ddb = DynamoDBDocumentClient.from(ddbClient, {
   marshallOptions: {
@@ -114,6 +118,18 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
       }
     }
 
+    // Build transcription provider configuration
+    const providerConfig = RECALL_TRANSCRIPTION_PROVIDER === 'deepgram_streaming' ? {
+      deepgram_streaming: {
+        language: RECALL_TRANSCRIPTION_LANGUAGE,
+        model: 'nova-3',
+      },
+    } : {
+      recallai_streaming: {
+        language_code: RECALL_TRANSCRIPTION_LANGUAGE,
+      },
+    };
+
     // Create Recall.ai bot
     const createBotRequest: CreateBotRequest = {
       meeting_url: meetingUrl,
@@ -126,11 +142,7 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
       },
       recording_config: {
         transcript: {
-          provider: {
-            recallai_streaming: {
-              language_code: 'ja', // Japanese transcription
-            },
-          },
+          provider: providerConfig,
         },
         realtime_endpoints: [
           {
