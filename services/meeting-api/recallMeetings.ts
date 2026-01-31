@@ -122,6 +122,7 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
     const providerConfig = RECALL_TRANSCRIPTION_PROVIDER === 'deepgram_streaming' ? {
       deepgram_streaming: {
         language: RECALL_TRANSCRIPTION_LANGUAGE,
+        model: 'nova-3',
       },
     } : {
       recallai_streaming: {
