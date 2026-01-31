@@ -131,17 +131,21 @@ export class RecallAdapter implements MeetingServiceAdapter {
   // ========================================
 
   /**
-   * Recall.ai Chat APIでメッセージ送信
+   * Recall.ai Chat APIでメッセージ送信 + DynamoDBに保存
    *
    * POST /api/v1/bot/{bot_id}/send_chat_message/
+   * DynamoDB保存により、ファシリテーター画面のポーリングで取得可能になる
    *
    * @param meetingId - 会議ID（botId）
    * @param message - 送信するメッセージ
    */
   async postChat(meetingId: MeetingId, message: string): Promise<void> {
     const botId = meetingId as string; // Recall.aiではmeetingId = botId
+    const timestamp = Date.now();
+    const ttl = Math.floor(timestamp / 1000) + 86400; // 24時間後に削除
 
     try {
+      // 1. Recall.ai Chat APIでメッセージ送信
       await this.recallClient.sendChatMessage(botId, {
         message,
         pin_message: false,
@@ -152,8 +156,30 @@ export class RecallAdapter implements MeetingServiceAdapter {
         meetingId,
         botId,
         messageLength: message.length,
-        timestamp: Date.now(),
+        timestamp,
         delivered: 'recall-api',
+      }));
+
+      // 2. DynamoDBに保存（ファシリテーター画面のポーリング用）
+      await this.ddb.send(
+        new PutCommand({
+          TableName: this.aiMessagesTable,
+          Item: {
+            meetingId,
+            timestamp,
+            message,
+            ttl,
+            type: 'ai_intervention',
+          },
+        })
+      );
+
+      console.log(JSON.stringify({
+        type: 'recall.chat.stored',
+        meetingId,
+        messageLength: message.length,
+        timestamp,
+        stored: 'dynamodb',
       }));
     } catch (err: any) {
       console.error('RecallAdapter: Failed to send chat message', {
