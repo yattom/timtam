@@ -1,6 +1,3 @@
-import boto3
-
-
 def clear_dynamodb_table(dynamodb, table_name):
     """Clear all data from a DynamoDB table by scanning and deleting items."""
     table = dynamodb.Table(table_name)
