@@ -28,8 +28,7 @@ test.describe('ローカル環境サニティチェック', () => {
   // 各テストケースの前にDynamoDBテーブルとSQSキューのデータをクリア
   test.beforeEach(async () => {
     console.log('Clearing LocalStack data...');
-    execSync('pnpm run local:clear-data', {
-      cwd: '/home/yattom/work/timtam/branches/wt1',
+    execSync('uv run invoke delete-localstack-data', {
       stdio: 'inherit',
     });
     console.log('LocalStack data cleared');
