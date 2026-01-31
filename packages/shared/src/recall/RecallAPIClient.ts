@@ -60,6 +60,15 @@ export interface CreateBotRequest {
         recallai_streaming?: {
           /** 言語コード (e.g., "ja" for Japanese, "auto" for auto-detection) */
           language_code?: string;
+          /** モード (prioritize_accuracy または prioritize_low_latency) */
+          mode?: 'prioritize_accuracy' | 'prioritize_low_latency';
+        };
+        /** Deepgram Streaming（サードパーティ文字起こし） */
+        deepgram_streaming?: {
+          /** 言語設定 (e.g., "auto" for auto-detection, "ja" for Japanese) */
+          language?: string;
+          /** モデル名 (オプション, e.g., "nova-2", "nova-3") */
+          model?: string;
         };
       };
     };
