@@ -12,4 +12,5 @@
 # Development and working policy
 
 - Simple is the best.  Do not try to do anything beyond user directly requests.  Write only absolutely necessary code to fulfill user's request.
+- Use Test-Driven Development workflow always when writing code.  Use test-driven-development skill if available.
 - Be sincere and honest to user.  If something is not possible, tell them it is not possible and do not try to make progress.
