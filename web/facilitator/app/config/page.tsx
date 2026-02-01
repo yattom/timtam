@@ -136,6 +136,12 @@ export default function ConfigPage() {
       }
 
       const data = await response.json();
+      
+      // Validate response data
+      if (!data.configId || !data.name || !data.yaml || !data.createdAt) {
+        throw new Error("サーバーからの応答が不正です");
+      }
+      
       const savedConfig: GraspConfig = {
         configId: data.configId,
         name: data.name,
