@@ -2,45 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-
-interface GraspConfig {
-  configId: string;
-  name: string;
-  yaml: string;
-  createdAt: number;
-  updatedAt?: number;
-}
-
-interface GroupedConfig {
-  name: string;
-  latestVersion: GraspConfig;
-  versions: GraspConfig[];
-  expanded: boolean;
-}
-
-// Helper function to group configs by name
-function groupConfigsByName(configs: GraspConfig[]): GroupedConfig[] {
-  const groups: { [name: string]: GraspConfig[] } = {};
-
-  // Group by name
-  configs.forEach((config) => {
-    if (!groups[config.name]) {
-      groups[config.name] = [];
-    }
-    groups[config.name].push(config);
-  });
-
-  // Convert to array and sort versions by createdAt (newest first)
-  return Object.entries(groups).map(([name, versions]) => {
-    const sortedVersions = [...versions].sort((a, b) => b.createdAt - a.createdAt);
-    return {
-      name,
-      latestVersion: sortedVersions[0],
-      versions: sortedVersions,
-      expanded: false,
-    };
-  }).sort((a, b) => b.latestVersion.createdAt - a.latestVersion.createdAt);
-}
+import { GraspConfig, GroupedConfig, groupConfigsByName } from "@/lib/graspConfig";
 
 export default function ConfigPage() {
   const [configs, setConfigs] = useState<GraspConfig[]>([]);

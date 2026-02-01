@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import ConfigTab from "./ConfigTab";
+import { GraspConfig, GroupedConfig, groupConfigsByName } from "@/lib/graspConfig";
 
 interface TranscriptEntry {
   timestamp: number;
@@ -25,21 +26,6 @@ interface LLMLog {
   rawResponse: string;
 }
 
-interface GraspConfig {
-  configId: string;
-  name: string;
-  yaml: string;
-  createdAt: number;
-  updatedAt?: number;
-}
-
-interface GroupedConfig {
-  name: string;
-  latestVersion: GraspConfig;
-  versions: GraspConfig[];
-  expanded: boolean;
-}
-
 interface CurrentConfig {
   configId: string | null;
   name: string | null;
@@ -57,30 +43,6 @@ interface Meeting {
     platform: string;
     status: string;
   };
-}
-
-// Helper function to group configs by name
-function groupConfigsByName(configs: GraspConfig[]): GroupedConfig[] {
-  const groups: { [name: string]: GraspConfig[] } = {};
-
-  // Group by name
-  configs.forEach((config) => {
-    if (!groups[config.name]) {
-      groups[config.name] = [];
-    }
-    groups[config.name].push(config);
-  });
-
-  // Convert to array and sort versions by createdAt (newest first)
-  return Object.entries(groups).map(([name, versions]) => {
-    const sortedVersions = [...versions].sort((a, b) => b.createdAt - a.createdAt);
-    return {
-      name,
-      latestVersion: sortedVersions[0],
-      versions: sortedVersions,
-      expanded: false,
-    };
-  }).sort((a, b) => b.latestVersion.createdAt - a.latestVersion.createdAt); // Sort groups by latest version
 }
 
 export default function MeetingDetailClient({ meetingId }: { meetingId: string }) {
