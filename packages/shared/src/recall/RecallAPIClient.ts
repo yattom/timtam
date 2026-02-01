@@ -81,6 +81,11 @@ export interface CreateBotRequest {
       /** イベントタイプ */
       events: Array<'transcript.data' | 'transcript.partial_data'>;
     }>;
+    /** 録音保存期間（時間単位） */
+    retention?: {
+      /** 保存時間（hours） */
+      hours: number;
+    };
   };
 }
 

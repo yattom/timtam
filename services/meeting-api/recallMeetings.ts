@@ -1,7 +1,7 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
-import { RecallAPIClient, CreateBotRequest, MeetingPlatform, VALID_PLATFORMS, isMeetingPlatform } from '@timtam/shared';
+import { RecallAPIClient, CreateBotRequest, MeetingPlatform, VALID_PLATFORMS, isMeetingPlatform, buildCreateBotRequest } from '@timtam/shared';
 
 const REGION = process.env.AWS_REGION || 'ap-northeast-1';
 const MEETINGS_METADATA_TABLE = process.env.MEETINGS_METADATA_TABLE || 'timtam-meetings-metadata';
@@ -118,41 +118,14 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
       }
     }
 
-    // Build transcription provider configuration
-    const providerConfig = RECALL_TRANSCRIPTION_PROVIDER === 'deepgram_streaming' ? {
-      deepgram_streaming: {
-        language: RECALL_TRANSCRIPTION_LANGUAGE,
-        model: 'nova-3',
-      },
-    } : {
-      recallai_streaming: {
-        language_code: RECALL_TRANSCRIPTION_LANGUAGE,
-      },
-    };
-
-    // Create Recall.ai bot
-    const createBotRequest: CreateBotRequest = {
-      meeting_url: meetingUrl,
-      bot_name: botName || 'Timtam AI',
-      chat: {
-        on_bot_join: {
-          send_to: 'everyone',
-          message: 'AI facilitator has joined the meeting.',
-        },
-      },
-      recording_config: {
-        transcript: {
-          provider: providerConfig,
-        },
-        realtime_endpoints: [
-          {
-            type: 'webhook',
-            url: isLocalDevelopment ? 'http://api-server:3000' : RECALL_WEBHOOK_URL,
-            events: ['transcript.data'],
-          },
-        ],
-      },
-    };
+    // Create Recall.ai bot request
+    const createBotRequest: CreateBotRequest = buildCreateBotRequest({
+      meetingUrl,
+      botName: botName || 'Timtam AI',
+      webhookUrl: isLocalDevelopment ? 'http://api-server:3000' : RECALL_WEBHOOK_URL,
+      transcriptionProvider: RECALL_TRANSCRIPTION_PROVIDER === 'deepgram_streaming' ? 'deepgram_streaming' : 'recallai_streaming',
+      transcriptionLanguage: RECALL_TRANSCRIPTION_LANGUAGE,
+    });
 
     const bot = await clientToUse.createBot(createBotRequest);
 
