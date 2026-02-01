@@ -3,6 +3,7 @@ import { Meeting } from './meetingOrchestrator';
 import { Grasp, MeetingId, Metrics, LLMClient } from './grasp';
 import { TranscriptEvent, MeetingServiceAdapter } from '@timtam/shared';
 import { loadGraspsForMeeting } from './graspConfigLoader';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 
 export type AdapterFactory = (meetingId: MeetingId) => Promise<MeetingServiceAdapter>;
 
@@ -13,6 +14,8 @@ export interface OrchestratorManagerConfig {
   graspConfigsTable?: string; // Grasp configs table name
   meetingsMetadataTable?: string; // Meetings metadata table name
   llmClient?: LLMClient; // LLM client for building Grasps
+  aiMessagesTable?: string; // AI messages table name (for DynamoDB storage)
+  ddbClient?: DynamoDBClient; // DynamoDB client (optional, for testing)
 }
 
 /**
@@ -38,12 +41,15 @@ export class OrchestratorManager {
       graspConfigsTable: config?.graspConfigsTable || 'timtam-grasp-configs',
       meetingsMetadataTable: config?.meetingsMetadataTable || 'timtam-meetings-metadata',
       llmClient: config?.llmClient as any, // Will be set by worker
+      aiMessagesTable: config?.aiMessagesTable,
+      ddbClient: config?.ddbClient,
     };
 
     console.log(JSON.stringify({
       type: 'orchestrator.manager.created',
       maxMeetings: this.config.maxMeetings,
       meetingTimeoutMs: this.config.meetingTimeoutMs,
+      hasAiMessagesTable: !!this.config.aiMessagesTable,
       ts: Date.now()
     }));
   }
@@ -74,7 +80,12 @@ export class OrchestratorManager {
 
       // 新しいオーケストレーターを作成
       meeting = new Meeting(
-        { meetingId, adapter },
+        {
+          meetingId,
+          adapter,
+          aiMessagesTable: this.config.aiMessagesTable,
+          ddbClient: this.config.ddbClient,
+        },
         grasps
       );
       this.meetings.set(meetingId, meeting);

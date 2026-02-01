@@ -12,11 +12,17 @@ import {
 } from './grasp';
 import { Message } from '@aws-sdk/client-sqs';
 import { TranscriptEvent, MeetingServiceAdapter } from '@timtam/shared';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 
 export interface MeetingConfig {
   meetingId: MeetingId;
   adapter: MeetingServiceAdapter;
   windowLines?: number;
+  /** DynamoDB テーブル名（AI応答メッセージ保存用） */
+  aiMessagesTable?: string;
+  /** DynamoDBクライアント（オプション、テスト用） */
+  ddbClient?: DynamoDBClient;
 }
 
 /**
@@ -35,6 +41,8 @@ export class Meeting implements Notifier {
   private grasps: Grasp[];
   private lastActivityTime: number;
   private messageCount: number = 0;
+  private ddb?: DynamoDBDocumentClient;
+  private aiMessagesTable?: string;
 
   constructor(
     config: MeetingConfig,
@@ -48,17 +56,61 @@ export class Meeting implements Notifier {
     this.grasps = grasps;
     this.lastActivityTime = Date.now();
 
+    // DynamoDB設定（オプショナル）
+    if (config.aiMessagesTable) {
+      this.aiMessagesTable = config.aiMessagesTable;
+      const ddbClient = config.ddbClient || new DynamoDBClient({});
+      this.ddb = DynamoDBDocumentClient.from(ddbClient);
+    }
+
     console.log(JSON.stringify({
       type: 'meeting.created',
       meetingId: this.meetingId,
       adapter: this.adapter.constructor.name,
       graspCount: this.grasps.length,
+      hasDdb: !!this.ddb,
       ts: Date.now()
     }));
   }
 
   // Notifierインターフェース実装
   async postChat(meetingId: MeetingId, message: string): Promise<void> {
+    // 共通処理: DynamoDBにメッセージを保存（ファシリテーター画面がポーリングで取得）
+    if (this.ddb && this.aiMessagesTable) {
+      const timestamp = Date.now();
+      const ttl = Math.floor(timestamp / 1000) + 86400; // 24時間後に削除
+
+      try {
+        await this.ddb.send(
+          new PutCommand({
+            TableName: this.aiMessagesTable,
+            Item: {
+              meetingId,
+              timestamp,
+              message,
+              ttl,
+              type: 'ai_intervention',
+            },
+          })
+        );
+
+        console.log(JSON.stringify({
+          type: 'meeting.chat.stored',
+          meetingId,
+          messageLength: message.length,
+          timestamp,
+          stored: 'dynamodb',
+        }));
+      } catch (err: any) {
+        console.error('Meeting: Failed to store chat message to DynamoDB', {
+          error: err?.message || err,
+          meetingId,
+        });
+        // DynamoDB保存失敗してもadapter.postChat()は続行する
+      }
+    }
+
+    // サービス固有の処理（Recall.aiならAPI呼び出し、Chimeならなし）
     return this.adapter.postChat(meetingId, message);
   }
 

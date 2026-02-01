@@ -410,6 +410,7 @@ async function initializeOrchestratorManager() {
         region: BEDROCK_REGION,
         graspConfigsTable: GRASP_CONFIGS_TABLE,
         meetingsMetadataTable: MEETINGS_METADATA_TABLE,
+        aiMessagesTable: AI_MESSAGES_TABLE,
       }
     );
 
