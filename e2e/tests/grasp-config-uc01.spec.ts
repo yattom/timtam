@@ -21,7 +21,7 @@ import { execSync } from 'child_process';
  */
 
 const FACILITATOR_URL = process.env.FACILITATOR_URL || 'http://localhost:3001';
-const API_URL = process.env.API_URL || 'http://localhost:4566';
+const API_URL = process.env.API_URL || 'http://localhost:3000';
 
 test.describe('UC01: 会議のGrasp設定を調整する', () => {
   test.setTimeout(120000); // 2分のタイムアウト
@@ -53,7 +53,7 @@ test.describe('UC01: 会議のGrasp設定を調整する', () => {
 
     const meetingUrlInput = page.locator('[data-testid="meeting-url-input"]');
     await expect(meetingUrlInput).toBeVisible({ timeout: 5000 });
-    await meetingUrlInput.fill('http://localhost/test-uc01');
+    await meetingUrlInput.fill('http://localhost');
 
     const joinButton = page.locator('[data-testid="join-meeting-button"]');
     await expect(joinButton).toBeEnabled({ timeout: 5000 });
@@ -101,7 +101,7 @@ test.describe('UC01: 会議のGrasp設定を調整する', () => {
       return response.json();
     }, { apiUrl: API_URL, name: initialConfigName, yaml: initialYaml });
 
-    const initialConfigId = saveResponse.config.configId;
+    const initialConfigId = saveResponse.configId;
     console.log(`  初期設定ID: ${initialConfigId}`);
 
     // 初期設定を会議に適用
