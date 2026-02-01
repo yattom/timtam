@@ -26,7 +26,13 @@ export interface OrchestratorManagerConfig {
  */
 export class OrchestratorManager {
   private meetings: Map<MeetingId, Meeting> = new Map();
-  private config: Required<OrchestratorManagerConfig>;
+  private config: OrchestratorManagerConfig & {
+    maxMeetings: number;
+    meetingTimeoutMs: number;
+    region: string;
+    graspConfigsTable: string;
+    meetingsMetadataTable: string;
+  };
   private adapterFactory: AdapterFactory;
 
   constructor(
@@ -40,7 +46,7 @@ export class OrchestratorManager {
       region: config?.region || 'ap-northeast-1',
       graspConfigsTable: config?.graspConfigsTable || 'timtam-grasp-configs',
       meetingsMetadataTable: config?.meetingsMetadataTable || 'timtam-meetings-metadata',
-      llmClient: config?.llmClient as any, // Will be set by worker
+      llmClient: config?.llmClient,
       aiMessagesTable: config?.aiMessagesTable,
       ddbClient: config?.ddbClient,
     };
@@ -64,6 +70,11 @@ export class OrchestratorManager {
       // 最大数チェックとクリーンアップ
       if (this.meetings.size >= this.config.maxMeetings) {
         this.cleanupInactiveMeetings();
+      }
+
+      // LLM client must be set before creating meetings
+      if (!this.config.llmClient) {
+        throw new Error('LLM client must be set via setLLMClient() before creating meetings');
       }
 
       // Load Grasp configuration for this meeting

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Meeting, MeetingConfig } from './meetingOrchestrator';
 import { MeetingServiceAdapter, MeetingId } from '@timtam/shared';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 
 describe('Meeting - DynamoDB保存共通処理', () => {
   /**
@@ -11,9 +12,14 @@ describe('Meeting - DynamoDB保存共通処理', () => {
   it('postChat()でDynamoDBにai_interventionメッセージを保存する', async () => {
     // Arrange
     const mockSend = vi.fn().mockResolvedValue({});
-    const mockDdbClient = {
+    const mockDocClient = {
       send: mockSend,
     } as any;
+
+    // Mock DynamoDBDocumentClient.from to return our mock
+    vi.spyOn(DynamoDBDocumentClient, 'from').mockReturnValue(mockDocClient);
+
+    const mockDdbClient = {} as any;
 
     const mockAdapter: MeetingServiceAdapter = {
       processInboundTranscript: vi.fn(),
@@ -56,9 +62,14 @@ describe('Meeting - DynamoDB保存共通処理', () => {
   it('DynamoDB保存に失敗してもエラーを投げずadapter.postChat()を呼ぶ', async () => {
     // Arrange
     const mockSend = vi.fn().mockRejectedValue(new Error('DynamoDB error'));
-    const mockDdbClient = {
+    const mockDocClient = {
       send: mockSend,
     } as any;
+
+    // Mock DynamoDBDocumentClient.from to return our mock
+    vi.spyOn(DynamoDBDocumentClient, 'from').mockReturnValue(mockDocClient);
+
+    const mockDdbClient = {} as any;
 
     const mockAdapter: MeetingServiceAdapter = {
       processInboundTranscript: vi.fn(),
