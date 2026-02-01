@@ -73,7 +73,7 @@ function groupConfigsByName(configs: GraspConfig[]): GroupedConfig[] {
 
   // Convert to array and sort versions by createdAt (newest first)
   return Object.entries(groups).map(([name, versions]) => {
-    const sortedVersions = versions.sort((a, b) => b.createdAt - a.createdAt);
+    const sortedVersions = [...versions].sort((a, b) => b.createdAt - a.createdAt);
     return {
       name,
       latestVersion: sortedVersions[0],
