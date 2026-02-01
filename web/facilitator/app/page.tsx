@@ -116,6 +116,7 @@ export default function DashboardPage() {
               </Link>
               <Link
                 href="/config"
+                data-testid="dashboard-config-link"
                 className="px-4 py-2 text-gray-700 hover:text-gray-900 transition-colors"
               >
                 Grasp設定
