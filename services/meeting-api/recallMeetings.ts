@@ -139,6 +139,7 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
         TableName: MEETINGS_METADATA_TABLE,
         Item: {
           meetingId: bot.id, // PK
+          type: 'MEETING', // Fixed partition key for createdAt-index GSI (Issue #107)
           platform: 'recall',
           status: 'active',
           createdAt: now,
@@ -405,7 +406,7 @@ export const listHandler: APIGatewayProxyHandlerV2 = async (event) => {
     // Parse query parameters
     const limitParam = event.queryStringParameters?.limit;
     let limit = 50; // default
-    
+
     if (limitParam) {
       const parsedLimit = parseInt(limitParam, 10);
       if (isNaN(parsedLimit) || parsedLimit < 1) {
@@ -417,9 +418,9 @@ export const listHandler: APIGatewayProxyHandlerV2 = async (event) => {
       }
       limit = Math.min(parsedLimit, 100);
     }
-    
+
     const nextToken = event.queryStringParameters?.nextToken;
-    
+
     // Decode nextToken if provided
     let exclusiveStartKey: Record<string, any> | undefined;
     if (nextToken) {
@@ -434,18 +435,27 @@ export const listHandler: APIGatewayProxyHandlerV2 = async (event) => {
       }
     }
 
-    // Scan meetings from DynamoDB with pagination
+    // Query meetings using GSI (createdAt-index) for sorted results
+    // Fixed partition key "MEETING" with createdAt sort key (Issue #107)
     const result = await ddb.send(
-      new ScanCommand({
+      new QueryCommand({
         TableName: MEETINGS_METADATA_TABLE,
+        IndexName: 'createdAt-index',
+        KeyConditionExpression: '#type = :type',
+        ExpressionAttributeNames: {
+          '#type': 'type',
+        },
+        ExpressionAttributeValues: {
+          ':type': 'MEETING',
+        },
+        ScanIndexForward: false, // Descending order (newest first)
         Limit: limit,
         ExclusiveStartKey: exclusiveStartKey,
       })
     );
 
-    // Note: Sorting is done client-side for now. For better performance with large datasets,
-    // consider using a GSI with createdAt as the sort key to enable Query operations with sorted results.
-    const meetings = (result.Items || []).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    // Results are already sorted by DynamoDB (descending createdAt)
+    const meetings = result.Items || [];
 
     // Encode LastEvaluatedKey as nextToken if present
     const responseBody: any = { meetings };

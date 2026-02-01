@@ -46,6 +46,7 @@ async function createMeetingInDynamoDB(meetingId: string, createdAt: number) {
       TableName: MEETINGS_METADATA_TABLE,
       Item: {
         meetingId,
+        type: 'MEETING', // Fixed partition key for createdAt-index GSI (Issue #107)
         platform: 'recall',
         status: 'active',
         createdAt,
