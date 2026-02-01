@@ -8,13 +8,6 @@ set -e
 ENDPOINT="http://localhost:4566"
 REGION="ap-northeast-1"
 
-# Set dummy AWS credentials for LocalStack if not already configured
-if [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then
-  export AWS_ACCESS_KEY_ID="test"
-fi
-if [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
-  export AWS_SECRET_ACCESS_KEY="test"
-fi
 echo "========================================="
 echo "LocalStack Setup for Timtam"
 echo "========================================="
@@ -73,12 +66,22 @@ aws dynamodb create-table \
   --attribute-definitions \
     AttributeName=meetingId,AttributeType=S \
     AttributeName=meetingCode,AttributeType=S \
+    AttributeName=type,AttributeType=S \
+    AttributeName=createdAt,AttributeType=N \
   --key-schema \
     AttributeName=meetingId,KeyType=HASH \
   --billing-mode PAY_PER_REQUEST \
-  --global-secondary-indexes '[{"IndexName":"meetingCode-index","KeySchema":[{"AttributeName":"meetingCode","KeyType":"HASH"}],"Projection":{"ProjectionType":"ALL"}}]' \
+  --global-secondary-indexes '[{"IndexName":"meetingCode-index","KeySchema":[{"AttributeName":"meetingCode","KeyType":"HASH"}],"Projection":{"ProjectionType":"ALL"}},{"IndexName":"createdAt-index","KeySchema":[{"AttributeName":"type","KeyType":"HASH"},{"AttributeName":"createdAt","KeyType":"RANGE"}],"Projection":{"ProjectionType":"ALL"}}]' \
   > /dev/null 2>&1 || echo "  → timtam-meetings-metadata already exists"
 echo "✓ timtam-meetings-metadata"
+
+# TTL for timtam-meetings-metadata
+aws dynamodb update-time-to-live \
+  --endpoint-url "$ENDPOINT" \
+  --region "$REGION" \
+  --table-name timtam-meetings-metadata \
+  --time-to-live-specification "Enabled=true,AttributeName=ttl" \
+  > /dev/null 2>&1 || true
 
 # timtam-orchestrator-config
 aws dynamodb create-table \

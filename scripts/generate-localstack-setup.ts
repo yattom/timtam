@@ -101,12 +101,11 @@ function generateDynamoDBCommands(tables: DynamoDBTableProperties[]): string[] {
 
     // Add GSI if exists
     if (table.GlobalSecondaryIndexes && table.GlobalSecondaryIndexes.length > 0) {
-      const gsi = table.GlobalSecondaryIndexes[0];
-      const gsiJson = JSON.stringify([{
+      const gsiJson = JSON.stringify(table.GlobalSecondaryIndexes.map(gsi => ({
         IndexName: gsi.IndexName,
         KeySchema: gsi.KeySchema,
         Projection: gsi.Projection
-      }]);
+      })));
       createCmd += ` \\\n  --global-secondary-indexes '${gsiJson}'`;
     }
 
