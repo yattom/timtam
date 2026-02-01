@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { mockClient } from 'aws-sdk-client-mock';
-import { DynamoDBDocumentClient, ScanCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { listHandler } from './recallMeetings';
 import { APIGatewayProxyEventV2 } from 'aws-lambda';
 
@@ -89,42 +89,6 @@ describe('recallMeetings - listHandler', () => {
       // nextToken をデコードして元のキーと一致すること
       const decodedKey = JSON.parse(Buffer.from(body.nextToken, 'base64').toString('utf-8'));
       expect(decodedKey).toEqual(lastKey);
-    });
-  });
-
-  describe('現在の実装（Scan使用）', () => {
-    it('【失敗するべき】50件を超えるデータで最新の会議が取得できない', async () => {
-      // Setup: 55件の会議データ
-      const now = Date.now();
-      const meetings = Array.from({ length: 55 }, (_, i) => ({
-        meetingId: `meeting-${i.toString().padStart(3, '0')}`,
-        createdAt: now - (54 - i) * 1000, // 最後のアイテムが最新
-        platform: 'recall',
-        status: 'active',
-      }));
-
-      // Mock Scan response: ランダムに50件を返す（最新を含まない）
-      ddbMock.on(ScanCommand).resolves({
-        Items: meetings.slice(0, 50), // 最初の50件のみ（最新5件を含まない）
-        Count: 50,
-        LastEvaluatedKey: { meetingId: 'meeting-049' },
-      });
-
-      const event = {
-        queryStringParameters: {},
-      } as unknown as APIGatewayProxyEventV2;
-
-      const response = await listHandler(event);
-      const body = JSON.parse(response.body);
-
-      // 現在の実装では、クライアント側でソートしても
-      // Scan で取得した50件の中に最新が含まれていない
-      const returnedIds = body.meetings.map((m: any) => m.meetingId);
-
-      // 最新の会議（meeting-054）が含まれていない
-      expect(returnedIds).not.toContain('meeting-054');
-
-      // この test は GSI 実装後に削除する
     });
   });
 });
