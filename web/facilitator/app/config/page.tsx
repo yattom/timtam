@@ -97,11 +97,31 @@ export default function ConfigPage() {
         throw new Error(errorData.error || "設定の保存に失敗しました");
       }
 
+      const data = await response.json();
+      
+      // Validate response data
+      if (!data.configId || !data.name || !data.yaml || !data.createdAt) {
+        throw new Error("サーバーからの応答が不正です");
+      }
+      
+      const savedConfig: GraspConfig = {
+        configId: data.configId,
+        name: data.name,
+        yaml: data.yaml,
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt,
+      };
+
       setSuccess(true);
       setShowSaveDialog(false);
 
       // Reload configs
       await loadConfigs();
+
+      // Select the newly saved config
+      setSelectedConfigId(savedConfig.configId);
+      setSelectedConfig(savedConfig);
+      setEditedYaml(savedConfig.yaml);
 
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {

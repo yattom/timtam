@@ -82,8 +82,10 @@ export default function ConfigTab({
               <p className="text-blue-800 font-medium">{currentConfig.name}</p>
               <p className="text-xs text-blue-600">ID: {currentConfig.configId}</p>
             </div>
-          ) : (
+          ) : currentConfig.yaml ? (
             <p className="text-blue-800">カスタムYAML設定</p>
+          ) : (
+            <p className="text-blue-800">設定が未適用</p>
           )}
         </div>
       )}

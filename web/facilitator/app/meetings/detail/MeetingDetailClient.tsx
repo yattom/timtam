@@ -191,9 +191,14 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
             name: currentData.name,
             yaml: currentData.yaml,
           });
+        } else {
+          // Explicitly indicate that no config is applied if loading fails
+          setCurrentConfig(null);
         }
       } catch (err) {
         console.error('Failed to load Grasp configs', err);
+        // Ensure state reflects that no config is applied on error
+        setCurrentConfig(null);
       } finally {
         setConfigLoading(false);
       }
@@ -252,7 +257,11 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
 
       let configIdToApply = selectedConfigId;
 
-      // If YAML was edited, save as new version first
+      // If YAML was edited, save as new version first.
+      // Note: The UI (ConfigTab.tsx) only passes `saveAsNew = true` when the YAML
+      // has actually changed (`yamlChanged === true`). The additional
+      // `editedYaml !== selectedConfigYaml` check here is a safeguard and prevents
+      // creating redundant configs if this function is ever called differently.
       if (saveAsNew && editedYaml !== selectedConfigYaml) {
         const saveName = configName || `設定_${Date.now()}`;
         const saveResponse = await fetch(`${apiUrl}/grasp/configs`, {
@@ -282,6 +291,11 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
           setGraspConfigs(configs);
           setGroupedConfigs(groupConfigsByName(configs));
         }
+
+        // Update selected/edited config state to reflect the newly saved config
+        setSelectedConfigId(configIdToApply);
+        setSelectedConfigYaml(editedYaml);
+        setEditedYaml(editedYaml);
       }
 
       // Apply config to meeting
