@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Meeting, MeetingConfig } from './meetingOrchestrator';
 import { MeetingServiceAdapter, MeetingId } from '@timtam/shared';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
