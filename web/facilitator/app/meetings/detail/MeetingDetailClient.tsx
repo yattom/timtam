@@ -325,6 +325,11 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
           setGraspConfigs(configs);
           setGroupedConfigs(groupConfigsByName(configs));
         }
+
+        // Update selected/edited config state to reflect the newly saved config
+        setSelectedConfigId(configIdToApply);
+        setSelectedConfigYaml(editedYaml);
+        setEditedYaml(editedYaml);
       }
 
       // Apply config to meeting
