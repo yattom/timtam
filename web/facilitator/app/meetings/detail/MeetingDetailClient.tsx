@@ -229,9 +229,14 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
             name: currentData.name,
             yaml: currentData.yaml,
           });
+        } else {
+          // Explicitly indicate that no config is applied if loading fails
+          setCurrentConfig(null);
         }
       } catch (err) {
         console.error('Failed to load Grasp configs', err);
+        // Ensure state reflects that no config is applied on error
+        setCurrentConfig(null);
       } finally {
         setConfigLoading(false);
       }
