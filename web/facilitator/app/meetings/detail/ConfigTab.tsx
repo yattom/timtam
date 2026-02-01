@@ -73,14 +73,14 @@ export default function ConfigTab({
 
       {/* 現在適用中の設定 */}
       {currentConfig && (
-        <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+        <div className="bg-blue-50 border border-blue-200 rounded-md p-4" data-testid="current-config-display">
           <h3 className="text-sm font-medium text-blue-900 mb-2">
             現在適用中の設定
           </h3>
           {currentConfig.configId ? (
             <div>
-              <p className="text-blue-800 font-medium">{currentConfig.name}</p>
-              <p className="text-xs text-blue-600">ID: {currentConfig.configId}</p>
+              <p className="text-blue-800 font-medium" data-testid="current-config-name">{currentConfig.name}</p>
+              <p className="text-xs text-blue-600" data-testid="current-config-id">ID: {currentConfig.configId}</p>
             </div>
           ) : currentConfig.yaml ? (
             <p className="text-blue-800">カスタムYAML設定</p>
@@ -91,7 +91,7 @@ export default function ConfigTab({
       )}
 
       {applySuccess && (
-        <div className="mb-4 bg-green-50 border border-green-200 rounded-md p-4">
+        <div className="mb-4 bg-green-50 border border-green-200 rounded-md p-4" data-testid="apply-success-message">
           <p className="text-green-800">設定を適用しました</p>
         </div>
       )}
@@ -111,9 +111,9 @@ export default function ConfigTab({
               保存済み設定がありません
             </p>
           ) : (
-            <div className="space-y-2 max-h-96 overflow-y-auto">
+            <div className="space-y-2 max-h-96 overflow-y-auto" data-testid="saved-configs-list">
               {groupedConfigs.map((group) => (
-                <div key={group.name} className="border border-gray-200 rounded">
+                <div key={group.name} className="border border-gray-200 rounded" data-testid={`config-group-${group.name}`}>
                   {/* グループヘッダー（最新バージョン） */}
                   <div className="flex items-start">
                     <button
@@ -123,6 +123,7 @@ export default function ConfigTab({
                           ? 'bg-blue-50'
                           : 'hover:bg-gray-50'
                       }`}
+                      data-testid={`config-version-${group.latestVersion.configId}`}
                     >
                       <div className="font-medium text-gray-900">
                         {group.name}
@@ -136,6 +137,7 @@ export default function ConfigTab({
                         onClick={() => onToggleVersionExpansion(group.name)}
                         className="px-2 py-2 text-gray-500 hover:text-gray-700"
                         title={group.expanded ? "バージョン一覧を隠す" : "過去のバージョンを表示"}
+                        data-testid={`expand-versions-button-${group.name}`}
                       >
                         {group.expanded ? '▲' : '▼'}
                       </button>
@@ -154,6 +156,7 @@ export default function ConfigTab({
                               ? 'bg-blue-50'
                               : 'hover:bg-gray-100'
                           }`}
+                          data-testid={`config-version-${version.configId}`}
                         >
                           <div className="text-xs text-gray-500">
                             {new Date(version.createdAt).toLocaleString('ja-JP')}
@@ -186,9 +189,10 @@ export default function ConfigTab({
                   onChange={(e) => onConfigNameChange(e.target.value)}
                   disabled={!yamlChanged}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md disabled:bg-gray-100 disabled:text-gray-600"
+                  data-testid="config-name-input"
                 />
                 {yamlChanged && (
-                  <p className="text-xs text-orange-600 mt-1">
+                  <p className="text-xs text-orange-600 mt-1" data-testid="yaml-changed-notice">
                     内容が変更されています。新しいバージョンとして保存されます。
                   </p>
                 )}
@@ -206,9 +210,10 @@ export default function ConfigTab({
                     rows={12}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
                     spellCheck={false}
+                    data-testid="config-yaml-textarea"
                   />
                 ) : (
-                  <pre className="text-xs bg-gray-50 p-3 rounded border border-gray-200 overflow-x-auto max-h-64 overflow-y-auto font-mono">
+                  <pre className="text-xs bg-gray-50 p-3 rounded border border-gray-200 overflow-x-auto max-h-64 overflow-y-auto font-mono" data-testid="config-yaml-display">
                     {selectedConfigYaml}
                   </pre>
                 )}
@@ -219,6 +224,7 @@ export default function ConfigTab({
                 <button
                   onClick={onToggleEditMode}
                   className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors font-medium"
+                  data-testid="toggle-edit-button"
                 >
                   {isEditingYaml ? '編集を終了' : '内容を編集'}
                 </button>
@@ -228,6 +234,7 @@ export default function ConfigTab({
                     onClick={() => onApplyConfig(false)}
                     disabled={configLoading}
                     className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
+                    data-testid="apply-config-button"
                   >
                     {configLoading ? '適用中...' : 'この設定を適用'}
                   </button>
@@ -236,6 +243,7 @@ export default function ConfigTab({
                     onClick={() => onApplyConfig(true)}
                     disabled={configLoading}
                     className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
+                    data-testid="save-and-apply-button"
                   >
                     {configLoading ? '保存して適用中...' : '新バージョンとして保存して適用'}
                   </button>

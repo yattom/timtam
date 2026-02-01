@@ -281,7 +281,7 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
         }
 
         const saveData = await saveResponse.json();
-        configIdToApply = saveData.config.configId;
+        configIdToApply = saveData.configId;
 
         // Reload configs to show new version
         const configsResponse = await fetch(`${apiUrl}/grasp/configs`);
@@ -474,6 +474,7 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
                       ? "border-blue-500 text-blue-600"
                       : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                   }`}
+                  data-testid={`${tab.id}-tab`}
                 >
                   {tab.label}
                 </button>
