@@ -281,7 +281,7 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
         }
 
         const saveData = await saveResponse.json();
-        configIdToApply = saveData.config.configId;
+        configIdToApply = saveData.configId;
 
         // Reload configs to show new version
         const configsResponse = await fetch(`${apiUrl}/grasp/configs`);
