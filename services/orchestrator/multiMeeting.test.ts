@@ -11,6 +11,7 @@ import {
 import { OrchestratorManager, AdapterFactory } from './orchestratorManager';
 import { Meeting } from './meetingOrchestrator';
 import { TranscriptEvent, MeetingServiceAdapter } from '@timtam/shared';
+import * as graspConfigLoader from './graspConfigLoader';
 
 describe('Multi-Meeting Orchestrator', () => {
   // Helper functions for creating test objects
@@ -65,6 +66,14 @@ describe('Multi-Meeting Orchestrator', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+
+    // Mock loadGraspsForMeeting to return test grasps
+    vi.spyOn(graspConfigLoader, 'loadGraspsForMeeting').mockImplementation(
+      async (meetingId, region, graspConfigsTable, meetingsMetadataTable, llmClient) => {
+        const config = createTestConfig();
+        return [new Grasp(config, llmClient)];
+      }
+    );
   });
 
   describe('Meeting', () => {
@@ -167,14 +176,12 @@ describe('Multi-Meeting Orchestrator', () => {
 
   describe('OrchestratorManager', () => {
     it('should create a manager with default config', () => {
-      const config = createTestConfig();
       const llm = createMockLLMClient();
-      const grasps = [new Grasp(config, llm)];
 
       const manager = new OrchestratorManager(
-        grasps,
         createMockAdapterFactory()
       );
+      manager.setLLMClient(llm);
 
       const status = manager.getStatus();
       expect(status.totalMeetings).toBe(0);
@@ -182,14 +189,12 @@ describe('Multi-Meeting Orchestrator', () => {
     });
 
     it('should create orchestrators for multiple meetings', async () => {
-      const config = createTestConfig();
       const llm = createMockLLMClient();
-      const grasps = [new Grasp(config, llm)];
 
       const manager = new OrchestratorManager(
-        grasps,
         createMockAdapterFactory()
       );
+      manager.setLLMClient(llm);
 
       const meeting1 = await manager.getOrCreateMeeting('meeting-001' as MeetingId);
       const meeting2 = await manager.getOrCreateMeeting('meeting-002' as MeetingId);
@@ -202,14 +207,12 @@ describe('Multi-Meeting Orchestrator', () => {
     });
 
     it('should return existing meeting for the same meeting ID', async () => {
-      const config = createTestConfig();
       const llm = createMockLLMClient();
-      const grasps = [new Grasp(config, llm)];
 
       const manager = new OrchestratorManager(
-        grasps,
         createMockAdapterFactory()
       );
+      manager.setLLMClient(llm);
 
       const meeting1 = await manager.getOrCreateMeeting('meeting-001' as MeetingId);
       const meeting2 = await manager.getOrCreateMeeting('meeting-001' as MeetingId);
@@ -219,16 +222,13 @@ describe('Multi-Meeting Orchestrator', () => {
     });
 
     it('should process ASR events for multiple meetings concurrently', async () => {
-      const config = createTestConfig();
       const llm = createMockLLMClient();
-      const grasps = [new Grasp(config, llm)];
-      const notifier = createMockNotifier();
       const metrics = createMockMetrics();
 
       const manager = new OrchestratorManager(
-        grasps,
         createMockAdapterFactory()
       );
+      manager.setLLMClient(llm);
 
       // Process events for multiple meetings
       await manager.processTranscriptEvent(
@@ -250,16 +250,13 @@ describe('Multi-Meeting Orchestrator', () => {
     });
 
     it('should maintain isolation between meetings', async () => {
-      const config = createTestConfig();
       const llm = createMockLLMClient();
-      const grasps = [new Grasp(config, llm)];
-      const notifier = createMockNotifier();
       const metrics = createMockMetrics();
 
       const manager = new OrchestratorManager(
-        grasps,
         createMockAdapterFactory()
       );
+      manager.setLLMClient(llm);
 
       // Process different numbers of events for each meeting
       await manager.processTranscriptEvent(
@@ -287,19 +284,16 @@ describe('Multi-Meeting Orchestrator', () => {
     });
 
     it('should cleanup inactive meetings', async () => {
-      const config = createTestConfig();
       const llm = createMockLLMClient();
-      const grasps = [new Grasp(config, llm)];
-      const notifier = createMockNotifier();
       const metrics = createMockMetrics();
 
       const manager = new OrchestratorManager(
-        grasps,
         createMockAdapterFactory(),
         {
           meetingTimeoutMs: 100, // 100ms timeout for testing
         }
       );
+      manager.setLLMClient(llm);
 
       // Create meetings
       await manager.processTranscriptEvent(
@@ -324,18 +318,16 @@ describe('Multi-Meeting Orchestrator', () => {
     });
 
     it('should enforce max meetings limit', async () => {
-      const config = createTestConfig();
       const llm = createMockLLMClient();
-      const grasps = [new Grasp(config, llm)];
 
       const manager = new OrchestratorManager(
-        grasps,
         createMockAdapterFactory(),
         {
           maxMeetings: 3,
           meetingTimeoutMs: 100,
         }
       );
+      manager.setLLMClient(llm);
 
       // Create 3 meetings
       await manager.getOrCreateMeeting('meeting-001' as MeetingId);
@@ -356,14 +348,12 @@ describe('Multi-Meeting Orchestrator', () => {
     });
 
     it('should remove specific meeting', async () => {
-      const config = createTestConfig();
       const llm = createMockLLMClient();
-      const grasps = [new Grasp(config, llm)];
 
       const manager = new OrchestratorManager(
-        grasps,
         createMockAdapterFactory()
       );
+      manager.setLLMClient(llm);
 
       await manager.getOrCreateMeeting('meeting-001' as MeetingId);
       await manager.getOrCreateMeeting('meeting-002' as MeetingId);
@@ -377,7 +367,7 @@ describe('Multi-Meeting Orchestrator', () => {
       expect(removedAgain).toBe(false);
     });
 
-    it('should rebuild grasps for all meetings', async () => {
+    it('should rebuild grasps for specific meeting', async () => {
       const config1 = createTestConfig({ nodeId: 'grasp-1' });
       const config2 = createTestConfig({ nodeId: 'grasp-2' });
       const llm = createMockLLMClient();
@@ -385,28 +375,26 @@ describe('Multi-Meeting Orchestrator', () => {
       const grasps2 = [new Grasp(config2, llm)];
 
       const manager = new OrchestratorManager(
-        grasps1,
         createMockAdapterFactory()
       );
+      manager.setLLMClient(llm);
 
       await manager.getOrCreateMeeting('meeting-001' as MeetingId);
       await manager.getOrCreateMeeting('meeting-002' as MeetingId);
 
-      // Should not throw
-      expect(() => manager.updateGraspsTemplate(grasps2)).not.toThrow();
+      // Should rebuild grasps for specific meeting
+      const result = manager.rebuildMeetingGrasps('meeting-001' as MeetingId, grasps2);
+      expect(result).toBe(true);
     });
 
     it('should process all queues periodically', async () => {
-      const config = createTestConfig();
       const llm = createMockLLMClient();
-      const grasps = [new Grasp(config, llm)];
-      const notifier = createMockNotifier();
       const metrics = createMockMetrics();
 
       const manager = new OrchestratorManager(
-        grasps,
         createMockAdapterFactory()
       );
+      manager.setLLMClient(llm);
 
       // Create meetings
       await manager.processTranscriptEvent(
@@ -427,14 +415,12 @@ describe('Multi-Meeting Orchestrator', () => {
     });
 
     it('should cleanup all meetings on shutdown', async () => {
-      const config = createTestConfig();
       const llm = createMockLLMClient();
-      const grasps = [new Grasp(config, llm)];
 
       const manager = new OrchestratorManager(
-        grasps,
         createMockAdapterFactory()
       );
+      manager.setLLMClient(llm);
 
       await manager.getOrCreateMeeting('meeting-001' as MeetingId);
       await manager.getOrCreateMeeting('meeting-002' as MeetingId);
@@ -447,19 +433,16 @@ describe('Multi-Meeting Orchestrator', () => {
 
   describe('Scalability and Parallel Processing', () => {
     it('should handle many concurrent meetings efficiently', async () => {
-      const config = createTestConfig();
       const llm = createMockLLMClient();
-      const grasps = [new Grasp(config, llm)];
-      const notifier = createMockNotifier();
       const metrics = createMockMetrics();
 
       const manager = new OrchestratorManager(
-        grasps,
         createMockAdapterFactory(),
         {
           maxMeetings: 50,
         }
       );
+      manager.setLLMClient(llm);
 
       // Create 20 meetings
       const promises = [];
@@ -480,16 +463,13 @@ describe('Multi-Meeting Orchestrator', () => {
     });
 
     it('should process events from different meetings in parallel', async () => {
-      const config = createTestConfig();
       const llm = createMockLLMClient();
-      const grasps = [new Grasp(config, llm)];
-      const notifier = createMockNotifier();
       const metrics = createMockMetrics();
 
       const manager = new OrchestratorManager(
-        grasps,
         createMockAdapterFactory()
       );
+      manager.setLLMClient(llm);
 
       const startTime = Date.now();
 

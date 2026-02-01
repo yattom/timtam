@@ -1,8 +1,28 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, ScanCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
 import { parseGraspGroupDefinition, GraspGroupDefinition } from './graspConfigParser';
-import { buildGraspsFromDefinition } from './worker';
-import { Grasp, LLMClient } from './grasp';
+import { Grasp, LLMClient, GraspConfig } from './grasp';
+
+/**
+ * Build Grasp instances from a GraspGroupDefinition
+ */
+export function buildGraspsFromDefinition(graspGroupDef: GraspGroupDefinition, llmClient: LLMClient): Grasp[] {
+  const grasps: Grasp[] = [];
+
+  for (const graspDef of graspGroupDef.grasps) {
+    const config: GraspConfig = {
+      nodeId: graspDef.nodeId,
+      promptTemplate: graspDef.promptTemplate,
+      cooldownMs: graspDef.intervalSec * 1000,
+      outputHandler: graspDef.outputHandler as 'chat' | 'note' | 'both',
+      noteTag: graspDef.noteTag,
+    };
+    const grasp = new Grasp(config, llmClient);
+    grasps.push(grasp);
+  }
+
+  return grasps;
+}
 
 const DEFAULT_GRASP_YAML = `grasps:
   - nodeId: friendly-nodder

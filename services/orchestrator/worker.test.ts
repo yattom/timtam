@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { buildGraspsFromDefinition } from './worker';
+import { buildGraspsFromDefinition } from './graspConfigLoader';
 import { parseGraspGroupDefinition, GraspGroupDefinition } from './graspConfigParser';
 import { LLMClient, JudgeResult } from './grasp';
 

@@ -13,6 +13,7 @@ import {
   Metrics as IMetrics
 } from './grasp';
 import { parseGraspGroupDefinition, GraspGroupDefinition } from './graspConfigParser';
+import { buildGraspsFromDefinition } from './graspConfigLoader';
 import { Message } from '@aws-sdk/client-sqs';
 import { OrchestratorManager } from './orchestratorManager';
 import { ChimeAdapter, RecallAdapter, MeetingServiceAdapter, MeetingId, TranscriptEvent } from '@timtam/shared';
@@ -145,23 +146,6 @@ const ddbDocClient = DynamoDBDocumentClient.from(ddbClient);
 let orchestratorManager: OrchestratorManager;
 
 // GraspGroupDefinitionからGrasp配列を生成するヘルパー関数
-export function buildGraspsFromDefinition(graspGroupDef: GraspGroupDefinition, llmClient: LLMClient): Grasp[] {
-  const grasps: Grasp[] = [];
-  
-  for (const graspDef of graspGroupDef.grasps) {
-    const config: GraspConfig = {
-      nodeId: graspDef.nodeId,
-      promptTemplate: graspDef.promptTemplate,
-      cooldownMs: graspDef.intervalSec * 1000,
-      outputHandler: graspDef.outputHandler as 'chat' | 'note' | 'both',
-      noteTag: graspDef.noteTag,
-    };
-    const grasp = new Grasp(config, llmClient);
-    grasps.push(grasp);
-  }
-  
-  return grasps;
-}
 
 async function pollControlOnce() {
   if (!CONTROL_SQS_URL) return;
@@ -410,6 +394,7 @@ async function initializeOrchestratorManager() {
         region: BEDROCK_REGION,
         graspConfigsTable: GRASP_CONFIGS_TABLE,
         meetingsMetadataTable: MEETINGS_METADATA_TABLE,
+        aiMessagesTable: AI_MESSAGES_TABLE,
       }
     );
 

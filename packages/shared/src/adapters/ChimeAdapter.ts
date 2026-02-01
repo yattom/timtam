@@ -85,44 +85,23 @@ export class ChimeAdapter implements MeetingServiceAdapter {
   // ========================================
 
   /**
-   * チャットメッセージをDynamoDBに書き込み
-   * ブラウザが2秒ごとにポーリングして取得
+   * チャットメッセージ送信（Chime SDKは外部APIなし）
+   *
+   * NOTE: DynamoDB保存はMeetingOrchestratorの共通処理で行われる
+   *       Chime SDKには外部チャットAPIがないため、このメソッドは何もしない
    *
    * @param meetingId - 会議ID
    * @param message - 送信するメッセージ
    */
   async postChat(meetingId: MeetingId, message: string): Promise<void> {
-    const timestamp = Date.now();
-    const ttl = Math.floor(timestamp / 1000) + 86400; // 24時間後に削除
-
-    try {
-      await this.ddb.send(
-        new PutCommand({
-          TableName: this.aiMessagesTable,
-          Item: {
-            meetingId,
-            timestamp,
-            message,
-            ttl,
-            type: 'ai_intervention',
-          },
-        })
-      );
-
-      console.log(JSON.stringify({
-        type: 'chime.chat.post',
-        meetingId,
-        messageLength: message.length,
-        timestamp,
-        stored: 'dynamodb',
-      }));
-    } catch (err: any) {
-      console.error('ChimeAdapter: Failed to store AI message', {
-        error: err?.message || err,
-        meetingId,
-      });
-      throw err;
-    }
+    // Chime SDKには外部チャットAPIがないため何もしない
+    // DynamoDB保存はMeetingOrchestratorで行われる
+    console.log(JSON.stringify({
+      type: 'chime.chat.noop',
+      meetingId,
+      messageLength: message.length,
+      reason: 'no-external-api',
+    }));
   }
 
   /**

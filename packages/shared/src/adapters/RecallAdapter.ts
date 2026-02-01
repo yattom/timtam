@@ -135,13 +135,17 @@ export class RecallAdapter implements MeetingServiceAdapter {
    *
    * POST /api/v1/bot/{bot_id}/send_chat_message/
    *
+   * NOTE: DynamoDB保存はMeetingOrchestratorの共通処理で行われる
+   *
    * @param meetingId - 会議ID（botId）
    * @param message - 送信するメッセージ
    */
   async postChat(meetingId: MeetingId, message: string): Promise<void> {
     const botId = meetingId as string; // Recall.aiではmeetingId = botId
+    const timestamp = Date.now();
 
     try {
+      // Recall.ai Chat APIでメッセージ送信
       await this.recallClient.sendChatMessage(botId, {
         message,
         pin_message: false,
@@ -152,7 +156,7 @@ export class RecallAdapter implements MeetingServiceAdapter {
         meetingId,
         botId,
         messageLength: message.length,
-        timestamp: Date.now(),
+        timestamp,
         delivered: 'recall-api',
       }));
     } catch (err: any) {
