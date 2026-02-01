@@ -181,6 +181,8 @@ export class TimtamInfraStack extends Stack {
         MEETINGS_METADATA_TABLE: meetingsMetadataTable.tableName,
         RECALL_API_KEY: process.env.RECALL_API_KEY || '', // TODO: Secrets Managerから取得
         RECALL_WEBHOOK_URL: process.env.RECALL_WEBHOOK_URL || '',
+        RECALL_TRANSCRIPTION_PROVIDER: process.env.RECALL_TRANSCRIPTION_PROVIDER || 'deepgram_streaming',
+        RECALL_TRANSCRIPTION_LANGUAGE: process.env.RECALL_TRANSCRIPTION_LANGUAGE || 'ja',
       },
     });
 
