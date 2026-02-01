@@ -48,6 +48,15 @@ export class TimtamInfraStack extends Stack {
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
+    // GSI for listing meetings by creation time (Issue #107)
+    // Fixed partition key "MEETING" with createdAt sort key enables efficient Query operations
+    meetingsMetadataTable.addGlobalSecondaryIndex({
+      indexName: 'createdAt-index',
+      partitionKey: { name: 'type', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'createdAt', type: dynamodb.AttributeType.NUMBER },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
     // === DynamoDB table for Orchestrator Configuration ===
     const orchestratorConfigTable = new dynamodb.Table(this, 'OrchestratorConfigTable', {
       tableName: 'timtam-orchestrator-config',
