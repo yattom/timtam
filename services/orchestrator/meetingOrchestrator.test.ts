@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Meeting, MeetingConfig } from './meetingOrchestrator';
 import { MeetingServiceAdapter, MeetingId } from '@timtam/shared';
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 
 describe('Meeting - DynamoDB保存共通処理', () => {
