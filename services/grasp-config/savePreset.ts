@@ -1,7 +1,7 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
-import { parseGraspGroupDefinition } from '../orchestrator/graspConfigParser';
+import { validateGraspConfigYaml } from './validation';
 
 const REGION = process.env.AWS_REGION || 'ap-northeast-1';
 const GRASP_CONFIGS_TABLE = process.env.GRASP_CONFIGS_TABLE || 'timtam-grasp-configs';
@@ -46,7 +46,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
     // Validate YAML format and structure
     try {
-      parseGraspGroupDefinition(yaml);
+      validateGraspConfigYaml(yaml);
     } catch (validationError: any) {
       return {
         statusCode: 400,

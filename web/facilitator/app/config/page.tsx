@@ -3,80 +3,110 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 
+interface GraspConfig {
+  configId: string;
+  name: string;
+  yaml: string;
+  createdAt: number;
+  updatedAt?: number;
+}
+
+interface GroupedConfig {
+  name: string;
+  latestVersion: GraspConfig;
+  versions: GraspConfig[];
+  expanded: boolean;
+}
+
+// Helper function to group configs by name
+function groupConfigsByName(configs: GraspConfig[]): GroupedConfig[] {
+  const groups: { [name: string]: GraspConfig[] } = {};
+
+  // Group by name
+  configs.forEach((config) => {
+    if (!groups[config.name]) {
+      groups[config.name] = [];
+    }
+    groups[config.name].push(config);
+  });
+
+  // Convert to array and sort versions by createdAt (newest first)
+  return Object.entries(groups).map(([name, versions]) => {
+    const sortedVersions = [...versions].sort((a, b) => b.createdAt - a.createdAt);
+    return {
+      name,
+      latestVersion: sortedVersions[0],
+      versions: sortedVersions,
+      expanded: false,
+    };
+  }).sort((a, b) => b.latestVersion.createdAt - a.latestVersion.createdAt);
+}
+
 export default function ConfigPage() {
-  const [config, setConfig] = useState("");
+  const [configs, setConfigs] = useState<GraspConfig[]>([]);
+  const [groupedConfigs, setGroupedConfigs] = useState<GroupedConfig[]>([]);
+  const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null);
+  const [selectedConfig, setSelectedConfig] = useState<GraspConfig | null>(null);
+  const [editedYaml, setEditedYaml] = useState("");
+  const [configName, setConfigName] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
-  const [configName, setConfigName] = useState("");
 
+  // Load configs on mount
   useEffect(() => {
-    const fetchConfig = async () => {
-      try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://your-api-gateway.amazonaws.com";
-        const response = await fetch(`${apiUrl}/grasp/config/current`);
-
-        if (!response.ok) {
-          throw new Error("設定の取得に失敗しました");
-        }
-
-        const data = await response.json();
-        setConfig(data.yaml || "");
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "エラーが発生しました");
-        // フォールバック: デフォルト設定
-        setConfig(`grasps:
-  - nodeId: silence-monitor
-    promptTemplate: |
-      以下の会議文字起こしで沈黙が30秒以上続いているか判断してください。
-      {{INPUT:past5m}}
-    intervalSec: 30
-    outputHandler: chat
-
-  - nodeId: topic-summary
-    promptTemplate: |
-      現在の議論のトピックを要約してください。
-      {{INPUT:past10m}}
-    intervalSec: 60
-    outputHandler: chat
-`);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchConfig();
+    loadConfigs();
   }, []);
 
-  const handleSave = async () => {
-    setSaving(true);
-    setError(null);
-    setSuccess(false);
-
+  const loadConfigs = async () => {
     try {
+      setLoading(true);
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://your-api-gateway.amazonaws.com";
-      const response = await fetch(`${apiUrl}/grasp/config`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ yaml: config }),
-      });
+      const response = await fetch(`${apiUrl}/grasp/configs`);
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "設定の保存に失敗しました");
+        throw new Error("設定の取得に失敗しました");
       }
 
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
+      const data = await response.json();
+      const loadedConfigs = data.configs || [];
+      setConfigs(loadedConfigs);
+      setGroupedConfigs(groupConfigsByName(loadedConfigs));
     } catch (err) {
       setError(err instanceof Error ? err.message : "エラーが発生しました");
     } finally {
-      setSaving(false);
+      setLoading(false);
     }
+  };
+
+  const handleSelectConfig = async (configId: string, name: string) => {
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://your-api-gateway.amazonaws.com";
+      const response = await fetch(`${apiUrl}/grasp/configs/${configId}`);
+
+      if (!response.ok) {
+        throw new Error('設定の取得に失敗しました');
+      }
+
+      const data = await response.json();
+      const config = data.config;
+      setSelectedConfigId(configId);
+      setSelectedConfig(config);
+      setEditedYaml(config.yaml);
+      setConfigName(name);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '設定の取得に失敗しました');
+    }
+  };
+
+  const toggleVersionExpansion = (name: string) => {
+    setGroupedConfigs((prev) =>
+      prev.map((group) =>
+        group.name === name ? { ...group, expanded: !group.expanded } : group
+      )
+    );
   };
 
   const handleSaveAsNamed = async () => {
@@ -91,13 +121,13 @@ export default function ConfigPage() {
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://your-api-gateway.amazonaws.com";
-      const createdAt = Date.now(); // Generate timestamp on client-side (user's local time)
+      const createdAt = Date.now();
       const response = await fetch(`${apiUrl}/grasp/configs`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ name: configName, yaml: config, createdAt }),
+        body: JSON.stringify({ name: configName, yaml: editedYaml, createdAt }),
       });
 
       if (!response.ok) {
@@ -107,7 +137,10 @@ export default function ConfigPage() {
 
       setSuccess(true);
       setShowSaveDialog(false);
-      setConfigName("");
+
+      // Reload configs
+      await loadConfigs();
+
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "エラーが発生しました");
@@ -115,6 +148,8 @@ export default function ConfigPage() {
       setSaving(false);
     }
   };
+
+  const yamlChanged = selectedConfig ? editedYaml !== selectedConfig.yaml : false;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -146,7 +181,7 @@ export default function ConfigPage() {
               Grasp設定
             </h1>
             <p className="text-gray-600">
-              YAML形式でGraspの設定を編集できる。変更は保存後すぐに反映される。
+              保存済みのGrasp設定を選択・編集して、新しいバージョンとして保存できる。
             </p>
           </div>
 
@@ -168,65 +203,142 @@ export default function ConfigPage() {
               <p className="mt-2 text-gray-600">読み込み中...</p>
             </div>
           ) : (
-            <>
-              <div className="mb-6">
-                <label
-                  htmlFor="config"
-                  className="block text-sm font-medium text-gray-700 mb-2"
-                >
-                  YAML設定
-                </label>
-                <textarea
-                  id="config"
-                  value={config}
-                  onChange={(e) => setConfig(e.target.value)}
-                  rows={20}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-                  spellCheck={false}
-                />
-                <p className="mt-2 text-sm text-gray-500">
-                  構文エラーがある場合、保存時にエラーメッセージが表示される
-                </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* 左側: 保存済み設定の一覧 */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <h3 className="text-md font-medium text-gray-900 mb-3">
+                  保存済み設定
+                </h3>
+                {groupedConfigs.length === 0 ? (
+                  <p className="text-gray-500 text-center py-8">
+                    保存済み設定がありません
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {groupedConfigs.map((group) => (
+                      <div key={group.name} className="border border-gray-200 rounded">
+                        {/* グループヘッダー（最新バージョン） */}
+                        <div className="flex items-start">
+                          <button
+                            onClick={() => handleSelectConfig(group.latestVersion.configId, group.name)}
+                            className={`flex-1 text-left px-3 py-2 transition-colors ${
+                              selectedConfigId === group.latestVersion.configId
+                                ? 'bg-blue-50'
+                                : 'hover:bg-gray-50'
+                            }`}
+                          >
+                            <div className="font-medium text-gray-900">
+                              {group.name}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {new Date(group.latestVersion.createdAt).toLocaleString('ja-JP')}
+                            </div>
+                          </button>
+                          {group.versions.length > 1 && (
+                            <button
+                              onClick={() => toggleVersionExpansion(group.name)}
+                              className="px-2 py-2 text-gray-500 hover:text-gray-700"
+                              title={group.expanded ? "バージョン一覧を隠す" : "過去のバージョンを表示"}
+                            >
+                              {group.expanded ? '▲' : '▼'}
+                            </button>
+                          )}
+                        </div>
+
+                        {/* 過去バージョン一覧 */}
+                        {group.expanded && group.versions.length > 1 && (
+                          <div className="border-t border-gray-200 bg-gray-50">
+                            {group.versions.slice(1).map((version) => (
+                              <button
+                                key={version.configId}
+                                onClick={() => handleSelectConfig(version.configId, group.name)}
+                                className={`w-full text-left px-6 py-2 text-sm transition-colors ${
+                                  selectedConfigId === version.configId
+                                    ? 'bg-blue-50'
+                                    : 'hover:bg-gray-100'
+                                }`}
+                              >
+                                <div className="text-xs text-gray-500">
+                                  {new Date(version.createdAt).toLocaleString('ja-JP')}
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              <div className="flex items-center justify-between">
-                <Link
-                  href="/"
-                  className="px-6 py-2 text-gray-700 hover:text-gray-900 transition-colors"
-                >
-                  キャンセル
-                </Link>
-                <div className="flex space-x-3">
-                  <button
-                    onClick={() => setShowSaveDialog(true)}
-                    disabled={saving}
-                    className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
-                  >
-                    名前を付けて保存
-                  </button>
-                  <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
-                  >
-                    {saving ? "保存中..." : "保存して適用"}
-                  </button>
-                </div>
+              {/* 右側: 設定プレビュー・編集 */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <h3 className="text-md font-medium text-gray-900 mb-3">
+                  設定内容
+                </h3>
+                {selectedConfigId ? (
+                  <div className="space-y-3">
+                    {/* 設定名 */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        設定名
+                      </label>
+                      <input
+                        type="text"
+                        value={configName}
+                        onChange={(e) => setConfigName(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      />
+                      {yamlChanged && (
+                        <p className="text-xs text-orange-600 mt-1">
+                          内容が変更されています。新しいバージョンとして保存されます。
+                        </p>
+                      )}
+                    </div>
+
+                    {/* YAML編集 */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        YAML設定
+                      </label>
+                      <textarea
+                        value={editedYaml}
+                        onChange={(e) => setEditedYaml(e.target.value)}
+                        rows={16}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                        spellCheck={false}
+                      />
+                    </div>
+
+                    {/* 保存ボタン */}
+                    <button
+                      onClick={() => setShowSaveDialog(true)}
+                      disabled={saving}
+                      className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
+                    >
+                      名前を付けて保存
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-gray-500 text-center py-16">
+                    左側から設定を選択してください
+                  </div>
+                )}
               </div>
-            </>
+            </div>
           )}
         </div>
 
         <div className="mt-6 bg-blue-50 border border-blue-200 rounded-md p-4">
           <h3 className="text-sm font-medium text-blue-900 mb-2">
-            YAML設定のヒント
+            使い方
           </h3>
           <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
-            <li>各GraspにはnodeId、promptTemplate、intervalSec、outputHandlerが必要</li>
-            <li>promptTemplateでは {"{{INPUT:past5m}}"} のような変数が使える</li>
-            <li>intervalSecは秒単位で実行間隔を指定</li>
-            <li>outputHandlerは通常 "chat" を指定</li>
-            <li>「名前を付けて保存」で設定を保存すると、会議ページから呼び出せる</li>
+            <li>左側から保存済み設定を選択すると、最新バージョンが表示される</li>
+            <li>▼ボタンで過去のバージョンを表示・選択できる</li>
+            <li>右側で内容を編集して「名前を付けて保存」で新しいバージョンとして保存</li>
+            <li>ここで保存した設定は、会議詳細画面から選択して適用できる</li>
+            <li><strong>注意: ダッシュボードでは進行中の会議に直接適用できない。会議詳細画面から適用すること</strong></li>
           </ul>
         </div>
       </main>
@@ -239,11 +351,11 @@ export default function ConfigPage() {
               設定に名前を付けて保存
             </h3>
             <div className="mb-4">
-              <label htmlFor="configName" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="saveConfigName" className="block text-sm font-medium text-gray-700 mb-2">
                 設定名
               </label>
               <input
-                id="configName"
+                id="saveConfigName"
                 type="text"
                 value={configName}
                 onChange={(e) => setConfigName(e.target.value)}
@@ -251,14 +363,13 @@ export default function ConfigPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
               <p className="mt-1 text-xs text-gray-500">
-                タイムスタンプが自動的に付加される
+                タイムスタンプが自動的に付加され、同じ名前の新しいバージョンとして保存される
               </p>
             </div>
             <div className="flex justify-end space-x-3">
               <button
                 onClick={() => {
                   setShowSaveDialog(false);
-                  setConfigName("");
                 }}
                 className="px-4 py-2 text-gray-700 hover:text-gray-900 transition-colors"
               >

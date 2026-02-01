@@ -24,6 +24,10 @@ COPY services/meeting-api/*.ts ./services/meeting-api/
 # Copy ai-messages service (no package.json, just handler)
 COPY services/ai-messages/*.ts ./services/ai-messages/
 
+# Copy grasp-config service (has package.json with workspace deps)
+COPY services/grasp-config/package.json ./services/grasp-config/
+COPY services/grasp-config/*.ts ./services/grasp-config/
+
 # Copy local-api-server
 COPY local-api-server/package.json ./local-api-server/
 COPY local-api-server/tsconfig.json ./local-api-server/
