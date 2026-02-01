@@ -393,6 +393,7 @@ export class TimtamInfraStack extends Stack {
       runtime: lambda.Runtime.NODEJS_20_X,
       environment: {
         GRASP_CONFIGS_TABLE: graspConfigsTable.tableName,
+        MEETINGS_METADATA_TABLE: meetingsMetadataTable.tableName,
         CONTROL_SQS_URL: '', // Will be set after controlQueue is created
       },
       bundling: {
@@ -403,6 +404,20 @@ export class TimtamInfraStack extends Stack {
       },
     });
     graspConfigsTable.grantReadData(applyGraspConfigToMeetingFn);
+    meetingsMetadataTable.grantWriteData(applyGraspConfigToMeetingFn);
+
+    // Get Meeting Grasp Config (GET /meetings/{meetingId}/grasp-config)
+    const getMeetingGraspConfigFn = new NodejsFunction(this, 'GetMeetingGraspConfigFn', {
+      entry: '../../services/grasp-config/getMeetingConfig.ts',
+      timeout: Duration.seconds(10),
+      runtime: lambda.Runtime.NODEJS_20_X,
+      environment: {
+        GRASP_CONFIGS_TABLE: graspConfigsTable.tableName,
+        MEETINGS_METADATA_TABLE: meetingsMetadataTable.tableName,
+      },
+    });
+    graspConfigsTable.grantReadData(getMeetingGraspConfigFn);
+    meetingsMetadataTable.grantReadData(getMeetingGraspConfigFn);
 
     // === Admin API Lambdas ===
     // Read ADMIN_PASSWORD from context (passed via --context or cdk.json)
@@ -1147,6 +1162,26 @@ export class TimtamInfraStack extends Stack {
     });
     applyGraspConfigToMeetingRoute.addDependency(applyGraspConfigToMeetingInt);
     applyGraspConfigToMeetingFn.addPermission('InvokeByHttpApiApplyGraspConfigToMeeting', {
+      principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+      sourceArn,
+      action: 'lambda:InvokeFunction',
+    });
+
+    // Get Meeting Grasp Config (GET /meetings/{meetingId}/grasp-config)
+    const getMeetingGraspConfigInt = new CfnIntegration(this, 'GetMeetingGraspConfigIntegration', {
+      apiId: httpApi.ref,
+      integrationType: 'AWS_PROXY',
+      integrationUri: lambdaIntegrationUri(getMeetingGraspConfigFn),
+      payloadFormatVersion: '2.0',
+      integrationMethod: 'POST',
+    });
+    const getMeetingGraspConfigRoute = new CfnRoute(this, 'GetMeetingGraspConfigRoute', {
+      apiId: httpApi.ref,
+      routeKey: 'GET /meetings/{meetingId}/grasp-config',
+      target: `integrations/${getMeetingGraspConfigInt.ref}`,
+    });
+    getMeetingGraspConfigRoute.addDependency(getMeetingGraspConfigInt);
+    getMeetingGraspConfigFn.addPermission('InvokeByHttpApiGetMeetingGraspConfig', {
       principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
       sourceArn,
       action: 'lambda:InvokeFunction',

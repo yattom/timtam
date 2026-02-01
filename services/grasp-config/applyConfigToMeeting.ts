@@ -1,11 +1,12 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import { parseGraspGroupDefinition } from '../orchestrator/graspConfigParser';
 
 const REGION = process.env.AWS_REGION || 'ap-northeast-1';
 const GRASP_CONFIGS_TABLE = process.env.GRASP_CONFIGS_TABLE || 'timtam-grasp-configs';
+const MEETINGS_METADATA_TABLE = process.env.MEETINGS_METADATA_TABLE || 'timtam-meetings-metadata';
 const CONTROL_SQS_URL = process.env.CONTROL_SQS_URL || '';
 
 const ddbClient = new DynamoDBClient({ region: REGION });
@@ -106,6 +107,18 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     }
 
     const trimmedYaml = yaml.trim();
+
+    // Update meeting metadata with graspConfigId
+    await ddb.send(
+      new UpdateCommand({
+        TableName: MEETINGS_METADATA_TABLE,
+        Key: { meetingId },
+        UpdateExpression: 'SET graspConfigId = :configId',
+        ExpressionAttributeValues: {
+          ':configId': configId || null,
+        },
+      })
+    );
 
     // Send control message to orchestrator via SQS
     const controlMessage = {
