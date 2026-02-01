@@ -103,9 +103,6 @@ describe('Meeting - DynamoDB保存共通処理', () => {
   it('aiMessagesTableが設定されていない場合はDynamoDB保存をスキップする', async () => {
     // Arrange
     const mockSend = vi.fn();
-    const mockDdbClient = {
-      send: mockSend,
-    } as any;
 
     const mockAdapter: MeetingServiceAdapter = {
       processInboundTranscript: vi.fn(),
