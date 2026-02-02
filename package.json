@@ -37,7 +37,7 @@
     "e2e:test:local": "cd e2e && pnpm run test:local",
     "e2e:test:local:headed": "cd e2e && pnpm run test:local:headed",
     "deploy:web-assets": "pnpm run web:build && pnpm run web:deploy && pnpm run facilitator:build && pnpm run facilitator:deploy",
-    "deploy:all": "pnpm run cdk:deploy && pnpm run deploy:web-assets",
+    "deploy:all": "pnpm run cdk:deploy && pnpm run deploy:web-assets && invoke seed-default-config-aws",
     "test": "pnpm --filter orchestrator test",
     "test:watch": "pnpm --filter orchestrator test:watch",
     "test:ui": "pnpm --filter orchestrator test:ui"

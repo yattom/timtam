@@ -1,7 +1,7 @@
 from invoke import task
 import boto3
 
-from invoke_tasks import clear_dynamodb_table, purge_sqs_queue
+from invoke_tasks import clear_dynamodb_table, purge_sqs_queue, seed_default_grasp_config
 
 @task
 def hello(c, name='yattom'):
@@ -64,5 +64,49 @@ def delete_localstack_data(c):
     print()
     print("=========================================")
     print("Data cleared!")
+    print("=========================================")
+
+
+@task
+def seed_default_config_local(c):
+    """Seed default Grasp configuration to LocalStack."""
+    print("=========================================")
+    print("Seeding default Grasp configuration (LocalStack)...")
+    print("=========================================")
+    print()
+
+    # DynamoDB setup for LocalStack
+    dynamodb = boto3.resource(
+        'dynamodb',
+        endpoint_url='http://localhost:4566',
+        region_name='ap-northeast-1',
+        aws_access_key_id='test',
+        aws_secret_access_key='test',
+    )
+
+    seed_default_grasp_config(dynamodb, 'timtam-grasp-configs')
+
+    print()
+    print("=========================================")
+    print("Default config seeded!")
+    print("=========================================")
+
+
+@task
+def seed_default_config_aws(c, region='ap-northeast-1'):
+    """Seed default Grasp configuration to AWS."""
+    print("=========================================")
+    print("Seeding default Grasp configuration (AWS)...")
+    print("=========================================")
+    print()
+
+    # DynamoDB setup for AWS
+    dynamodb = boto3.resource('dynamodb', region_name=region)
+
+    seed_default_grasp_config(dynamodb, 'timtam-grasp-configs')
+
+    print()
+    print("=========================================")
+    print("Default config seeded!")
     print("=========================================")
 
