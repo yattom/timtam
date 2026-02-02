@@ -124,6 +124,37 @@ importers:
         specifier: ^3.948.0
         version: 3.958.0
 
+  services/grasp-config:
+    dependencies:
+      '@aws-sdk/client-dynamodb':
+        specifier: ^3.948.0
+        version: 3.948.0
+      '@aws-sdk/client-sqs':
+        specifier: ^3.948.0
+        version: 3.960.0
+      '@aws-sdk/lib-dynamodb':
+        specifier: ^3.948.0
+        version: 3.948.0(@aws-sdk/client-dynamodb@3.948.0)
+      js-yaml:
+        specifier: ^4.1.0
+        version: 4.1.1
+    devDependencies:
+      '@types/aws-lambda':
+        specifier: ^8.10.159
+        version: 8.10.159
+      '@types/js-yaml':
+        specifier: ^4.0.5
+        version: 4.0.9
+      '@types/node':
+        specifier: ^20.11.30
+        version: 20.19.27
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.16
+        version: 4.0.16(@types/node@20.19.27)(jiti@1.21.7)(tsx@4.21.0)
+
   services/meeting-api:
     dependencies:
       '@aws-sdk/client-chime-sdk-media-pipelines':
