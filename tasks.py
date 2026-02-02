@@ -93,15 +93,16 @@ def seed_default_config_local(c):
 
 
 @task
-def seed_default_config_aws(c, region='ap-northeast-1'):
+def seed_default_config_aws(c, region='ap-northeast-1', profile='admin'):
     """Seed default Grasp configuration to AWS."""
     print("=========================================")
     print("Seeding default Grasp configuration (AWS)...")
     print("=========================================")
     print()
 
-    # DynamoDB setup for AWS
-    dynamodb = boto3.resource('dynamodb', region_name=region)
+    # DynamoDB setup for AWS with explicit profile
+    session = boto3.Session(profile_name=profile, region_name=region)
+    dynamodb = session.resource('dynamodb')
 
     seed_default_grasp_config(dynamodb, 'timtam-grasp-configs')
 
