@@ -25,7 +25,7 @@ export function GraspConfigPanel() {
         setPresets(presetList);
 
         // デフォルトプリセットを選択
-        const defaultPreset = presetList.find(p => p.isDefault);
+        const defaultPreset = presetList.find(p => p.name === 'DEFAULT');
         if (defaultPreset) {
           setSelectedPresetId(defaultPreset.configId);
         } else if (presetList.length > 0) {
@@ -131,7 +131,7 @@ export function GraspConfigPanel() {
                 >
                   {presets.map(p => (
                     <option key={p.configId} value={p.configId}>
-                      {p.name}{p.isDefault ? ' (デフォルト)' : ''}
+                      {p.name}{p.name === 'DEFAULT' ? ' (デフォルト)' : ''}
                     </option>
                   ))}
                 </select>

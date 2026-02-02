@@ -127,7 +127,6 @@ export type GraspPreset = {
   configId: string;
   name: string;
   yaml: string;
-  isDefault: boolean;
   createdAt: number;
   updatedAt: number;
 };

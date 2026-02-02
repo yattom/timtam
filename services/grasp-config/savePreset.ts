@@ -12,12 +12,12 @@ const ddb = DynamoDBDocumentClient.from(ddbClient);
 /**
  * POST /grasp/presets
  * Save a new Grasp configuration preset
- * Body: { configId: string, name: string, yaml: string, isDefault?: boolean }
+ * Body: { configId: string, name: string, yaml: string }
  */
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   try {
     const body = event.body ? JSON.parse(event.body) : {};
-    const { configId, name, yaml, isDefault } = body;
+    const { configId, name, yaml } = body;
 
     // Validation
     if (typeof configId !== 'string' || configId.trim() === '') {
@@ -72,7 +72,6 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
           configId: configId.trim(),
           name: name.trim(),
           yaml: yaml.trim(),
-          isDefault: isDefault === true,
           createdAt: now,
           updatedAt: now,
         },
