@@ -174,7 +174,7 @@ export default function ConfigPage() {
           )}
 
           {success && (
-            <div className="mb-6 bg-green-50 border border-green-200 rounded-md p-4">
+            <div className="mb-6 bg-green-50 border border-green-200 rounded-md p-4" data-testid="dashboard-save-success-message">
               <p className="text-green-800">設定を保存しました</p>
             </div>
           )}
@@ -188,20 +188,40 @@ export default function ConfigPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* 左側: 保存済み設定の一覧 */}
               <div className="border border-gray-200 rounded-lg p-4">
-                <h3 className="text-md font-medium text-gray-900 mb-3">
-                  保存済み設定
-                </h3>
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-md font-medium text-gray-900">
+                    保存済み設定
+                  </h3>
+                  <button
+                    data-testid="dashboard-new-config-button"
+                    className="px-3 py-1 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                    onClick={() => {
+                      setSelectedConfigId(null);
+                      setSelectedConfig(null);
+                      setEditedYaml(`grasps:
+  - nodeId: example-grasp
+    promptTemplate: |
+      ここにプロンプトを記述
+    intervalSec: 30
+    outputHandler: chat`);
+                      setConfigName('');
+                    }}
+                  >
+                    新規作成
+                  </button>
+                </div>
                 {groupedConfigs.length === 0 ? (
                   <p className="text-gray-500 text-center py-8">
                     保存済み設定がありません
                   </p>
                 ) : (
-                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                  <div className="space-y-2 max-h-96 overflow-y-auto" data-testid="dashboard-saved-configs-list">
                     {groupedConfigs.map((group) => (
-                      <div key={group.name} className="border border-gray-200 rounded">
+                      <div key={group.name} className="border border-gray-200 rounded" data-testid={`dashboard-config-group-${group.name}`}>
                         {/* グループヘッダー（最新バージョン） */}
                         <div className="flex items-start">
                           <button
+                            data-testid={`dashboard-config-version-${group.latestVersion.configId}`}
                             onClick={() => handleSelectConfig(group.latestVersion.configId, group.name)}
                             className={`flex-1 text-left px-3 py-2 transition-colors ${
                               selectedConfigId === group.latestVersion.configId
@@ -218,6 +238,7 @@ export default function ConfigPage() {
                           </button>
                           {group.versions.length > 1 && (
                             <button
+                              data-testid={`dashboard-expand-versions-button-${group.name}`}
                               onClick={() => toggleVersionExpansion(group.name)}
                               className="px-2 py-2 text-gray-500 hover:text-gray-700"
                               title={group.expanded ? "バージョン一覧を隠す" : "過去のバージョンを表示"}
@@ -233,6 +254,7 @@ export default function ConfigPage() {
                             {group.versions.slice(1).map((version) => (
                               <button
                                 key={version.configId}
+                                data-testid={`dashboard-config-version-${version.configId}`}
                                 onClick={() => handleSelectConfig(version.configId, group.name)}
                                 className={`w-full text-left px-6 py-2 text-sm transition-colors ${
                                   selectedConfigId === version.configId
@@ -267,12 +289,13 @@ export default function ConfigPage() {
                       </label>
                       <input
                         type="text"
+                        data-testid="dashboard-config-name-input"
                         value={configName}
                         onChange={(e) => setConfigName(e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md"
                       />
                       {yamlChanged && (
-                        <p className="text-xs text-orange-600 mt-1">
+                        <p className="text-xs text-orange-600 mt-1" data-testid="dashboard-yaml-changed-notice">
                           内容が変更されています。新しいバージョンとして保存されます。
                         </p>
                       )}
@@ -284,6 +307,7 @@ export default function ConfigPage() {
                         YAML設定
                       </label>
                       <textarea
+                        data-testid="dashboard-config-yaml-textarea"
                         value={editedYaml}
                         onChange={(e) => setEditedYaml(e.target.value)}
                         rows={16}
@@ -294,6 +318,7 @@ export default function ConfigPage() {
 
                     {/* 保存ボタン */}
                     <button
+                      data-testid="dashboard-save-config-button"
                       onClick={() => setShowSaveDialog(true)}
                       disabled={saving}
                       className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
@@ -328,7 +353,7 @@ export default function ConfigPage() {
       {/* Save As Dialog */}
       {showSaveDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4" data-testid="dashboard-save-dialog">
             <h3 className="text-lg font-bold text-gray-900 mb-4">
               設定に名前を付けて保存
             </h3>
@@ -339,6 +364,7 @@ export default function ConfigPage() {
               <input
                 id="saveConfigName"
                 type="text"
+                data-testid="dashboard-save-dialog-name-input"
                 value={configName}
                 onChange={(e) => setConfigName(e.target.value)}
                 placeholder="例: 沈黙検知設定"
@@ -358,6 +384,7 @@ export default function ConfigPage() {
                 キャンセル
               </button>
               <button
+                data-testid="dashboard-confirm-save-button"
                 onClick={handleSaveAsNamed}
                 disabled={saving || !configName.trim()}
                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
