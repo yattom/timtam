@@ -114,13 +114,16 @@ export async function getDefaultGraspConfig(
   const ddb = DynamoDBDocumentClient.from(ddbClient);
 
   try {
-    // Scan for configs with configId starting with 'DEFAULT-'
+    // Scan for configs with name 'DEFAULT'
     const result = await ddb.send(
       new ScanCommand({
         TableName: graspConfigsTable,
-        FilterExpression: 'begins_with(configId, :prefix)',
+        FilterExpression: '#name = :defaultName',
+        ExpressionAttributeNames: {
+          '#name': 'name',
+        },
         ExpressionAttributeValues: {
-          ':prefix': 'DEFAULT-',
+          ':defaultName': 'DEFAULT',
         },
       })
     );
@@ -128,7 +131,7 @@ export async function getDefaultGraspConfig(
     if (!result.Items || result.Items.length === 0) {
       console.log(JSON.stringify({
         type: 'orchestrator.graspConfig.noDefaultFound',
-        message: 'No DEFAULT-* config found, using hardcoded default',
+        message: 'No DEFAULT config found, using hardcoded default',
         ts: Date.now(),
       }));
       return DEFAULT_GRASP_YAML;

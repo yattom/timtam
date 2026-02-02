@@ -8,6 +8,29 @@ const GRASP_CONFIGS_TABLE = process.env.GRASP_CONFIGS_TABLE || 'timtam-grasp-con
 const ddbClient = new DynamoDBClient({ region: REGION });
 const ddb = DynamoDBDocumentClient.from(ddbClient);
 
+export type GraspConfigItem = {
+  configId: string;
+  name: string;
+  yaml: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+/**
+ * Sort Grasp configs: DEFAULT first, then by updatedAt desc
+ */
+export function sortGraspConfigs(configs: GraspConfigItem[]): GraspConfigItem[] {
+  return [...configs].sort((a, b) => {
+    const aIsDefault = a.name === 'DEFAULT';
+    const bIsDefault = b.name === 'DEFAULT';
+
+    if (aIsDefault !== bIsDefault) {
+      return aIsDefault ? -1 : 1;
+    }
+    return b.updatedAt - a.updatedAt;
+  });
+}
+
 /**
  * GET /grasp/configs
  * Get all Grasp configuration presets
@@ -24,24 +47,17 @@ export const handler: APIGatewayProxyHandlerV2 = async () => {
       configId: item.configId,
       name: item.name,
       yaml: item.yaml,
-      isDefault: item.isDefault || false,
       createdAt: item.createdAt || 0,
       updatedAt: item.updatedAt || 0,
     }));
 
-    // Sort by isDefault (default first) then by updatedAt (newest first)
-    configs.sort((a, b) => {
-      if (a.isDefault !== b.isDefault) {
-        return a.isDefault ? -1 : 1;
-      }
-      return b.updatedAt - a.updatedAt;
-    });
+    const sortedConfigs = sortGraspConfigs(configs);
 
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        configs,
+        configs: sortedConfigs,
       }),
     };
   } catch (err: any) {
