@@ -26,6 +26,8 @@ allowed-tools: Bash(git diff:*), Bash(git status:*), Bash(git log:*)
 - Avoid using mocks as much as possible.
 - Readability is more important in test code so avoid dependencies and over reuse and make every single test cases easy to understand just by themselves.
 - Order test files and test cases so that the organized tests represents the structure of the specification.
+- Make sure that unit tests does not use actual external resources like DynamoDB and also does not use mocks.  The very interface with external resources should not be tested in unit tests.  When we want to test logic we wrote, refactor them out into a separate method/function/class/module and then write unit test for them.
+
 
 # Refactoring
 
