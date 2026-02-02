@@ -57,7 +57,7 @@ chmod +x scripts/setup-localstack.sh
 
 このスクリプトは以下のリソースを作成する:
 
-- DynamoDBテーブル: `timtam-meetings-metadata`, `timtam-ai-messages`, `timtam-orchestrator-config`
+- DynamoDBテーブル: `timtam-meetings-metadata`, `timtam-ai-messages`, `timtam-orchestrator-config`, `timtam-grasp-configs`
 - SQS FIFOキュー: `transcript-asr.fifo`
 - S3バケット: `timtam-local-dev`
 
@@ -114,7 +114,17 @@ VITE_API_BASE_URL=http://localhost:3000
 # VITE_API_BASE_URL=https://your-api-gateway-url.execute-api.ap-northeast-1.amazonaws.com
 ```
 
-### 7. Webフロントエンドを起動
+### 7. デフォルトGrasp設定を初期化（オプション）
+
+デフォルトのGrasp設定を登録する:
+
+```bash
+invoke seed-default-config-local
+```
+
+このコマンドは `infra/default-grasp-config/default.json` のデフォルト設定をLocalStackに登録する。既に同じ内容の設定が存在する場合はスキップされる（冪等）。
+
+### 8. Webフロントエンドを起動
 
 ```bash
 cd web/facilitator

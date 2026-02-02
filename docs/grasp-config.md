@@ -4,6 +4,42 @@
 
 Grasp は、会議の発話ストリームを監視し、LLMを使って判断・介入を行う基本単位です。各 Grasp は独立したプロンプト、実行間隔、出力先を持ち、YAML形式で設定できます。
 
+## デフォルト設定
+
+### デフォルト設定とは
+
+デフォルト設定は、システムに予め登録されているGrasp設定で、`name` フィールドが `"DEFAULT"` のものです。UIではデフォルト設定が自動的にリストの先頭に表示されます。
+
+### デプロイ時の登録
+
+デフォルトGrasp設定は以下のコマンドで登録できます:
+
+**AWS環境:**
+```bash
+invoke seed-default-config-aws
+```
+
+**ローカル環境（LocalStack）:**
+```bash
+invoke seed-default-config-local
+```
+
+これらのコマンドは、`infra/default-grasp-config/default.json` のデフォルト設定をDynamoDBに登録します。既に同じ内容の設定が存在する場合はスキップされます（冪等）。
+
+### デフォルト設定の更新
+
+デフォルト設定の内容を変更する場合は、`infra/default-grasp-config/default.json` を編集し、再度デプロイコマンドを実行してください。内容が変更されている場合、新しいバージョンが作成されます。
+
+**重要:** デフォルト設定のファイル構造:
+```json
+{
+  "name": "DEFAULT",
+  "yaml": "grasps:\n  - nodeId: ...\n"
+}
+```
+
+`name` フィールドは必ず `"DEFAULT"` としてください（これによってデフォルト判定されます）。
+
 ## YAML フォーマット
 
 ### 基本構造
