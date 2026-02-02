@@ -42,5 +42,14 @@ export function groupConfigsByName(configs: GraspConfig[]): GroupedConfig[] {
       versions: sortedVersions,
       expanded: false,
     };
-  }).sort((a, b) => b.latestVersion.createdAt - a.latestVersion.createdAt); // Sort groups by latest version
+  }).sort((a, b) => {
+    // Sort DEFAULT first, then by latest version's createdAt
+    const aIsDefault = a.name === 'DEFAULT';
+    const bIsDefault = b.name === 'DEFAULT';
+
+    if (aIsDefault !== bIsDefault) {
+      return aIsDefault ? -1 : 1;
+    }
+    return b.latestVersion.createdAt - a.latestVersion.createdAt;
+  });
 }
