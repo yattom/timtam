@@ -6,8 +6,8 @@ WORKDIR /app
 # pnpmをインストール
 RUN npm install -g pnpm@9
 
-# package.jsonとpackage-lock.jsonをコピー
-COPY package.json pnpm-lock.yaml* ./
+# package.json と ルートの pnpm-lock.yaml をコピー
+COPY package.json ../pnpm-lock.yaml ./
 
 # 依存関係をインストール
 RUN pnpm install --frozen-lockfile
