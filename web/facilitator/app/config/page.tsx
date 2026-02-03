@@ -280,7 +280,7 @@ export default function ConfigPage() {
                 <h3 className="text-md font-medium text-gray-900 mb-3">
                   設定内容
                 </h3>
-                {selectedConfigId ? (
+                {selectedConfigId || editedYaml ? (
                   <div className="space-y-3">
                     {/* 設定名 */}
                     <div>
