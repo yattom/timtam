@@ -249,7 +249,7 @@ export async function loadGraspsForMeeting(
     if (error instanceof MissingGraspConfigIdError) {
       throw error;
     }
-    
+
     // For other errors (config not found, parsing errors, etc.), fall back to default
     console.error(JSON.stringify({
       type: 'orchestrator.meeting.grasps.buildError',
