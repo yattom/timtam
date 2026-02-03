@@ -31,14 +31,12 @@ interface ConfigTabProps {
   editedYaml: string;
   isEditingYaml: boolean;
   configName: string;
-  customYaml: string;
   configLoading: boolean;
   applySuccess: boolean;
   onSelectConfig: (configId: string, name: string) => void;
   onToggleVersionExpansion: (name: string) => void;
   onEditYamlChange: (yaml: string) => void;
   onConfigNameChange: (name: string) => void;
-  onCustomYamlChange: (yaml: string) => void;
   onApplyConfig: (saveAsNew: boolean) => void;
   onToggleEditMode: () => void;
 }
@@ -52,14 +50,12 @@ export default function ConfigTab({
   editedYaml,
   isEditingYaml,
   configName,
-  customYaml,
   configLoading,
   applySuccess,
   onSelectConfig,
   onToggleVersionExpansion,
   onEditYamlChange,
   onConfigNameChange,
-  onCustomYamlChange,
   onApplyConfig,
   onToggleEditMode,
 }: ConfigTabProps) {
@@ -72,20 +68,18 @@ export default function ConfigTab({
       </h2>
 
       {/* 現在適用中の設定 */}
-      {currentConfig && (
+      {!configLoading && (
         <div className="bg-blue-50 border border-blue-200 rounded-md p-4" data-testid="current-config-display">
           <h3 className="text-sm font-medium text-blue-900 mb-2">
             現在適用中の設定
           </h3>
-          {currentConfig.configId ? (
+          {currentConfig && currentConfig.configId ? (
             <div>
               <p className="text-blue-800 font-medium" data-testid="current-config-name">{currentConfig.name}</p>
               <p className="text-xs text-blue-600" data-testid="current-config-id">ID: {currentConfig.configId}</p>
             </div>
-          ) : currentConfig.yaml ? (
-            <p className="text-blue-800">カスタムYAML設定</p>
           ) : (
-            <p className="text-blue-800">設定が未適用</p>
+            <p className="text-blue-800" data-testid="no-config-applied">設定が未適用</p>
           )}
         </div>
       )}
@@ -251,28 +245,9 @@ export default function ConfigTab({
               </div>
             </div>
           ) : (
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  カスタムYAML設定
-                </label>
-                <textarea
-                  value={customYaml}
-                  onChange={(e) => onCustomYamlChange(e.target.value)}
-                  rows={10}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-                  spellCheck={false}
-                  placeholder="grasps:&#10;  - nodeId: example&#10;    promptTemplate: |&#10;      プロンプト内容&#10;    intervalSec: 30&#10;    outputHandler: chat"
-                />
-              </div>
-              <button
-                onClick={() => onApplyConfig(false)}
-                disabled={configLoading || !customYaml.trim()}
-                className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
-              >
-                {configLoading ? '適用中...' : 'カスタム設定を適用'}
-              </button>
-            </div>
+            <p className="text-gray-500 text-center py-8">
+              左側から保存済み設定を選択してください
+            </p>
           )}
         </div>
       </div>
@@ -284,8 +259,7 @@ export default function ConfigTab({
         <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
           <li>左側から保存済み設定を選択すると、最新バージョンが選択される</li>
           <li>▼ボタンで過去のバージョンを表示・選択できる</li>
-          <li>右側で内容を編集すると、新しいバージョンとして保存できる</li>
-          <li>カスタムYAMLを直接入力して適用することもできる</li>
+          <li>右側で内容を編集すると、新しいバージョンとして保存して適用できる</li>
           <li>設定を適用すると、この会議のGraspが更新される</li>
         </ul>
       </div>
