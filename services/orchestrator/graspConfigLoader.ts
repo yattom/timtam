@@ -2,6 +2,7 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, ScanCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
 import { parseGraspGroupDefinition, GraspGroupDefinition } from './graspConfigParser';
 import { Grasp, LLMClient, GraspConfig } from './grasp';
+import { getDefaultGraspConfigId } from '@timtam/shared';
 
 /**
  * Build Grasp instances from a GraspGroupDefinition
@@ -110,25 +111,11 @@ export async function getDefaultGraspConfig(
   region: string,
   graspConfigsTable: string
 ): Promise<string> {
-  const ddbClient = new DynamoDBClient({ region });
-  const ddb = DynamoDBDocumentClient.from(ddbClient);
-
   try {
-    // Scan for configs with name 'DEFAULT'
-    const result = await ddb.send(
-      new ScanCommand({
-        TableName: graspConfigsTable,
-        FilterExpression: '#name = :defaultName',
-        ExpressionAttributeNames: {
-          '#name': 'name',
-        },
-        ExpressionAttributeValues: {
-          ':defaultName': 'DEFAULT',
-        },
-      })
-    );
+    // Use shared function to get DEFAULT config ID
+    const defaultConfigId = await getDefaultGraspConfigId(region, graspConfigsTable);
 
-    if (!result.Items || result.Items.length === 0) {
+    if (!defaultConfigId) {
       console.log(JSON.stringify({
         type: 'orchestrator.graspConfig.noDefaultFound',
         message: 'No DEFAULT config found, using hardcoded default',
@@ -137,26 +124,17 @@ export async function getDefaultGraspConfig(
       return DEFAULT_GRASP_YAML;
     }
 
-    // Sort by configId (which contains timestamp) to get the latest
-    interface ConfigItem {
-      configId: string;
-      yaml?: string;
-    }
-    
-    const sortedConfigs = (result.Items as ConfigItem[]).sort((a, b) => {
-      return b.configId.localeCompare(a.configId);
-    });
-
-    const latestConfig = sortedConfigs[0];
+    // Load the config by ID
+    const yaml = await loadGraspConfigById(defaultConfigId, region, graspConfigsTable);
 
     console.log(JSON.stringify({
       type: 'orchestrator.graspConfig.defaultLoaded',
-      configId: latestConfig.configId,
-      yamlLength: latestConfig.yaml?.length || 0,
+      configId: defaultConfigId,
+      yamlLength: yaml.length,
       ts: Date.now(),
     }));
 
-    return latestConfig.yaml || DEFAULT_GRASP_YAML;
+    return yaml;
   } catch (error) {
     console.error(JSON.stringify({
       type: 'orchestrator.graspConfig.defaultLoadError',

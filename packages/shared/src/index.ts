@@ -7,3 +7,4 @@ export * from './types';
 export * from './adapters';
 export * from './recall/RecallAPIClient';
 export * from './recall/buildCreateBotRequest';
+export * from './grasp-config';

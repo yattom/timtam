@@ -1,10 +1,11 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
-import { RecallAPIClient, CreateBotRequest, VALID_PLATFORMS, isMeetingPlatform, buildCreateBotRequest } from '@timtam/shared';
+import { RecallAPIClient, CreateBotRequest, VALID_PLATFORMS, isMeetingPlatform, buildCreateBotRequest, getDefaultGraspConfigId } from '@timtam/shared';
 
 const REGION = process.env.AWS_REGION || 'ap-northeast-1';
 const MEETINGS_METADATA_TABLE = process.env.MEETINGS_METADATA_TABLE || 'timtam-meetings-metadata';
+const GRASP_CONFIGS_TABLE = process.env.GRASP_CONFIGS_TABLE || 'timtam-grasp-configs';
 const RECALL_API_KEY = process.env.RECALL_API_KEY || '';
 const RECALL_API_BASE_URL = process.env.RECALL_API_BASE_URL; // Optional: for local dev, use http://stub-recall:8080
 const RECALL_WEBHOOK_URL = process.env.RECALL_WEBHOOK_URL || ''; // e.g., https://api.timtam.example.com/recall/webhook
@@ -132,6 +133,15 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
     // Generate meeting code (6桁の英数字)
     const meetingCode = await generateMeetingCode();
 
+    // Get DEFAULT grasp config ID if not provided
+    let finalGraspConfigId = graspConfigId;
+    if (!finalGraspConfigId) {
+      const defaultConfigId = await getDefaultGraspConfigId(REGION, GRASP_CONFIGS_TABLE);
+      if (defaultConfigId) {
+        finalGraspConfigId = defaultConfigId;
+      }
+    }
+
     // Save to DynamoDB
     const now = Date.now();
     await ddb.send(
@@ -144,7 +154,7 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
           status: 'active',
           createdAt: now,
           meetingCode,
-          graspConfigId: graspConfigId || undefined, // Store config ID if provided
+          graspConfigId: finalGraspConfigId || undefined, // Store config ID (DEFAULT or specified)
           recallBot: {
             botId: bot.id,
             meetingUrl,
@@ -162,7 +172,7 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
       meetingId: bot.id,
       platform,
       meetingCode,
-      graspConfigId: graspConfigId || 'default',
+      graspConfigId: finalGraspConfigId || 'none',
       timestamp: now,
     }));
 
