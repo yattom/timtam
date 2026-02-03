@@ -44,6 +44,12 @@ const recallClient = new RecallAPIClient({
  *   meetingCode: string;       // Attendee用の短いコード
  *   status: "starting";
  * }
+ *
+ * Error (500):
+ * {
+ *   error: "DEFAULT Grasp configuration not found. Please create a DEFAULT config first."
+ * }
+ * - graspConfigIdが指定されず、かつDEFAULT設定が存在しない場合
  */
 export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
   try {
