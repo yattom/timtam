@@ -1,5 +1,5 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, ScanCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
 import { parseGraspGroupDefinition, GraspGroupDefinition } from './graspConfigParser';
 import { Grasp, LLMClient, GraspConfig } from './grasp';
 
@@ -97,74 +97,6 @@ export async function loadGraspConfigById(
       ts: Date.now(),
     }));
     throw error;
-  }
-}
-
-/**
- * Get the latest DEFAULT-* Grasp configuration
- * @param region AWS region
- * @param graspConfigsTable Table name for grasp configs
- * @returns YAML configuration string (or hardcoded default if none found)
- */
-export async function getDefaultGraspConfig(
-  region: string,
-  graspConfigsTable: string
-): Promise<string> {
-  const ddbClient = new DynamoDBClient({ region });
-  const ddb = DynamoDBDocumentClient.from(ddbClient);
-
-  try {
-    // Scan for configs with name 'DEFAULT'
-    const result = await ddb.send(
-      new ScanCommand({
-        TableName: graspConfigsTable,
-        FilterExpression: '#name = :defaultName',
-        ExpressionAttributeNames: {
-          '#name': 'name',
-        },
-        ExpressionAttributeValues: {
-          ':defaultName': 'DEFAULT',
-        },
-      })
-    );
-
-    if (!result.Items || result.Items.length === 0) {
-      console.log(JSON.stringify({
-        type: 'orchestrator.graspConfig.noDefaultFound',
-        message: 'No DEFAULT config found, using hardcoded default',
-        ts: Date.now(),
-      }));
-      return DEFAULT_GRASP_YAML;
-    }
-
-    // Sort by configId (which contains timestamp) to get the latest
-    interface ConfigItem {
-      configId: string;
-      yaml?: string;
-    }
-    
-    const sortedConfigs = (result.Items as ConfigItem[]).sort((a, b) => {
-      return b.configId.localeCompare(a.configId);
-    });
-
-    const latestConfig = sortedConfigs[0];
-
-    console.log(JSON.stringify({
-      type: 'orchestrator.graspConfig.defaultLoaded',
-      configId: latestConfig.configId,
-      yamlLength: latestConfig.yaml?.length || 0,
-      ts: Date.now(),
-    }));
-
-    return latestConfig.yaml || DEFAULT_GRASP_YAML;
-  } catch (error) {
-    console.error(JSON.stringify({
-      type: 'orchestrator.graspConfig.defaultLoadError',
-      error: (error as Error).message,
-      message: 'Falling back to hardcoded default',
-      ts: Date.now(),
-    }));
-    return DEFAULT_GRASP_YAML;
   }
 }
 
