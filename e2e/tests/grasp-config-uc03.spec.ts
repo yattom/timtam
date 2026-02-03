@@ -29,7 +29,7 @@ import {
  * - web/facilitator で pnpm run dev が起動している（ポート3001）
  */
 
-test.describe('UC03: 会議のGrasp設定を置き換える', () => {
+test.describe('UC03: 会議のGrasp設定を置き換える', { tag: '@local' }, () => {
   test.setTimeout(120000); // 2分のタイムアウト
 
   // 各テストケースの前にDynamoDBテーブルとSQSキューのデータをクリア

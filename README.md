@@ -45,21 +45,31 @@ pnpm run deploy
 完全にオフラインで開発可能なローカル環境を提供。Recall.aiやAWSへの接続不要で、文字起こしのテストが可能。
 
 ```bash
-# LocalStack + Recall.ai Stub Serverを起動
-docker-compose up
+# すべてのサービス（LocalStack + Recall.ai Stub + API Server + Orchestrator + Facilitator）を起動
+docker compose up -d
 
 # LocalStackにリソースを作成
-./scripts/setup-localstack.sh
+pnpm run local:setup
 
 # 環境のテスト（推奨）
 ./scripts/test-local-dev-env.sh
 
-# Webフロントエンドを起動
-cd web/facilitator
-pnpm dev
+# Facilitatorにアクセス
+open http://localhost:3001
 ```
 
-詳細は [ローカル開発環境ガイド](./docs/local-development.md) を参照。
+**ホットリロード開発**: `web/facilitator`のファイルを編集すると、コンテナ内のNext.jsが自動的に変更を検知してリロードする。
+
+**E2Eテスト実行**:
+```bash
+# ローカル環境用テストを実行
+docker compose run --rm e2e-tests
+
+# 特定のテストを実行
+docker compose run --rm e2e-tests pnpm test -- local-sanity.spec.ts
+```
+
+詳細は [ローカル開発環境ガイド](./docs/local-development.md) および [E2Eテストガイド](./e2e/README.md) を参照。
 
 ## プロジェクト構成
 

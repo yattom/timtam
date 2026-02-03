@@ -178,7 +178,7 @@ async function endMeeting(page: Page) {
   await expect(page.locator('[data-testid="create-and-join-button"]')).toBeVisible({ timeout: 10000 });
 }
 
-test.describe('E2E: 会議のゴールデンパス', () => {
+test.describe('E2E: 会議のゴールデンパス', { tag: '@aws' }, () => {
   test.setTimeout(180000); // 3分のタイムアウト
 
   test('会議の作成、参加、文字起こし、AI反応、終了までの一連の流れ', async ({}) => {

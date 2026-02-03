@@ -75,7 +75,7 @@ function generateRandomCode(): string {
   return code;
 }
 
-test.describe('会議一覧のページネーション問題（Issue #107）', () => {
+test.describe('会議一覧のページネーション問題（Issue #107）', { tag: '@local' }, () => {
   test.setTimeout(120000); // 2分のタイムアウト
 
   test.beforeEach(async () => {
