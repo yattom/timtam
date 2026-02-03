@@ -6,6 +6,7 @@ import {
   createMeeting,
   saveGraspConfig,
   getMeetingConfig,
+  getMeetingMetadata,
 } from './helpers/grasp-config-helpers';
 
 /**
@@ -356,5 +357,75 @@ test.describe('DEFAULT Grasp設定の動作確認', () => {
     console.log('  ✓ DEFAULT設定がない場合でも会議を作成できる');
     console.log('  ✓ ハードコードされたデフォルトYAMLが使用される');
     console.log('  ✓ カスタム設定は自動適用されない');
+  });
+
+  test('DEFAULT設定IDがミーティングメタデータに保存される', async ({ page }) => {
+    console.log('='.repeat(60));
+    console.log('テスト: DEFAULT設定IDがミーティングメタデータに保存される');
+    console.log('='.repeat(60));
+
+    // ========================================
+    // Step 1: DEFAULT設定を作成
+    // ========================================
+    console.log('\nStep 1: DEFAULT設定を作成');
+
+    const defaultYaml = `grasps:
+  - nodeId: metadata-test-grasp
+    promptTemplate: |
+      これはメタデータ保存テストです
+    intervalSec: 60
+    outputHandler: chat`;
+
+    const defaultConfigId = await saveGraspConfig(page, 'DEFAULT', defaultYaml);
+    console.log(`  ✓ DEFAULT設定を保存 (ID: ${defaultConfigId})`);
+
+    // ========================================
+    // Step 2: 新しい会議を作成
+    // ========================================
+    console.log('\nStep 2: 新しい会議を作成');
+
+    const meetingId = await createMeeting(page);
+    console.log(`  ✓ 会議を作成 (ID: ${meetingId})`);
+
+    // ========================================
+    // Step 3: ミーティングメタデータを取得
+    // ========================================
+    console.log('\nStep 3: ミーティングメタデータを取得');
+
+    const metadata = await getMeetingMetadata(page, meetingId);
+    console.log(`  メタデータの graspConfigId: ${metadata.graspConfigId || 'なし'}`);
+
+    // ========================================
+    // Step 4: メタデータにDEFAULT設定IDが保存されていることを確認
+    // ========================================
+    console.log('\nStep 4: メタデータにDEFAULT設定IDが保存されていることを確認');
+
+    expect(metadata.graspConfigId).toBeDefined();
+    expect(metadata.graspConfigId).toBe(defaultConfigId);
+    console.log('  ✓ ミーティングメタデータにDEFAULT設定IDが保存されている');
+
+    // ========================================
+    // Step 5: オーケストレータでも同じ設定が使われることを確認
+    // ========================================
+    console.log('\nStep 5: オーケストレータでも同じ設定が使われることを確認');
+
+    const meetingConfig = await getMeetingConfig(page, meetingId);
+
+    expect(meetingConfig.configId).toBe(defaultConfigId);
+    expect(meetingConfig.name).toBe('DEFAULT');
+    console.log('  ✓ オーケストレータでも同じDEFAULT設定が使用されている');
+
+    // YAMLの内容も確認
+    if (meetingConfig.yaml) {
+      expect(meetingConfig.yaml).toContain('metadata-test-grasp');
+      console.log('  ✓ DEFAULT設定のYAMLが正しく使用されている');
+    }
+
+    console.log('\n✅ テスト完了！');
+    console.log('');
+    console.log('確認した項目:');
+    console.log('  ✓ ミーティング作成時にDEFAULT設定IDがメタデータに保存される');
+    console.log('  ✓ オーケストレータが同じ設定を使用する');
+    console.log('  ✓ 設定の一貫性が保たれる');
   });
 });

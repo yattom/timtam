@@ -5,6 +5,7 @@ import { RecallAPIClient, CreateBotRequest, VALID_PLATFORMS, isMeetingPlatform, 
 
 const REGION = process.env.AWS_REGION || 'ap-northeast-1';
 const MEETINGS_METADATA_TABLE = process.env.MEETINGS_METADATA_TABLE || 'timtam-meetings-metadata';
+const GRASP_CONFIGS_TABLE = process.env.GRASP_CONFIGS_TABLE || 'timtam-grasp-configs';
 const RECALL_API_KEY = process.env.RECALL_API_KEY || '';
 const RECALL_API_BASE_URL = process.env.RECALL_API_BASE_URL; // Optional: for local dev, use http://stub-recall:8080
 const RECALL_WEBHOOK_URL = process.env.RECALL_WEBHOOK_URL || ''; // e.g., https://api.timtam.example.com/recall/webhook
@@ -132,6 +133,15 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
     // Generate meeting code (6桁の英数字)
     const meetingCode = await generateMeetingCode();
 
+    // Get DEFAULT grasp config ID if not provided
+    let finalGraspConfigId = graspConfigId;
+    if (!finalGraspConfigId) {
+      const defaultConfigId = await getDefaultGraspConfigId();
+      if (defaultConfigId) {
+        finalGraspConfigId = defaultConfigId;
+      }
+    }
+
     // Save to DynamoDB
     const now = Date.now();
     await ddb.send(
@@ -144,7 +154,7 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
           status: 'active',
           createdAt: now,
           meetingCode,
-          graspConfigId: graspConfigId || undefined, // Store config ID if provided
+          graspConfigId: finalGraspConfigId || undefined, // Store DEFAULT or specified config ID
           recallBot: {
             botId: bot.id,
             meetingUrl,
@@ -162,7 +172,7 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
       meetingId: bot.id,
       platform,
       meetingCode,
-      graspConfigId: graspConfigId || 'default',
+      graspConfigId: finalGraspConfigId || 'none',
       timestamp: now,
     }));
 
@@ -610,6 +620,64 @@ async function deleteMeetingMedia(botId: string): Promise<void> {
       });
     }
   })();
+}
+
+/**
+ * DEFAULT Grasp設定のIDを取得
+ * DynamoDBから name = "DEFAULT" の最新設定を取得する
+ *
+ * @returns DEFAULT設定のconfigId、または null（見つからない場合）
+ */
+async function getDefaultGraspConfigId(): Promise<string | null> {
+  try {
+    const result = await ddb.send(
+      new ScanCommand({
+        TableName: GRASP_CONFIGS_TABLE,
+        FilterExpression: '#name = :defaultName',
+        ExpressionAttributeNames: {
+          '#name': 'name',
+        },
+        ExpressionAttributeValues: {
+          ':defaultName': 'DEFAULT',
+        },
+      })
+    );
+
+    if (!result.Items || result.Items.length === 0) {
+      console.log(JSON.stringify({
+        type: 'graspConfig.noDefaultFound',
+        message: 'No DEFAULT config found in DynamoDB',
+        ts: Date.now(),
+      }));
+      return null;
+    }
+
+    // configId（タイムスタンプ含む）で降順ソートして最新を取得
+    interface ConfigItem {
+      configId: string;
+    }
+
+    const sortedConfigs = (result.Items as ConfigItem[]).sort((a, b) => {
+      return b.configId.localeCompare(a.configId);
+    });
+
+    const latestConfig = sortedConfigs[0];
+
+    console.log(JSON.stringify({
+      type: 'graspConfig.defaultFound',
+      configId: latestConfig.configId,
+      ts: Date.now(),
+    }));
+
+    return latestConfig.configId;
+  } catch (error) {
+    console.error(JSON.stringify({
+      type: 'graspConfig.defaultLookupError',
+      error: (error as Error).message,
+      ts: Date.now(),
+    }));
+    return null;
+  }
 }
 
 /**

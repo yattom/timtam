@@ -196,30 +196,30 @@ export async function loadGraspsForMeeting(
       })
     );
 
-    let yaml: string;
-
-    if (meetingResult.Item?.graspConfigId) {
-      // Load specific config
-      yaml = await loadGraspConfigById(
-        meetingResult.Item.graspConfigId,
-        region,
-        graspConfigsTable
-      );
-      console.log(JSON.stringify({
-        type: 'orchestrator.meeting.graspConfig.specific',
+    // graspConfigId must be present (set by meeting-api)
+    if (!meetingResult.Item?.graspConfigId) {
+      const error = new Error('graspConfigId is undefined in meeting metadata');
+      console.error(JSON.stringify({
+        type: 'orchestrator.meeting.graspConfig.missingConfigId',
         meetingId,
-        configId: meetingResult.Item.graspConfigId,
+        error: error.message,
         ts: Date.now(),
       }));
-    } else {
-      // Load default config
-      yaml = await getDefaultGraspConfig(region, graspConfigsTable);
-      console.log(JSON.stringify({
-        type: 'orchestrator.meeting.graspConfig.default',
-        meetingId,
-        ts: Date.now(),
-      }));
+      throw error;
     }
+
+    // Load specific config by ID
+    const yaml = await loadGraspConfigById(
+      meetingResult.Item.graspConfigId,
+      region,
+      graspConfigsTable
+    );
+    console.log(JSON.stringify({
+      type: 'orchestrator.meeting.graspConfig.loaded',
+      meetingId,
+      configId: meetingResult.Item.graspConfigId,
+      ts: Date.now(),
+    }));
 
     // Parse YAML and build Grasps
     const graspGroupDef: GraspGroupDefinition = parseGraspGroupDefinition(yaml);

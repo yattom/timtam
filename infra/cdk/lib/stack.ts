@@ -179,6 +179,7 @@ export class TimtamInfraStack extends Stack {
       runtime: lambda.Runtime.NODEJS_20_X,
       environment: {
         MEETINGS_METADATA_TABLE: meetingsMetadataTable.tableName,
+        GRASP_CONFIGS_TABLE: graspConfigsTable.tableName,
         RECALL_API_KEY: process.env.RECALL_API_KEY || '', // TODO: Secrets Managerから取得
         RECALL_WEBHOOK_URL: process.env.RECALL_WEBHOOK_URL || '',
         RECALL_TRANSCRIPTION_PROVIDER: process.env.RECALL_TRANSCRIPTION_PROVIDER || 'deepgram_streaming',
@@ -256,6 +257,7 @@ export class TimtamInfraStack extends Stack {
     // Phase 2: Grant permissions for Recall.ai Lambda functions
     transcriptQueue.grantSendMessages(recallWebhookFn);
     meetingsMetadataTable.grantReadWriteData(recallJoinMeetingFn);
+    graspConfigsTable.grantReadData(recallJoinMeetingFn);
     meetingsMetadataTable.grantReadData(recallGetMeetingFn);
     meetingsMetadataTable.grantReadWriteData(recallLeaveMeetingFn);
     meetingsMetadataTable.grantReadData(recallListMeetingsFn);

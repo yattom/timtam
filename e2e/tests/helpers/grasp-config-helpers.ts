@@ -127,6 +127,24 @@ export async function getMeetingConfig(
 }
 
 /**
+ * ミーティングメタデータを取得する（API経由）
+ */
+export async function getMeetingMetadata(
+  page: Page,
+  meetingId: string
+): Promise<any> {
+  const metadata = await page.evaluate(
+    async ({ apiUrl, meetingId }) => {
+      const response = await fetch(`${apiUrl}/recall/meetings/${meetingId}`);
+      return response.json();
+    },
+    { apiUrl: API_URL, meetingId }
+  );
+
+  return metadata;
+}
+
+/**
  * Grasp設定タブを開く
  */
 export async function openGraspConfigTab(page: Page): Promise<void> {
