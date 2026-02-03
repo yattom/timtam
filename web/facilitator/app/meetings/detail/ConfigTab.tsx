@@ -123,7 +123,14 @@ export default function ConfigTab({
                         {group.name}
                       </div>
                       <div className="text-xs text-gray-500">
-                        {new Date(group.latestVersion.createdAt).toLocaleString('ja-JP')}
+                        {new Date(group.latestVersion.createdAt).toLocaleString('ja-JP', {
+                          year: 'numeric',
+                          month: '2-digit',
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          second: '2-digit'
+                        })}
                       </div>
                     </button>
                     {group.versions.length > 1 && (
@@ -153,7 +160,14 @@ export default function ConfigTab({
                           data-testid={`config-version-${version.configId}`}
                         >
                           <div className="text-xs text-gray-500">
-                            {new Date(version.createdAt).toLocaleString('ja-JP')}
+                            {new Date(version.createdAt).toLocaleString('ja-JP', {
+                              year: 'numeric',
+                              month: '2-digit',
+                              day: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit'
+                            })}
                           </div>
                         </button>
                       ))}
