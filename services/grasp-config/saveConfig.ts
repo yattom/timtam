@@ -109,13 +109,14 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
     // Generate configId with name and timestamp
     // Format: {name}_{timestamp} (e.g., "my-config_20260125_003500")
+    // Use UTC methods to ensure consistent timestamp regardless of server timezone
     const timestamp = new Date(createdAt);
-    const year = timestamp.getFullYear();
-    const month = String(timestamp.getMonth() + 1).padStart(2, '0');
-    const day = String(timestamp.getDate()).padStart(2, '0');
-    const hours = String(timestamp.getHours()).padStart(2, '0');
-    const minutes = String(timestamp.getMinutes()).padStart(2, '0');
-    const seconds = String(timestamp.getSeconds()).padStart(2, '0');
+    const year = timestamp.getUTCFullYear();
+    const month = String(timestamp.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(timestamp.getUTCDate()).padStart(2, '0');
+    const hours = String(timestamp.getUTCHours()).padStart(2, '0');
+    const minutes = String(timestamp.getUTCMinutes()).padStart(2, '0');
+    const seconds = String(timestamp.getUTCSeconds()).padStart(2, '0');
     const timestampStr = `${year}${month}${day}_${hours}${minutes}${seconds}`;
 
     // Sanitize name for use in ID (remove special characters)
