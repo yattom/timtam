@@ -16,7 +16,7 @@ const sqs = new SQSClient({});
 /**
  * POST /meetings/{meetingId}/grasp-config
  * Apply a Grasp configuration to a specific meeting
- * Body: { configId: string } or { yaml: string }
+ * Body: { configId: string }
  */
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   try {
@@ -49,40 +49,34 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         };
       }
     }
-    const { configId, yaml: directYaml } = body;
+    const { configId } = body;
 
-    let yaml: string;
-    let configName: string | undefined;
-
-    if (configId) {
-      // Retrieve config from DynamoDB
-      const result = await ddb.send(
-        new GetCommand({
-          TableName: GRASP_CONFIGS_TABLE,
-          Key: { configId },
-        })
-      );
-
-      if (!result.Item) {
-        return {
-          statusCode: 404,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ok: false, error: 'Configuration not found' }),
-        };
-      }
-
-      yaml = result.Item.yaml;
-      configName = result.Item.name;
-    } else if (directYaml) {
-      // Use YAML directly from request
-      yaml = directYaml;
-    } else {
+    if (!configId) {
       return {
         statusCode: 400,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ok: false, error: 'Either configId or yaml is required' }),
+        body: JSON.stringify({ ok: false, error: 'configId is required' }),
       };
     }
+
+    // Retrieve config from DynamoDB
+    const result = await ddb.send(
+      new GetCommand({
+        TableName: GRASP_CONFIGS_TABLE,
+        Key: { configId },
+      })
+    );
+
+    if (!result.Item) {
+      return {
+        statusCode: 404,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ok: false, error: 'Configuration not found' }),
+      };
+    }
+
+    const yaml = result.Item.yaml;
+    const configName = result.Item.name;
 
     // Validate YAML format
     if (typeof yaml !== 'string' || yaml.trim() === '') {
@@ -115,7 +109,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         Key: { meetingId },
         UpdateExpression: 'SET graspConfigId = :configId',
         ExpressionAttributeValues: {
-          ':configId': configId || null,
+          ':configId': configId,
         },
       })
     );

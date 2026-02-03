@@ -62,7 +62,6 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
   const [isEditingYaml, setIsEditingYaml] = useState(false);
   const [editedYaml, setEditedYaml] = useState<string>("");
   const [configName, setConfigName] = useState<string>("");
-  const [customYaml, setCustomYaml] = useState<string>("");
   const [configLoading, setConfigLoading] = useState(false);
   const [applySuccess, setApplySuccess] = useState(false);
 
@@ -187,18 +186,26 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
         if (currentResponse.ok) {
           const currentData = await currentResponse.json();
           setCurrentConfig({
-            configId: currentData.configId,
-            name: currentData.name,
-            yaml: currentData.yaml,
+            configId: currentData.configId || null,
+            name: currentData.name || null,
+            yaml: currentData.yaml || null,
           });
         } else {
-          // Explicitly indicate that no config is applied if loading fails
-          setCurrentConfig(null);
+          // Set empty config to indicate no config is applied
+          setCurrentConfig({
+            configId: null,
+            name: null,
+            yaml: null,
+          });
         }
       } catch (err) {
         console.error('Failed to load Grasp configs', err);
         // Ensure state reflects that no config is applied on error
-        setCurrentConfig(null);
+        setCurrentConfig({
+          configId: null,
+          name: null,
+          yaml: null,
+        });
       } finally {
         setConfigLoading(false);
       }
@@ -223,7 +230,6 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
       setEditedYaml(data.config.yaml);
       setConfigName(name);
       setIsEditingYaml(false);
-      setCustomYaml('');
     } catch (err) {
       alert(err instanceof Error ? err.message : '設定の取得に失敗しました');
     }
@@ -299,16 +305,16 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
       }
 
       // Apply config to meeting
-      const body = configIdToApply
-        ? { configId: configIdToApply }
-        : { yaml: customYaml };
+      if (!configIdToApply) {
+        throw new Error('設定が選択されていません');
+      }
 
       const response = await fetch(`${apiUrl}/meetings/${meetingId}/grasp-config`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ configId: configIdToApply }),
       });
 
       if (!response.ok) {
@@ -319,21 +325,13 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
       const result = await response.json();
 
       // Update current config
-      if (result.configId) {
-        const configResponse = await fetch(`${apiUrl}/grasp/configs/${result.configId}`);
-        if (configResponse.ok) {
-          const configData = await configResponse.json();
-          setCurrentConfig({
-            configId: result.configId,
-            name: result.configName,
-            yaml: configData.config.yaml,
-          });
-        }
-      } else {
+      const configResponse = await fetch(`${apiUrl}/grasp/configs/${result.configId}`);
+      if (configResponse.ok) {
+        const configData = await configResponse.json();
         setCurrentConfig({
-          configId: null,
-          name: null,
-          yaml: customYaml,
+          configId: result.configId,
+          name: result.configName,
+          yaml: configData.config.yaml,
         });
       }
 
@@ -610,14 +608,12 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
                 editedYaml={editedYaml}
                 isEditingYaml={isEditingYaml}
                 configName={configName}
-                customYaml={customYaml}
                 configLoading={configLoading}
                 applySuccess={applySuccess}
                 onSelectConfig={handleSelectConfig}
                 onToggleVersionExpansion={toggleVersionExpansion}
                 onEditYamlChange={setEditedYaml}
                 onConfigNameChange={setConfigName}
-                onCustomYamlChange={setCustomYaml}
                 onApplyConfig={handleApplyConfig}
                 onToggleEditMode={toggleEditMode}
               />
