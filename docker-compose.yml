@@ -112,6 +112,11 @@ services:
     depends_on:
       api-server:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # E2E Tests (run on-demand, not auto-started)
   e2e-tests:
@@ -139,7 +144,7 @@ services:
       api-server:
         condition: service_healthy
       facilitator:
-        condition: service_started
+        condition: service_healthy
 
 networks:
   timtam-local:

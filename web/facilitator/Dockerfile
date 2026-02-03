@@ -3,6 +3,9 @@ FROM node:22-slim
 
 WORKDIR /app
 
+# curlをインストール（healthcheck用）
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
 # pnpmをインストール
 RUN npm install -g pnpm@9
 
