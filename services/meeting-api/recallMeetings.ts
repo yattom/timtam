@@ -137,9 +137,22 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
     let finalGraspConfigId = graspConfigId;
     if (!finalGraspConfigId) {
       const defaultConfigId = await getDefaultGraspConfigId();
-      if (defaultConfigId) {
-        finalGraspConfigId = defaultConfigId;
+      if (!defaultConfigId) {
+        // If DEFAULT config is expected but not found, fail the request
+        console.error(JSON.stringify({
+          type: 'recall.meeting.defaultConfigNotFound',
+          message: 'DEFAULT Grasp config not found, cannot create meeting without graspConfigId',
+          ts: Date.now(),
+        }));
+        return {
+          statusCode: 500,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            error: 'DEFAULT Grasp configuration not found. Please create a DEFAULT config first.' 
+          }),
+        };
       }
+      finalGraspConfigId = defaultConfigId;
     }
 
     // Save to DynamoDB
@@ -154,7 +167,7 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
           status: 'active',
           createdAt: now,
           meetingCode,
-          graspConfigId: finalGraspConfigId || undefined, // Store DEFAULT or specified config ID
+          graspConfigId: finalGraspConfigId, // Always set (DEFAULT or specified config ID)
           recallBot: {
             botId: bot.id,
             meetingUrl,
@@ -172,7 +185,7 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
       meetingId: bot.id,
       platform,
       meetingCode,
-      graspConfigId: finalGraspConfigId || 'none',
+      graspConfigId: finalGraspConfigId,
       timestamp: now,
     }));
 
