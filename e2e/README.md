@@ -91,7 +91,7 @@ pnpm run test:debug
 例：
 
 ```bash
-BASE_URL=https://your-timtam-deployment.com npm test
+BASE_URL=https://your-timtam-deployment.com pnpm test
 ```
 
 ## テストタグ
