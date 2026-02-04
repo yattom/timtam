@@ -1,0 +1,21 @@
+# Node modules (will be reinstalled)
+node_modules
+
+# Build outputs
+playwright-report
+test-results
+
+# Environment files
+.env*
+
+# Git
+.git
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Logs
+*.log

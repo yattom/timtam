@@ -22,7 +22,7 @@ import { execSync } from 'child_process';
 const FACILITATOR_URL = process.env.FACILITATOR_URL || 'http://localhost:3001';
 const STUB_RECALL_URL = process.env.STUB_RECALL_URL || 'http://localhost:8080';
 
-test.describe('ローカル環境サニティチェック', () => {
+test.describe('ローカル環境サニティチェック', { tag: '@local' }, () => {
   test.setTimeout(120000); // 2分のタイムアウト
 
   // 各テストケースの前にDynamoDBテーブルとSQSキューのデータをクリア

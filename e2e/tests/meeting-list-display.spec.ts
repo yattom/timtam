@@ -34,7 +34,7 @@ const ddb = DynamoDBDocumentClient.from(ddbClient, {
   },
 });
 
-test.describe('会議リスト表示', () => {
+test.describe('会議リスト表示', { tag: '@local' }, () => {
   test.setTimeout(60000); // 1分のタイムアウト
 
   // 各テストケースの前にDynamoDBテーブルとSQSキューのデータをクリア

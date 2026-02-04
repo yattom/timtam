@@ -29,28 +29,57 @@ npx playwright install chromium
 
 ## テストの実行
 
-### 基本的な実行
+### Docker環境での実行（推奨）
+
+ローカル環境用のE2Eテストは、`docker compose`を使って実行することを推奨します。この方法では、依存関係やブラウザのインストールが不要です。
 
 ```bash
-npm test
+# ローカル環境用テスト全体を実行
+docker compose run --rm e2e-tests
+
+# 特定のテストファイルを実行
+docker compose run --rm e2e-tests pnpm test -- local-sanity.spec.ts
+
+# ローカル環境用テストのみ実行（@localタグ）
+docker compose run --rm e2e-tests pnpm test:local-only
+
+# AWS環境用テストのみ実行（@awsタグ）
+docker compose run --rm e2e-tests pnpm test:aws-only
+```
+
+**注意**: facilitatorもコンテナ化されているため、`docker compose up -d`で起動しておく必要があります。
+
+### ホスト側での実行
+
+従来通り、ホスト側で直接実行することもできます：
+
+```bash
+# 基本的な実行
+pnpm test
+
+# ローカル環境用テストのみ
+pnpm test:local-only
+
+# AWS環境用テストのみ
+pnpm test:aws-only
 ```
 
 ### ヘッド付きモードで実行（ブラウザを表示）
 
 ```bash
-npm run test:headed
+pnpm run test:headed
 ```
 
 ### UIモードで実行（インタラクティブ）
 
 ```bash
-npm run test:ui
+pnpm run test:ui
 ```
 
 ### デバッグモード
 
 ```bash
-npm run test:debug
+pnpm run test:debug
 ```
 
 ## 環境変数
@@ -62,17 +91,37 @@ npm run test:debug
 例：
 
 ```bash
-BASE_URL=https://your-timtam-deployment.com npm test
+BASE_URL=https://your-timtam-deployment.com pnpm test
+```
+
+## テストタグ
+
+テストは環境別にタグ付けされています：
+
+- `@local`: ローカル環境用テスト（LocalStack + Recall Stub使用）
+- `@aws`: AWS環境用テスト（Chime SDK等の本番サービス使用）
+
+タグを使ったテスト実行：
+```bash
+# ローカル環境用テストのみ実行
+pnpm test:local-only  # または: pnpm test -- --grep @local
+
+# AWS環境用テストのみ実行
+pnpm test:aws-only    # または: pnpm test -- --grep @aws
 ```
 
 ## テストケース
 
-### local-sanity.spec.ts
+### local-sanity.spec.ts (タグ: @local)
 
 ローカル開発環境のサニティチェックテストです：
 
-**前提条件：**
-- `docker-compose up -d` ですべてのサービスが起動している
+**前提条件（Docker環境）：**
+- `docker compose up -d` ですべてのサービス（facilitator含む）が起動している
+- `pnpm run local:setup` でLocalStackリソースが作成されている
+
+**前提条件（ホスト実行）：**
+- `docker-compose up -d` でバックエンドサービスが起動している
 - `pnpm run local:setup` でLocalStackリソースが作成されている
 - `web/facilitator` で `pnpm run dev` が起動している（ポート3001）
 
@@ -87,17 +136,21 @@ BASE_URL=https://your-timtam-deployment.com npm test
 
 **実行方法：**
 ```bash
+# Docker環境
+docker compose run --rm e2e-tests pnpm test -- local-sanity.spec.ts
+
+# ホスト側
 cd e2e
-npm test -- local-sanity.spec.ts
+pnpm test -- local-sanity.spec.ts
 ```
 
 **環境変数：**
 - `FACILITATOR_URL`: Facilitator UIのURL（デフォルト: `http://localhost:3001`）
 - `STUB_RECALL_URL`: stub-recallaiのURL（デフォルト: `http://localhost:8080`）
 
-### golden-path.spec.ts
+### golden-path.spec.ts (タグ: @aws)
 
-会議の基本的なゴールデンパステストを実行します（本番環境用）：
+会議の基本的なゴールデンパステストを実行します（AWS本番環境用）：
 
 1. ページを開く
 2. 自分の名前を設定する

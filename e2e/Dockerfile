@@ -1,0 +1,41 @@
+# E2Eテスト実行用コンテナ
+FROM mcr.microsoft.com/playwright:v1.58.1-jammy
+
+WORKDIR /app
+
+# socat をインストール（localhost:3000 を api-server:3000 にリダイレクトするため）
+RUN apt-get update && apt-get install -y socat curl && rm -rf /var/lib/apt/lists/*
+
+# uv をインストール（Pythonタスクランナー用）
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:${PATH}"
+
+# Python依存関係をインストール（invoke, boto3など）
+COPY pyproject.toml tasks.py /root/
+COPY invoke_tasks /root/invoke_tasks
+WORKDIR /root
+RUN uv sync
+ENV PATH="/root/.venv/bin:${PATH}"
+WORKDIR /app
+
+# pnpmをインストール
+RUN npm install -g pnpm@9
+
+# package.json をコピー
+COPY e2e/package.json ./
+
+# 依存関係をインストール（pnpm-lock.yamlなしで）
+RUN pnpm install
+
+# entrypoint スクリプトをコピー
+COPY e2e/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# テストコードをコピー
+COPY e2e/ .
+
+# entrypoint を設定
+ENTRYPOINT ["/entrypoint.sh"]
+
+# デフォルトコマンド（すべてのローカル環境テストを実行）
+CMD ["pnpm", "test:local-only"]

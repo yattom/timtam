@@ -23,7 +23,7 @@ import { execSync } from 'child_process';
 const FACILITATOR_URL = process.env.FACILITATOR_URL || 'http://localhost:3001';
 const API_URL = process.env.API_URL || 'http://localhost:3000';
 
-test.describe('UC01: 会議のGrasp設定を調整する', () => {
+test.describe('UC01: 会議のGrasp設定を調整する', { tag: '@local' }, () => {
   test.setTimeout(120000); // 2分のタイムアウト
 
   // 各テストケースの前にDynamoDBテーブルとSQSキューのデータをクリア

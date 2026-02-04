@@ -9,7 +9,8 @@ build
 **/build
 
 # Test files
-e2e/
+# e2e/ は e2e-tests コンテナで必要なのでコメントアウト
+# e2e/
 **/*.test.ts
 **/*.spec.ts
 coverage/

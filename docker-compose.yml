@@ -96,6 +96,58 @@ services:
     networks:
       - timtam-local
 
+  # Facilitator Web UI (Next.js dev server with hot reload)
+  facilitator:
+    build: ./web/facilitator
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./web/facilitator:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:3000
+    networks:
+      - timtam-local
+    depends_on:
+      api-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # E2E Tests (run on-demand, not auto-started)
+  e2e-tests:
+    build:
+      context: .
+      dockerfile: ./e2e/Dockerfile
+    profiles:
+      - test
+    environment:
+      - FACILITATOR_URL=http://facilitator:3001
+      - STUB_RECALL_URL=http://recall-stub:8080
+      - BASE_URL=http://facilitator:3001
+      - API_URL=http://api-server:3000
+      - LOCALSTACK_ENDPOINT=http://localstack:4566
+    volumes:
+      - ./e2e:/app
+      - /app/node_modules
+      - ./e2e/test-results:/app/test-results
+      - ./e2e/playwright-report:/app/playwright-report
+    networks:
+      - timtam-local
+    depends_on:
+      localstack:
+        condition: service_healthy
+      recall-stub:
+        condition: service_healthy
+      api-server:
+        condition: service_healthy
+      facilitator:
+        condition: service_healthy
+
 networks:
   timtam-local:
     driver: bridge

@@ -11,7 +11,9 @@
     "test:ui": "playwright test --ui",
     "test:local": "playwright test local-sanity.spec.ts",
     "test:local:headed": "playwright test local-sanity.spec.ts --headed",
-    "test:local:debug": "playwright test local-sanity.spec.ts --debug"
+    "test:local:debug": "playwright test local-sanity.spec.ts --debug",
+    "test:local-only": "playwright test --grep @local",
+    "test:aws-only": "playwright test --grep @aws"
   },
   "devDependencies": {
     "@playwright/test": "^1.48.2",

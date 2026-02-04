@@ -26,7 +26,7 @@ import {
  * - web/facilitator で pnpm run dev が起動している（ポート3001）
  */
 
-test.describe('UC04: システムにGrasp設定を保存する', () => {
+test.describe('UC04: システムにGrasp設定を保存する', { tag: '@local' }, () => {
   test.setTimeout(120000); // 2分のタイムアウト
 
   // 各テストケースの前にDynamoDBテーブルとSQSキューのデータをクリア
