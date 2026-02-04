@@ -1,6 +1,14 @@
 {
   "permissions": {
     "allow": [
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_take_screenshot",
+      "mcp__playwright__browser_type",
+      "mcp__playwright__browser_wait_for",
+      "Skill(generate-commit-message)",
+      "Skill(manage-adr)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
       "WebSearch",
       "Bash(docker-compose up:*)",
       "Bash(docker-compose ps:*)",
@@ -38,7 +46,29 @@
       "Bash(aws logs get-log-events:*)",
       "Bash(aws logs tail:*)",
       "Bash(aws s3 ls:*)",
-      "Bash(aws transcribe get-transcription-job:*)"
+      "Bash(aws transcribe get-transcription-job:*)",
+      "Bash(pnpm test:*)",
+      "Bash(pnpm -C services/orchestrator run test)",
+      "Bash(pnpm run test:*)",
+      "Bash(pnpm build:*)",
+      "Bash(pnpm run cdk:synth:*)",
+      "Bash(pnpm run sync-schema:*)",
+      "Bash(pnpm run local:reset:*)",
+      "Bash(pnpm run local:setup:*)",
+      "Bash(pnpm run e2e:test:local:*)",
+      "Bash(aws cloudfront list-distributions:*)",
+      "Bash(aws sqs list-queues:*)",
+      "Bash(aws kinesis:*)",
+      "Bash(npm test:*)",
+      "Bash(git log:*)",
+      "Bash(npx tsc:*)",
+      "Skill(git-commit)",
+      "Bash(BASE_URL=https://d2jpmvoh7dgxe.cloudfront.net pnpm e2e:test:ci:*)",
+      "Bash(pnpm orchestrator:build:*)",
+      "WebFetch(domain:docs.recall.ai)",
+      "Bash(docker compose logs:*)",
+      "Bash(docker compose:*)",
+      "Bash(tee:*)"
     ]
   }
 }
