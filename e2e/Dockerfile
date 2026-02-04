@@ -1,5 +1,5 @@
 # E2Eテスト実行用コンテナ
-FROM mcr.microsoft.com/playwright:v1.48.2-jammy
+FROM mcr.microsoft.com/playwright:v1.58.1-jammy
 
 WORKDIR /app
 
