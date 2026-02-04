@@ -1,7 +1,18 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, ScanCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
 import { parseGraspGroupDefinition, GraspGroupDefinition } from './graspConfigParser';
 import { Grasp, LLMClient, GraspConfig } from './grasp';
+
+/**
+ * Error thrown when graspConfigId is missing from meeting metadata
+ * This error should propagate and not fall back to defaults
+ */
+export class MissingGraspConfigIdError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'MissingGraspConfigIdError';
+  }
+}
 
 /**
  * Build Grasp instances from a GraspGroupDefinition
@@ -101,74 +112,6 @@ export async function loadGraspConfigById(
 }
 
 /**
- * Get the latest DEFAULT-* Grasp configuration
- * @param region AWS region
- * @param graspConfigsTable Table name for grasp configs
- * @returns YAML configuration string (or hardcoded default if none found)
- */
-export async function getDefaultGraspConfig(
-  region: string,
-  graspConfigsTable: string
-): Promise<string> {
-  const ddbClient = new DynamoDBClient({ region });
-  const ddb = DynamoDBDocumentClient.from(ddbClient);
-
-  try {
-    // Scan for configs with name 'DEFAULT'
-    const result = await ddb.send(
-      new ScanCommand({
-        TableName: graspConfigsTable,
-        FilterExpression: '#name = :defaultName',
-        ExpressionAttributeNames: {
-          '#name': 'name',
-        },
-        ExpressionAttributeValues: {
-          ':defaultName': 'DEFAULT',
-        },
-      })
-    );
-
-    if (!result.Items || result.Items.length === 0) {
-      console.log(JSON.stringify({
-        type: 'orchestrator.graspConfig.noDefaultFound',
-        message: 'No DEFAULT config found, using hardcoded default',
-        ts: Date.now(),
-      }));
-      return DEFAULT_GRASP_YAML;
-    }
-
-    // Sort by configId (which contains timestamp) to get the latest
-    interface ConfigItem {
-      configId: string;
-      yaml?: string;
-    }
-    
-    const sortedConfigs = (result.Items as ConfigItem[]).sort((a, b) => {
-      return b.configId.localeCompare(a.configId);
-    });
-
-    const latestConfig = sortedConfigs[0];
-
-    console.log(JSON.stringify({
-      type: 'orchestrator.graspConfig.defaultLoaded',
-      configId: latestConfig.configId,
-      yamlLength: latestConfig.yaml?.length || 0,
-      ts: Date.now(),
-    }));
-
-    return latestConfig.yaml || DEFAULT_GRASP_YAML;
-  } catch (error) {
-    console.error(JSON.stringify({
-      type: 'orchestrator.graspConfig.defaultLoadError',
-      error: (error as Error).message,
-      message: 'Falling back to hardcoded default',
-      ts: Date.now(),
-    }));
-    return DEFAULT_GRASP_YAML;
-  }
-}
-
-/**
  * Load Grasp configuration for a meeting
  * @param meetingId Meeting ID
  * @param region AWS region
@@ -196,30 +139,30 @@ export async function loadGraspsForMeeting(
       })
     );
 
-    let yaml: string;
-
-    if (meetingResult.Item?.graspConfigId) {
-      // Load specific config
-      yaml = await loadGraspConfigById(
-        meetingResult.Item.graspConfigId,
-        region,
-        graspConfigsTable
-      );
-      console.log(JSON.stringify({
-        type: 'orchestrator.meeting.graspConfig.specific',
+    // graspConfigId must be present (set by meeting-api)
+    if (!meetingResult.Item?.graspConfigId) {
+      const error = new MissingGraspConfigIdError('graspConfigId is undefined in meeting metadata');
+      console.error(JSON.stringify({
+        type: 'orchestrator.meeting.graspConfig.missingConfigId',
         meetingId,
-        configId: meetingResult.Item.graspConfigId,
+        error: error.message,
         ts: Date.now(),
       }));
-    } else {
-      // Load default config
-      yaml = await getDefaultGraspConfig(region, graspConfigsTable);
-      console.log(JSON.stringify({
-        type: 'orchestrator.meeting.graspConfig.default',
-        meetingId,
-        ts: Date.now(),
-      }));
+      throw error;
     }
+
+    // Load specific config by ID
+    const yaml = await loadGraspConfigById(
+      meetingResult.Item.graspConfigId,
+      region,
+      graspConfigsTable
+    );
+    console.log(JSON.stringify({
+      type: 'orchestrator.meeting.graspConfig.loaded',
+      meetingId,
+      configId: meetingResult.Item.graspConfigId,
+      ts: Date.now(),
+    }));
 
     // Parse YAML and build Grasps
     const graspGroupDef: GraspGroupDefinition = parseGraspGroupDefinition(yaml);
@@ -234,6 +177,12 @@ export async function loadGraspsForMeeting(
 
     return grasps;
   } catch (error) {
+    // If graspConfigId is missing, this is a real error that should propagate
+    if (error instanceof MissingGraspConfigIdError) {
+      throw error;
+    }
+
+    // For other errors (config not found, parsing errors, etc.), fall back to default
     console.error(JSON.stringify({
       type: 'orchestrator.meeting.grasps.buildError',
       meetingId,
