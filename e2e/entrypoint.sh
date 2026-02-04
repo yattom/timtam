@@ -7,6 +7,11 @@ set -e
 echo "Starting port forwarding: localhost:3000 -> api-server:3000"
 socat TCP-LISTEN:3000,fork,reuseaddr TCP:api-server:3000 &
 
+# localhost:4566 を localstack:4566 にリダイレクト
+# invokeタスクがLocalStackにアクセスできるようにする
+echo "Starting port forwarding: localhost:4566 -> localstack:4566"
+socat TCP-LISTEN:4566,fork,reuseaddr TCP:localstack:4566 &
+
 # Python invoke タスク用のシンボリックリンクを作成
 # docker-compose.ymlのボリュームマウントで上書きされるため、起動時に作成
 ln -sf /root/tasks.py /app/tasks.py
