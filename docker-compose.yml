@@ -132,7 +132,8 @@ services:
       - API_URL=http://api-server:3000
       - LOCALSTACK_ENDPOINT=http://localstack:4566
     volumes:
-      - ./e2e:/app
+      # テストコードのみマウント（ホットリロード用）
+      - ./e2e/tests:/app/tests
       - /app/node_modules
       - ./e2e/test-results:/app/test-results
       - ./e2e/playwright-report:/app/playwright-report
