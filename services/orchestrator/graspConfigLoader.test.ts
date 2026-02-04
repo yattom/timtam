@@ -268,7 +268,7 @@ grasps:
   - nodeId: grasp-1
     intervalSec: 10
     outputHandler: chat
-    promptTemplate: "Prompt 1"
+    promptTemplate: "Prompt 1 {{NOTES:notes-tag}}"
   - nodeId: grasp-2
     intervalSec: 20
     outputHandler: note
