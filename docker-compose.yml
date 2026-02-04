@@ -121,8 +121,8 @@ services:
   # E2E Tests (run on-demand, not auto-started)
   e2e-tests:
     build:
-      context: ./e2e
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./e2e/Dockerfile
     profiles:
       - test
     environment:
