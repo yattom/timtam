@@ -3,17 +3,27 @@ FROM mcr.microsoft.com/playwright:v1.48.2-jammy
 
 WORKDIR /app
 
+# socat をインストール（localhost:3000 を api-server:3000 にリダイレクトするため）
+RUN apt-get update && apt-get install -y socat && rm -rf /var/lib/apt/lists/*
+
 # pnpmをインストール
 RUN npm install -g pnpm@9
 
-# package.json と ルートの pnpm-lock.yaml をコピー
-COPY package.json ../pnpm-lock.yaml ./
+# package.json をコピー
+COPY package.json ./
 
-# 依存関係をインストール
-RUN pnpm install --frozen-lockfile
+# 依存関係をインストール（pnpm-lock.yamlなしで）
+RUN pnpm install
+
+# entrypoint スクリプトをコピー
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # テストコードをコピー
 COPY . .
+
+# entrypoint を設定
+ENTRYPOINT ["/entrypoint.sh"]
 
 # デフォルトコマンド（すべてのローカル環境テストを実行）
 CMD ["pnpm", "test:local-only"]
