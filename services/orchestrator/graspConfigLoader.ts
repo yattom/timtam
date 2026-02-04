@@ -4,6 +4,17 @@ import { parseGraspGroupDefinition, GraspGroupDefinition } from './graspConfigPa
 import { Grasp, LLMClient, GraspConfig } from './grasp';
 
 /**
+ * Error thrown when graspConfigId is missing from meeting metadata
+ * This error should propagate and not fall back to defaults
+ */
+export class MissingGraspConfigIdError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'MissingGraspConfigIdError';
+  }
+}
+
+/**
  * Build Grasp instances from a GraspGroupDefinition
  */
 export function buildGraspsFromDefinition(graspGroupDef: GraspGroupDefinition, llmClient: LLMClient): Grasp[] {
@@ -130,7 +141,7 @@ export async function loadGraspsForMeeting(
 
     // graspConfigId must be present (set by meeting-api)
     if (!meetingResult.Item?.graspConfigId) {
-      const error = new Error('graspConfigId is undefined in meeting metadata');
+      const error = new MissingGraspConfigIdError('graspConfigId is undefined in meeting metadata');
       console.error(JSON.stringify({
         type: 'orchestrator.meeting.graspConfig.missingConfigId',
         meetingId,
@@ -166,6 +177,12 @@ export async function loadGraspsForMeeting(
 
     return grasps;
   } catch (error) {
+    // If graspConfigId is missing, this is a real error that should propagate
+    if (error instanceof MissingGraspConfigIdError) {
+      throw error;
+    }
+
+    // For other errors (config not found, parsing errors, etc.), fall back to default
     console.error(JSON.stringify({
       type: 'orchestrator.meeting.grasps.buildError',
       meetingId,
