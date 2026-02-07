@@ -1,21 +1,25 @@
 from invoke import task
 import boto3
 
-from invoke_tasks import clear_dynamodb_table, purge_sqs_queue, seed_default_grasp_config
+from invoke_tasks import log, clear_dynamodb_table, purge_sqs_queue, seed_default_grasp_config
+
 
 @task
-def hello(c, name='yattom'):
+def hello(c, name='yattom', verbose=False):
     """Say hello to someone"""
-    print(f"Hello, {name}!")
+    log.set_verbose(verbose)
+    log(f"Hello, {name}!")
+    log.error('This is an example of an error message')
 
 
 @task
-def delete_localstack_data(c):
+def delete_localstack_data(c, verbose=False):
     """Clear all data from LocalStack DynamoDB tables and SQS queues."""
-    print("=========================================")
-    print("Clearing LocalStack data...")
-    print("=========================================")
-    print()
+    log.set_verbose(verbose)
+    log("=========================================")
+    log("Clearing LocalStack data...")
+    log("=========================================")
+    log()
 
     # DynamoDB setup
     dynamodb = boto3.resource(
@@ -38,9 +42,9 @@ def delete_localstack_data(c):
         try:
             clear_dynamodb_table(dynamodb, table_name)
         except Exception as e:
-            print(f"  → Error clearing {table_name}: {e}")
+            log.error(f"  → Error clearing {table_name}: {e}")
 
-    print()
+    log()
 
     # SQS setup
     sqs = boto3.client(
@@ -61,19 +65,20 @@ def delete_localstack_data(c):
     for queue_url in queues:
         purge_sqs_queue(sqs, queue_url)
 
-    print()
-    print("=========================================")
-    print("Data cleared!")
-    print("=========================================")
+    log()
+    log("=========================================")
+    log("Data cleared!")
+    log("=========================================")
 
 
 @task
-def seed_default_config_local(c):
+def seed_default_config_local(c, verbose=False):
     """Seed default Grasp configuration to LocalStack."""
-    print("=========================================")
-    print("Seeding default Grasp configuration (LocalStack)...")
-    print("=========================================")
-    print()
+    log.set_verbose(verbose)
+    log("=========================================")
+    log("Seeding default Grasp configuration (LocalStack)...")
+    log("=========================================")
+    log()
 
     # DynamoDB setup for LocalStack
     dynamodb = boto3.resource(
@@ -86,19 +91,20 @@ def seed_default_config_local(c):
 
     seed_default_grasp_config(dynamodb, 'timtam-grasp-configs')
 
-    print()
-    print("=========================================")
-    print("Default config seeded!")
-    print("=========================================")
+    log()
+    log("=========================================")
+    log("Default config seeded!")
+    log("=========================================")
 
 
 @task
-def seed_default_config_aws(c, region='ap-northeast-1', profile='admin'):
+def seed_default_config_aws(c, region='ap-northeast-1', profile='admin', verbose=False):
     """Seed default Grasp configuration to AWS."""
-    print("=========================================")
-    print("Seeding default Grasp configuration (AWS)...")
-    print("=========================================")
-    print()
+    log.set_verbose(verbose)
+    log("=========================================")
+    log("Seeding default Grasp configuration (AWS)...")
+    log("=========================================")
+    log()
 
     # DynamoDB setup for AWS with explicit profile
     session = boto3.Session(profile_name=profile, region_name=region)
@@ -106,8 +112,8 @@ def seed_default_config_aws(c, region='ap-northeast-1', profile='admin'):
 
     seed_default_grasp_config(dynamodb, 'timtam-grasp-configs')
 
-    print()
-    print("=========================================")
-    print("Default config seeded!")
-    print("=========================================")
+    log()
+    log("=========================================")
+    log("Default config seeded!")
+    log("=========================================")
 
