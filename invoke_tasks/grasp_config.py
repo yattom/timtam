@@ -5,7 +5,7 @@ from datetime import datetime
 from . import log
 
 
-def seed_default_grasp_config(dynamodb, table_name='timtam-grasp-configs'):
+def seed_default_grasp_config(dynamodb, config_path=None, table_name='timtam-grasp-configs'):
     """
     Seed the default Grasp configuration to DynamoDB.
 
@@ -18,7 +18,10 @@ def seed_default_grasp_config(dynamodb, table_name='timtam-grasp-configs'):
         table_name: Name of the Grasp configs table
     """
     # Read default config file
-    config_path = Path(__file__).parent.parent / 'infra' / 'default-grasp-config' / 'default.json'
+    if config_path is None:
+        config_path = Path(__file__).parent.parent / 'infra' / 'default-grasp-config' / 'default.json'
+    else:
+        config_path = Path(config_path)
 
     if not config_path.exists():
         log(f"  ⚠ Default config file not found: {config_path}")

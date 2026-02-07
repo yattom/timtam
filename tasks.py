@@ -64,7 +64,7 @@ def delete_localstack_data(c, verbose=False):
 
 
 @task
-def seed_default_config_local(c, verbose=False):
+def seed_default_config_local(c, config_path=None, verbose=False):
     """Seed default Grasp configuration to LocalStack."""
     log.set_verbose(verbose)
     log("=========================================")
@@ -72,7 +72,7 @@ def seed_default_config_local(c, verbose=False):
     log("=========================================")
     log()
 
-    seed_default_grasp_config(localstack.get_dynamodb(), 'timtam-grasp-configs')
+    seed_default_grasp_config(localstack.get_dynamodb(), config_path, 'timtam-grasp-configs')
 
     log()
     log("=========================================")
@@ -89,7 +89,7 @@ def seed_default_config_aws(c, region='ap-northeast-1', profile='admin', verbose
     log("=========================================")
     log()
 
-    seed_default_grasp_config(aws.get_dynamodb(profile, region), 'timtam-grasp-configs')
+    seed_default_grasp_config(aws.get_dynamodb(profile, region), config_path, 'timtam-grasp-configs')
 
     log()
     log("=========================================")
@@ -121,5 +121,5 @@ def start_local_dev(c, verbose=False):
                 raise RuntimeError("localstack did not become healthy.")
 
         c.run("pnpm sync-schema")
-        seed_default_config_local(c, verbose)
+        seed_default_config_local(c, None, verbose)
 
