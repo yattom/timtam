@@ -1,8 +1,13 @@
 from invoke import task
+import time
+import os
 
 from invoke_tasks import log, clear_dynamodb_table, purge_sqs_queue, seed_default_grasp_config
 from invoke_tasks import aws_resources as aws
 from invoke_tasks import localstack_resources as localstack
+
+
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 
 @task
@@ -90,4 +95,31 @@ def seed_default_config_aws(c, region='ap-northeast-1', profile='admin', verbose
     log("=========================================")
     log("Default config seeded!")
     log("=========================================")
+
+
+@task
+def start_local_dev(c, verbose=False):
+    """Start local development servers.  docker compose up and then initialize data."""
+    log.set_verbose(verbose)
+    log("=========================================")
+    log("Starting Local Development Servers ...")
+    log("=========================================")
+    log()
+
+    with c.cd(PROJECT_ROOT):
+        c.run('docker compose build')
+        c.run('docker compose up -d')
+
+        start_at = time.time()
+        while True:
+            result = c.run("docker compose ps --format '{{.Status}}' localstack", hide=True)
+            if 'healthy' in result.stdout.lower():
+                break
+            time.sleep(1)
+
+            if time.time() - start_at > 60:
+                raise RuntimeError("localstack did not become healthy.")
+
+        c.run("pnpm sync-schema")
+        seed_default_config_local(c, verbose)
 
