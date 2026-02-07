@@ -1,7 +1,8 @@
 from invoke import task
-import boto3
 
 from invoke_tasks import log, clear_dynamodb_table, purge_sqs_queue, seed_default_grasp_config
+from invoke_tasks import aws_resources as aws
+from invoke_tasks import localstack_resources as localstack
 
 
 @task
@@ -21,14 +22,6 @@ def delete_localstack_data(c, verbose=False):
     log("=========================================")
     log()
 
-    # DynamoDB setup
-    dynamodb = boto3.resource(
-        'dynamodb',
-        endpoint_url='http://localhost:4566',
-        region_name='ap-northeast-1',
-        aws_access_key_id='test',
-        aws_secret_access_key='test',
-    )
 
     # Clear DynamoDB tables
     tables = [
@@ -38,6 +31,7 @@ def delete_localstack_data(c, verbose=False):
         'timtam-grasp-configs',
     ]
 
+    dynamodb = localstack.get_dynamodb()
     for table_name in tables:
         try:
             clear_dynamodb_table(dynamodb, table_name)
@@ -46,14 +40,6 @@ def delete_localstack_data(c, verbose=False):
 
     log()
 
-    # SQS setup
-    sqs = boto3.client(
-        'sqs',
-        endpoint_url='http://localhost:4566',
-        region_name='ap-northeast-1',
-        aws_access_key_id='test',
-        aws_secret_access_key='test',
-    )
 
     # Purge SQS queues
     queues = [
@@ -62,6 +48,7 @@ def delete_localstack_data(c, verbose=False):
         'http://localhost:4566/000000000000/OrchestratorControlQueue',
     ]
 
+    sqs = localstack.get_sqs()
     for queue_url in queues:
         purge_sqs_queue(sqs, queue_url)
 
@@ -80,16 +67,7 @@ def seed_default_config_local(c, verbose=False):
     log("=========================================")
     log()
 
-    # DynamoDB setup for LocalStack
-    dynamodb = boto3.resource(
-        'dynamodb',
-        endpoint_url='http://localhost:4566',
-        region_name='ap-northeast-1',
-        aws_access_key_id='test',
-        aws_secret_access_key='test',
-    )
-
-    seed_default_grasp_config(dynamodb, 'timtam-grasp-configs')
+    seed_default_grasp_config(localstack.get_dynamodb(), 'timtam-grasp-configs')
 
     log()
     log("=========================================")
@@ -106,11 +84,7 @@ def seed_default_config_aws(c, region='ap-northeast-1', profile='admin', verbose
     log("=========================================")
     log()
 
-    # DynamoDB setup for AWS with explicit profile
-    session = boto3.Session(profile_name=profile, region_name=region)
-    dynamodb = session.resource('dynamodb')
-
-    seed_default_grasp_config(dynamodb, 'timtam-grasp-configs')
+    seed_default_grasp_config(aws.get_dynamodb(profile, region), 'timtam-grasp-configs')
 
     log()
     log("=========================================")

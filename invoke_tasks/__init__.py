@@ -21,8 +21,9 @@ class Logger:
 log = Logger()
 
 
-from .localstack import *
+from .aws_operations import *
 from .grasp_config import *
+from .aws_resources import *
 
 __all__ = [
     'log',
