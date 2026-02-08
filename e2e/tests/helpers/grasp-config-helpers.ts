@@ -12,6 +12,9 @@ export function clearLocalStackData() {
   execSync('uv run invoke delete-localstack-data', {
     stdio: 'inherit',
   });
+  execSync('uv run invoke seed-default-config-local --config-path /app/tests/test-grasp-config.json -v', {
+    stdio: 'inherit',
+  });
   console.log('LocalStack data cleared');
 }
 

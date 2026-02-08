@@ -2,8 +2,10 @@ import json
 from pathlib import Path
 from datetime import datetime
 
+from . import log
 
-def seed_default_grasp_config(dynamodb, table_name='timtam-grasp-configs'):
+
+def seed_default_grasp_config(dynamodb, config_path=None, table_name='timtam-grasp-configs'):
     """
     Seed the default Grasp configuration to DynamoDB.
 
@@ -16,10 +18,13 @@ def seed_default_grasp_config(dynamodb, table_name='timtam-grasp-configs'):
         table_name: Name of the Grasp configs table
     """
     # Read default config file
-    config_path = Path(__file__).parent.parent / 'infra' / 'default-grasp-config' / 'default.json'
+    if config_path is None:
+        config_path = Path(__file__).parent.parent / 'infra' / 'default-grasp-config' / 'default.json'
+    else:
+        config_path = Path(config_path)
 
     if not config_path.exists():
-        print(f"  ⚠ Default config file not found: {config_path}")
+        log.error(f"  ⚠ Default config file not found: {config_path}")
         return
 
     with open(config_path, 'r', encoding='utf-8') as f:
@@ -50,16 +55,16 @@ def seed_default_grasp_config(dynamodb, table_name='timtam-grasp-configs'):
             existing_yaml = normalize_yaml(latest_config.get('yaml', ''))
 
             if new_yaml == existing_yaml:
-                print(f"  → DEFAULT config already exists with same content, skipping")
+                log(f"  → DEFAULT config already exists with same content, skipping")
                 return
 
-            print(f"  → DEFAULT config exists but content differs, creating new version")
+            log(f"  → DEFAULT config exists but content differs, creating new version")
         else:
-            print(f"  → No DEFAULT config found, creating new one")
+            log(f"  → No DEFAULT config found, creating new one")
 
     except Exception as e:
-        print(f"  ⚠ Error checking existing config: {e}")
-        print(f"  → Proceeding with config creation")
+        log.error(f"  ⚠ Error checking existing config: {e}")
+        log.error(f"  → Proceeding with config creation")
 
     # Create new config with timestamp-based configId
     now = datetime.utcnow()
@@ -75,4 +80,4 @@ def seed_default_grasp_config(dynamodb, table_name='timtam-grasp-configs'):
     }
 
     table.put_item(Item=item)
-    print(f"  ✓ DEFAULT Grasp config seeded: {config_id}")
+    log(f"  ✓ DEFAULT Grasp config seeded: {config_id}")
