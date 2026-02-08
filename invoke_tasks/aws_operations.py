@@ -1,3 +1,6 @@
+from . import log
+
+
 def clear_dynamodb_table(dynamodb, table_name):
     """Clear all data from a DynamoDB table by scanning and deleting items."""
     table = dynamodb.Table(table_name)
@@ -7,7 +10,7 @@ def clear_dynamodb_table(dynamodb, table_name):
     hash_key = next(k['AttributeName'] for k in key_schema if k['KeyType'] == 'HASH')
     range_key = next((k['AttributeName'] for k in key_schema if k['KeyType'] == 'RANGE'), None)
 
-    print(f"Clearing {table_name}...")
+    log(f"Clearing {table_name}...")
 
     # Scan and delete with pagination support
     total_deleted = 0
@@ -17,7 +20,7 @@ def clear_dynamodb_table(dynamodb, table_name):
         items = response.get('Items', [])
 
         if not items:
-            print(f"  → {table_name} is already empty")
+            log(f"  → {table_name} is already empty")
             break
 
         for item in items:
@@ -33,21 +36,21 @@ def clear_dynamodb_table(dynamodb, table_name):
         response = table.scan(ExclusiveStartKey=response['LastEvaluatedKey'])
 
     if total_deleted > 0:
-        print(f"  ✓ {table_name} cleared ({total_deleted} items deleted)")
+        log(f"  ✓ {table_name} cleared ({total_deleted} items deleted)")
 
 
 def purge_sqs_queue(sqs, queue_url):
     """Purge all messages from an SQS queue."""
     queue_name = queue_url.split('/')[-1]
-    print(f"Purging {queue_name}...")
+    log(f"Purging {queue_name}...")
 
     try:
         sqs.purge_queue(QueueUrl=queue_url)
-        print(f"  ✓ {queue_name} purged")
+        log(f"  ✓ {queue_name} purged")
     except Exception as e:
         if 'NonExistentQueue' in str(e) or 'QueueDoesNotExist' in str(e):
-            print(f"  → {queue_name} does not exist")
+            log(f"  → {queue_name} does not exist")
         else:
-            print(f"  → {queue_name} is empty or error: {e}")
+            log.error(f"  → {queue_name} is empty or error: {e}")
 
 
