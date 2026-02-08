@@ -81,7 +81,7 @@ def seed_default_config_local(c, config_path=None, verbose=False):
 
 
 @task
-def seed_default_config_aws(c, region='ap-northeast-1', profile='admin', verbose=False):
+def seed_default_config_aws(c, region='ap-northeast-1', profile='admin', config_path=None, verbose=False):
     """Seed default Grasp configuration to AWS."""
     log.set_verbose(verbose)
     log("=========================================")
