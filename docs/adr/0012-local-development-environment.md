@@ -273,20 +273,13 @@ app.listen(PORT, () => {
 ### 開発フロー
 
 ```bash
-# 1. LocalStack + Orchestrator起動
-docker-compose up
+# 1. (必要に応じて)イメージ再作成
+docker compose build --no-cache
 
-# 2. 初回のみ: LocalStackにDynamoDBテーブル・SQSキューを作成
-./scripts/setup-localstack.sh
+# 2. LocalStack + Orchestrator起動、DynamoDBテーブル・SQSキュー作成、初期データ投入
+uv invoke run start-locak-dev
 
-# 3. ローカルAPIサーバー起動
-node local-api-server.js
-
-# 4. Webフロントエンド起動（Facilitator UI）
-cd web/facilitator
-pnpm dev
-
-# 5. ブラウザで http://localhost:3000 にアクセス
+# 3. ブラウザで http://localhost:3001 にアクセス
 ```
 
 ### セットアップスクリプト（scripts/setup-localstack.sh）
