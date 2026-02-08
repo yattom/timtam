@@ -55,8 +55,8 @@ Grasp設定のデフォルト判定に2つの異なるメカニズムが存在�
    - すべてのコードから `isDefault` への参照を削除：
      - `services/grasp-config/getConfigs.ts`
      - `services/grasp-config/savePreset.ts`
-     - `web/timtam-web/src/api.ts`
-     - `web/timtam-web/src/GraspConfigPanel.tsx`
+     - ~~`web/timtam-web/src/api.ts`~~ (timtam-web 削除済み 2026-02-08)
+     - ~~`web/timtam-web/src/GraspConfigPanel.tsx`~~ (timtam-web 削除済み 2026-02-08)
 
 3. **ソートロジックの変更**
    - `getConfigs.ts` で `name === 'DEFAULT'` による判定に変更
@@ -265,8 +265,8 @@ Single Source of Truth 原則に反し、保守性が低い
 - `services/grasp-config/getConfigs.ts` (lines 23-38): 設定一覧取得とソート
 - `services/grasp-config/savePreset.ts` (lines 15, 20, 75): 設定保存
 - `services/grasp-config/saveConfig.ts`: configId 生成ロジック
-- `web/timtam-web/src/api.ts` (lines 126-133): TypeScript 型定義
-- `web/timtam-web/src/GraspConfigPanel.tsx` (lines 28, 42, 134): UI 表示ロジック
+- ~~`web/timtam-web/src/api.ts`~~ (timtam-web 削除済み 2026-02-08)
+- ~~`web/timtam-web/src/GraspConfigPanel.tsx`~~ (timtam-web 削除済み 2026-02-08)
 
 ### 関連 ADR
 - なし（Grasp 設定管理に関する初めての ADR）

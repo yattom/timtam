@@ -282,11 +282,11 @@ docker-compose up
 # 3. ローカルAPIサーバー起動
 node local-api-server.js
 
-# 4. Webフロントエンド起動
-cd web/timtam-web
+# 4. Webフロントエンド起動（Facilitator UI）
+cd web/facilitator
 pnpm dev
 
-# 5. ブラウザで http://localhost:5173 にアクセス
+# 5. ブラウザで http://localhost:3000 にアクセス
 ```
 
 ### セットアップスクリプト（scripts/setup-localstack.sh）
@@ -454,9 +454,9 @@ echo "LocalStack setup complete!"
 
 ### Phase 4: Webフロントエンドの接続（30分）
 
-1. `web/timtam-web/.env.local`作成
+1. `web/facilitator/.env.local`作成
    ```
-   VITE_API_BASE_URL=http://localhost:3000
+   NEXT_PUBLIC_API_URL=http://localhost:3000
    ```
 2. 動作確認
 3. E2Eテスト（会議作成→文字起こし→LLM応答）

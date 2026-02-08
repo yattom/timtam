@@ -9,7 +9,6 @@ Phase 3でFacilitator UI（ファシリテーター向け管理画面）を実�
 ADR 0015に基づいて、以下のURL構造を実装した：
 
 - **`/`** - Facilitator UI（管理者向け）
-- **`/experiment`** - 既存Chime WebUI（実験用）
 - **`/<meetingCode>/attendee`** - Attendee UI（Phase 4で実装予定）
 
 ## CloudFront設定
@@ -19,10 +18,6 @@ CloudFront Functionsを使用して、リクエストURLに基づいてS3バケ�
 ### ルートパス (`/`)
 - `facilitator/index.html`を返す
 - Next.jsのSPAルーティングに対応
-
-### 実験用パス (`/experiment/*`)
-- `timtam-web/`から既存のChime WebUIを配信
-- `/experiment`プレフィックスを除去してS3から取得
 
 ## デプロイ手順
 
@@ -56,18 +51,7 @@ aws s3 cp web/facilitator/out/index.html s3://${BUCKET_NAME}/facilitator/index.h
   --cache-control "public, max-age=0, must-revalidate"
 ```
 
-### 3. 既存WebUIを/experimentに移動
-
-```bash
-# 既存のtimtam-webをアップロード
-cd web/timtam-web
-pnpm build
-
-aws s3 sync dist/ s3://${BUCKET_NAME}/timtam-web/ \
-  --delete
-```
-
-### 4. CloudFrontキャッシュの無効化
+### 3. CloudFrontキャッシュの無効化
 
 ```bash
 # Distribution IDを取得
@@ -82,7 +66,7 @@ aws cloudfront create-invalidation \
   --paths "/*"
 ```
 
-### 5. 環境変数の設定
+### 4. 環境変数の設定
 
 Facilitator UIからAPIを呼び出すために、環境変数を設定する：
 
@@ -121,7 +105,6 @@ aws cloudformation describe-stacks \
 ### 2. ブラウザでアクセス
 
 - **Facilitator UI**: `https://d1234567890.cloudfront.net/`
-- **実験用UI**: `https://d1234567890.cloudfront.net/experiment`
 
 ### 3. 機能確認
 
