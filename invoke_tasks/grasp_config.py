@@ -24,7 +24,7 @@ def seed_default_grasp_config(dynamodb, config_path=None, table_name='timtam-gra
         config_path = Path(config_path)
 
     if not config_path.exists():
-        log(f"  ⚠ Default config file not found: {config_path}")
+        log.error(f"  ⚠ Default config file not found: {config_path}")
         return
 
     with open(config_path, 'r', encoding='utf-8') as f:
