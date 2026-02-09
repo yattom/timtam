@@ -11,7 +11,7 @@ describe('buildCreateBotRequest', () => {
       transcriptionLanguage: 'auto',
     });
 
-    expect(request.recording_config?.retention).toEqual({ type: "timed", hours: 24 });
+    expect(request.recording_config?.retention).toEqual({ type: 'timed', hours: 24 });
   });
 
   it('Deepgram Streamingプロバイダーを正しく設定すること', () => {
