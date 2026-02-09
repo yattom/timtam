@@ -50,6 +50,7 @@ export function buildCreateBotRequest(params: BuildCreateBotRequestParams): Crea
         },
       ],
       retention: {
+        type: 'timed',
         hours: 24,
       },
     },
