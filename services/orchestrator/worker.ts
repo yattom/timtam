@@ -29,6 +29,16 @@ const CONTROL_SQS_URL = process.env.CONTROL_SQS_URL || '';
 const MAX_MEETINGS = Number(process.env.MAX_MEETINGS || '100');
 const MEETING_TIMEOUT_MS = Number(process.env.MEETING_TIMEOUT_MS || '43200000'); // 12時間
 const RECALL_API_KEY = process.env.RECALL_API_KEY || '';
+
+// Fail fast on missing critical environment variables
+if (!TRANSCRIPT_QUEUE_URL) {
+  console.error('TRANSCRIPT_QUEUE_URL is not set');
+  process.exit(1);
+}
+if (!CONTROL_SQS_URL) {
+  console.error('CONTROL_SQS_URL is not set');
+  process.exit(1);
+}
 if (!RECALL_API_KEY) {
   console.error('RECALL_API_KEY is not set');
 }
