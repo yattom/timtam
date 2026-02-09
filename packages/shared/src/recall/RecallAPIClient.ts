@@ -83,8 +83,8 @@ export interface CreateBotRequest {
     }>;
     /** 録音保存期間（時間単位） */
     retention?: {
-      /** 保存オプション (timed / forever) **/
-      type: "timed" | "forever";
+      /** 保存オプション (timed / forever) */
+      type: 'timed' | 'forever';
       /** 保存時間（hours） */
       hours: number;
     };
