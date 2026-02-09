@@ -2,7 +2,7 @@ import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedroc
 import { CloudWatchClient, PutMetricDataCommand } from '@aws-sdk/client-cloudwatch';
 import { SQSClient, ReceiveMessageCommand, DeleteMessageCommand } from '@aws-sdk/client-sqs';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import {
   Grasp,
   GraspConfig,
@@ -268,14 +268,22 @@ async function saveTranscriptToDynamoDB(event: TranscriptEvent): Promise<void> {
 async function processMessages(messages: Message[]) {
   // Process messages in parallel for better throughput
   await Promise.all(messages.map(async (message) => {
-    let ev: TranscriptEvent | null = null;
-    try { 
+    try {
       const parsed = JSON.parse(message.Body || '');
-      
+
+      // meeting.endedイベントの処理
+      if (parsed.type === 'meeting.ended') {
+        await handleMeetingEndedMessage(parsed, message);
+        return;
+      }
+
+      // TranscriptEventの処理
+      let ev: TranscriptEvent | null = null;
+
       // Validate required fields for TranscriptEvent
-      if (!parsed.meetingId || !parsed.speakerId || typeof parsed.text !== 'string' || 
-          typeof parsed.isFinal !== 'boolean' || typeof parsed.timestamp !== 'number') {
-        console.warn('[Worker] Invalid TranscriptEvent format', { 
+      if (!parsed.meetingId || !parsed.speakerId || typeof parsed.text !== 'string' ||
+        typeof parsed.isFinal !== 'boolean' || typeof parsed.timestamp !== 'number') {
+        console.warn('[Worker] Invalid TranscriptEvent format', {
           hasmeeting: !!parsed.meetingId,
           hasSpeaker: !!parsed.speakerId,
           hasText: typeof parsed.text === 'string',
@@ -290,46 +298,119 @@ async function processMessages(messages: Message[]) {
           meetingId: parsed.meetingId as MeetingId
         } as TranscriptEvent;
       }
-    } catch (err) {
-      console.error('[Worker] Failed to parse message', err);
-    }
-    
-    if (!ev) {
-      // Delete malformed message
-      await sqs.send(
+
+      if (!ev) {
+        // Delete malformed message
+        await sqs.send(
           new DeleteMessageCommand({
             QueueUrl: TRANSCRIPT_QUEUE_URL,
             ReceiptHandle: message.ReceiptHandle!,
           })
-      );
-      return;
-    }
+        );
+        return;
+      }
 
-    if (!ev.isFinal) {
-      // Delete non-final message
-      await sqs.send(
+      if (!ev.isFinal) {
+        // Delete non-final message
+        await sqs.send(
           new DeleteMessageCommand({
             QueueUrl: TRANSCRIPT_QUEUE_URL,
             ReceiptHandle: message.ReceiptHandle!,
           })
-      );
-      return;
-    }
+        );
+        return;
+      }
 
-    // Final transcriptをDynamoDBに保存（Grasp実行前）
-    await saveTranscriptToDynamoDB(ev);
+      // Final transcriptをDynamoDBに保存（Grasp実行前）
+      await saveTranscriptToDynamoDB(ev);
 
-    // ミーティングIDに基づいて適切なオーケストレーターに処理を委譲
-    await orchestratorManager.processTranscriptEvent(ev, metrics);
+      // ミーティングIDに基づいて適切なオーケストレーターに処理を委譲
+      await orchestratorManager.processTranscriptEvent(ev, metrics);
 
-    // 処理完了後にメッセージを削除
-    await sqs.send(
+      // 処理完了後にメッセージを削除
+      await sqs.send(
         new DeleteMessageCommand({
           QueueUrl: TRANSCRIPT_QUEUE_URL,
           ReceiptHandle: message.ReceiptHandle!,
         })
-    );
+      );
+    } catch (err) {
+      console.error('[Worker] Failed to process message', err);
+      // エラー時もメッセージを削除（DLQに送られる）
+      await sqs.send(
+        new DeleteMessageCommand({
+          QueueUrl: TRANSCRIPT_QUEUE_URL,
+          ReceiptHandle: message.ReceiptHandle!,
+        })
+      );
+    }
   }));
+}
+
+/**
+ * meeting.endedイベントの処理
+ * DynamoDB更新、内部状態クリーンアップを実行
+ */
+async function handleMeetingEndedMessage(parsed: any, message: Message): Promise<void> {
+  const meetingId = parsed.meetingId as MeetingId;
+  const reason = parsed.reason || 'unknown';
+
+  console.log(JSON.stringify({
+    type: 'orchestrator.worker.meeting_ended.received',
+    meetingId,
+    reason,
+    ts: Date.now()
+  }));
+
+  try {
+    // DynamoDBのステータスを更新
+    const now = Date.now();
+    const ttl = Math.floor(now / 1000) + (7 * 24 * 60 * 60); // 7日後
+
+    await ddbDocClient.send(
+      new UpdateCommand({
+        TableName: MEETINGS_METADATA_TABLE,
+        Key: { meetingId },
+        UpdateExpression: 'SET #status = :status, #endedAt = :endedAt, #ttl = :ttl',
+        ExpressionAttributeNames: {
+          '#status': 'status',
+          '#endedAt': 'endedAt',
+          '#ttl': 'ttl',
+        },
+        ExpressionAttributeValues: {
+          ':status': 'ended',
+          ':endedAt': now,
+          ':ttl': ttl,
+        },
+      })
+    );
+
+    console.log(JSON.stringify({
+      type: 'orchestrator.worker.meeting_ended.dynamodb_updated',
+      meetingId,
+      reason,
+      ts: Date.now()
+    }));
+  } catch (err: any) {
+    console.error('Failed to update DynamoDB for meeting.ended event', {
+      meetingId,
+      reason,
+      error: err?.message || err,
+      stack: err?.stack,
+    });
+    // DynamoDB更新失敗でもOrchestratorの内部状態はクリーンアップする
+  }
+
+  // Orchestratorの内部状態をクリーンアップ
+  await orchestratorManager.handleMeetingEnded(meetingId, reason);
+
+  // 処理完了後にメッセージを削除
+  await sqs.send(
+    new DeleteMessageCommand({
+      QueueUrl: TRANSCRIPT_QUEUE_URL,
+      ReceiptHandle: message.ReceiptHandle!,
+    })
+  );
 }
 
 async function runLoop() {

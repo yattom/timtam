@@ -44,6 +44,24 @@ export interface ParticipantEvent {
 }
 
 /**
+ * MeetingEndedEvent - ミーティング終了イベント
+ * Webhookまたは手動終了時にSQS経由でOrchestratorに送信される
+ */
+export interface MeetingEndedEvent {
+  /** イベントタイプ */
+  type: 'meeting.ended';
+
+  /** 会議ID */
+  meetingId: MeetingId;
+
+  /** 終了理由 */
+  reason: 'bot.status.done' | 'bot.status.error' | 'bot.status.fatal' | 'manual.delete';
+
+  /** エポックミリ秒 */
+  timestamp: number;
+}
+
+/**
  * MeetingInfo - 会議参加情報
  */
 export interface MeetingInfo {

@@ -251,6 +251,33 @@ export class OrchestratorManager {
   }
 
   /**
+   * ミーティング終了イベントを処理
+   * Webhookまたは手動終了時にSQS経由で呼び出される
+   *
+   * @param meetingId 会議ID
+   * @param reason 終了理由
+   */
+  async handleMeetingEnded(meetingId: MeetingId, reason: string): Promise<void> {
+    console.log(JSON.stringify({
+      type: 'orchestrator.manager.meeting.ending',
+      meetingId,
+      reason,
+      ts: Date.now()
+    }));
+
+    // 内部状態のクリーンアップ
+    const wasRemoved = this.removeMeeting(meetingId);
+
+    console.log(JSON.stringify({
+      type: 'orchestrator.manager.meeting.ended',
+      meetingId,
+      reason,
+      wasActive: wasRemoved,
+      ts: Date.now()
+    }));
+  }
+
+  /**
    * クリーンアップ（シャットダウン時）
    */
   cleanup(): void {

@@ -1,6 +1,8 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
+import { createHash } from 'crypto';
 import { RecallAPIClient, CreateBotRequest, VALID_PLATFORMS, isMeetingPlatform, buildCreateBotRequest } from '@timtam/shared';
 
 const REGION = process.env.AWS_REGION || 'ap-northeast-1';
@@ -9,6 +11,7 @@ const GRASP_CONFIGS_TABLE = process.env.GRASP_CONFIGS_TABLE || 'timtam-grasp-con
 const RECALL_API_KEY = process.env.RECALL_API_KEY || '';
 const RECALL_API_BASE_URL = process.env.RECALL_API_BASE_URL; // Optional: for local dev, use http://stub-recall:8080
 const RECALL_WEBHOOK_URL = process.env.RECALL_WEBHOOK_URL || ''; // e.g., https://api.timtam.example.com/recall/webhook
+const TRANSCRIPT_QUEUE_URL = process.env.TRANSCRIPT_QUEUE_URL || '';
 
 // Recall.ai transcription provider configuration
 const RECALL_TRANSCRIPTION_PROVIDER = process.env.RECALL_TRANSCRIPTION_PROVIDER || 'deepgram_streaming';
@@ -24,6 +27,7 @@ const recallClient = new RecallAPIClient({
   apiKey: RECALL_API_KEY,
   ...(RECALL_API_BASE_URL && { apiBaseUrl: RECALL_API_BASE_URL })
 });
+const sqs = new SQSClient({ region: REGION });
 
 /**
  * POST /recall/meetings/join
@@ -349,44 +353,47 @@ export const leaveHandler: APIGatewayProxyHandlerV2 = async (event) => {
       deleteMeetingMedia(result.Item.recallBot.botId);
     }
 
-    // Update DynamoDB status
+    // Send meeting.ended event to SQS (Orchestrator will handle DynamoDB update)
     const now = Date.now();
-    // Set TTL to 7 days from now (Phase 1.1)
-    const ttl = Math.floor(now / 1000) + (7 * 24 * 60 * 60);
     try {
-      await ddb.send(
-        new UpdateCommand({
-          TableName: MEETINGS_METADATA_TABLE,
-          Key: { meetingId },
-          UpdateExpression: 'SET #status = :status, #endedAt = :endedAt, #ttl = :ttl',
-          ExpressionAttributeNames: {
-            '#status': 'status',
-            '#endedAt': 'endedAt',
-            '#ttl': 'ttl',
-          },
-          ExpressionAttributeValues: {
-            ':status': 'ended',
-            ':endedAt': now,
-            ':ttl': ttl,
-          },
+      const meetingEndedEvent = {
+        type: 'meeting.ended',
+        meetingId,
+        reason: 'manual.delete',
+        timestamp: now,
+      };
+
+      // MessageDeduplicationId生成
+      const deduplicationId = createHash('sha256')
+        .update(`${meetingId}:meeting.ended:manual.delete:${now}`)
+        .digest('hex')
+        .substring(0, 128);
+
+      // MessageGroupId = meetingId（会議ごとに順序保証）
+      const messageGroupId = meetingId;
+
+      await sqs.send(
+        new SendMessageCommand({
+          QueueUrl: TRANSCRIPT_QUEUE_URL,
+          MessageBody: JSON.stringify(meetingEndedEvent),
+          MessageDeduplicationId: deduplicationId,
+          MessageGroupId: messageGroupId,
         })
       );
+
+      console.log(JSON.stringify({
+        type: 'recall.meeting.left',
+        meetingId,
+        timestamp: now,
+      }));
     } catch (err: any) {
-      console.error('Failed to update DynamoDB after bot deletion', {
+      console.error('Failed to send meeting.ended event to SQS', {
         meetingId,
         error: err?.message || err,
         stack: err?.stack,
-        note: 'Bot was successfully deleted from Recall.ai but DynamoDB update failed. Database is out of sync.',
-        recovery: 'Manual intervention may be required to update the meeting status to "ended" in DynamoDB.',
       });
       throw err;
     }
-
-    console.log(JSON.stringify({
-      type: 'recall.meeting.left',
-      meetingId,
-      timestamp: now,
-    }));
 
     return {
       statusCode: 200,

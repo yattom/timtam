@@ -219,6 +219,7 @@ export class TimtamInfraStack extends Stack {
       environment: {
         MEETINGS_METADATA_TABLE: meetingsMetadataTable.tableName,
         RECALL_API_KEY: process.env.RECALL_API_KEY || '',
+        TRANSCRIPT_QUEUE_URL: transcriptQueue.queueUrl,
       },
     });
 
@@ -256,10 +257,11 @@ export class TimtamInfraStack extends Stack {
 
     // Phase 2: Grant permissions for Recall.ai Lambda functions
     transcriptQueue.grantSendMessages(recallWebhookFn);
+    transcriptQueue.grantSendMessages(recallLeaveMeetingFn);
     meetingsMetadataTable.grantReadWriteData(recallJoinMeetingFn);
     graspConfigsTable.grantReadData(recallJoinMeetingFn);
     meetingsMetadataTable.grantReadData(recallGetMeetingFn);
-    meetingsMetadataTable.grantReadWriteData(recallLeaveMeetingFn);
+    meetingsMetadataTable.grantReadData(recallLeaveMeetingFn);
     meetingsMetadataTable.grantReadData(recallListMeetingsFn);
     meetingsMetadataTable.grantReadData(attendeeGetMeetingByCodeFn);
 

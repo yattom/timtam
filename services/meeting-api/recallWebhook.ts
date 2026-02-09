@@ -90,17 +90,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         };
 
       case 'bot.status':
-        // Phase 2: ボット状態変化イベント（後回し）
-        console.log(JSON.stringify({
-          type: 'recall.webhook.bot_status',
-          botId: payload.bot_id,
-          status: payload.status,
-        }));
-        return {
-          statusCode: 200,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ok: true, message: 'Bot status event acknowledged (not processed)' }),
-        };
+        return await handleBotStatusEvent(payload);
 
       default:
         console.warn(`Unknown Recall.ai event type: ${eventType}`);
@@ -185,6 +175,98 @@ async function handleTranscriptEvent(payload: any): Promise<any> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ok: true }),
   };
+}
+
+/**
+ * bot.statusイベント処理
+ *
+ * ボット状態が終了状態（done, error, fatal）の場合、
+ * SQS経由でOrchestratorにmeeting.endedイベントを送信する
+ */
+async function handleBotStatusEvent(payload: any): Promise<any> {
+  const bot_id = payload.bot_id;
+  const status = payload.status;
+
+  console.log(JSON.stringify({
+    type: 'recall.webhook.bot_status',
+    botId: bot_id,
+    status,
+    timestamp: Date.now(),
+  }));
+
+  // 終了状態のチェック
+  const isTerminalStatus = ['done', 'error', 'fatal'].includes(status);
+
+  if (!isTerminalStatus) {
+    // アクティブ状態（ready, in_meeting等）では何もしない
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ok: true, message: 'Bot status event acknowledged (not terminal)' }),
+    };
+  }
+
+  // 終了状態の場合、SQSにmeeting.endedイベントを送信
+  try {
+    const reasonMap: { [key: string]: string } = {
+      'done': 'bot.status.done',
+      'error': 'bot.status.error',
+      'fatal': 'bot.status.fatal',
+    };
+
+    const meetingEndedEvent = {
+      type: 'meeting.ended',
+      meetingId: bot_id,
+      reason: reasonMap[status] || 'bot.status.error',
+      timestamp: Date.now(),
+    };
+
+    // MessageDeduplicationId生成
+    const deduplicationId = createHash('sha256')
+      .update(`${bot_id}:meeting.ended:${status}:${meetingEndedEvent.timestamp}`)
+      .digest('hex')
+      .substring(0, 128);
+
+    // MessageGroupId = botId（会議ごとに順序保証）
+    const messageGroupId = bot_id;
+
+    await sqs.send(
+      new SendMessageCommand({
+        QueueUrl: TRANSCRIPT_QUEUE_URL,
+        MessageBody: JSON.stringify(meetingEndedEvent),
+        MessageDeduplicationId: deduplicationId,
+        MessageGroupId: messageGroupId,
+      })
+    );
+
+    console.log(JSON.stringify({
+      type: 'recall.webhook.bot_status.meeting_ended',
+      botId: bot_id,
+      status,
+      reason: meetingEndedEvent.reason,
+      timestamp: meetingEndedEvent.timestamp,
+    }));
+
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ok: true }),
+    };
+  } catch (err: any) {
+    console.error('Error sending meeting.ended event to SQS', {
+      error: err?.message || err,
+      stack: err?.stack,
+      botId: bot_id,
+      status,
+    });
+
+    // Recall.aiのリトライを防ぐため、エラーでも200を返す
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ok: true }),
+    };
+  }
 }
 
 /**
