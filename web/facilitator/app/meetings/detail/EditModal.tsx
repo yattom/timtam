@@ -25,7 +25,7 @@ export default function EditModal({
 }: EditModalProps) {
   // ESCキーでモーダルを閉じる
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || isLoading) return;
 
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -35,7 +35,7 @@ export default function EditModal({
 
     window.addEventListener("keydown", handleEsc);
     return () => window.removeEventListener("keydown", handleEsc);
-  }, [isOpen, onDiscard]);
+  }, [isOpen, isLoading, onDiscard]);
 
   if (!isOpen) return null;
 
@@ -44,7 +44,7 @@ export default function EditModal({
       {/* 背景オーバーレイ */}
       <div
         className="fixed inset-0 bg-black bg-opacity-50 z-40"
-        onClick={onDiscard}
+        onClick={isLoading ? undefined : onDiscard}
         data-testid="modal-backdrop"
       />
 
@@ -58,7 +58,8 @@ export default function EditModal({
             </h3>
             <button
               onClick={onDiscard}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              disabled={isLoading}
+              className="text-gray-400 hover:text-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed transition-colors"
               aria-label="閉じる"
               data-testid="modal-close-button"
             >
