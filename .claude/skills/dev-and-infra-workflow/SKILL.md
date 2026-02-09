@@ -189,7 +189,7 @@ pnpm run infra:open:cloudfront   # CloudFrontを有効化
 #### web:build - Webアプリケーションビルド
 
 ```bash
-pnpm run web:build
+pnpm run facilitator:build
 ```
 
 facilitatorパッケージをビルド。
@@ -197,10 +197,17 @@ facilitatorパッケージをビルド。
 #### web:deploy - Webアプリケーションデプロイ
 
 ```bash
-pnpm run web:deploy
+pnpm run facilitator:deploy
 ```
 
 ビルドしたWebアプリをS3にアップロードしてCloudFrontで配信。
+
+#### deploy:web-assets - Webアプリケーションのビルドとデプロイまとめて実行する
+
+```bash
+pnpm run deploy:web-assets
+```
+
 
 ### 5. Orchestratorビルド
 
