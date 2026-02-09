@@ -54,5 +54,16 @@ export function buildCreateBotRequest(params: BuildCreateBotRequestParams): Crea
         hours: 24,
       },
     },
+    automatic_leave: {
+      waiting_room_timeout: 1200, // デフォルト: 1200秒（20分）
+      noone_joined_timeout: 1200, // デフォルト: 1200秒（20分）
+      everyone_left_timeout: {
+        timeout: 2, // 全員退出後2秒で退出
+      },
+      silence_detection: {
+        timeout: 3600, // 60分沈黙後に退出
+        activate_after: 1200, // 20分後から検知開始
+      },
+    },
   };
 }
