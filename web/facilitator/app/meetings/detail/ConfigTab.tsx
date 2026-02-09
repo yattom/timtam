@@ -1,5 +1,6 @@
 "use client";
 
+import EditModal from "./EditModal";
 
 interface GraspConfig {
   configId: string;
@@ -29,7 +30,7 @@ interface ConfigTabProps {
   selectedConfigId: string | null;
   selectedConfigYaml: string;
   editedYaml: string;
-  isEditingYaml: boolean;
+  isEditModalOpen: boolean;
   configName: string;
   configLoading: boolean;
   applySuccess: boolean;
@@ -38,7 +39,9 @@ interface ConfigTabProps {
   onEditYamlChange: (yaml: string) => void;
   onConfigNameChange: (name: string) => void;
   onApplyConfig: (saveAsNew: boolean) => void;
-  onToggleEditMode: () => void;
+  onOpenEditModal: () => void;
+  onCloseEditModal: () => void;
+  onSaveAndApply: () => void;
 }
 
 export default function ConfigTab({
@@ -48,7 +51,7 @@ export default function ConfigTab({
   selectedConfigId,
   selectedConfigYaml,
   editedYaml,
-  isEditingYaml,
+  isEditModalOpen,
   configName,
   configLoading,
   applySuccess,
@@ -57,9 +60,10 @@ export default function ConfigTab({
   onEditYamlChange,
   onConfigNameChange,
   onApplyConfig,
-  onToggleEditMode,
+  onOpenEditModal,
+  onCloseEditModal,
+  onSaveAndApply,
 }: ConfigTabProps) {
-  const yamlChanged = editedYaml !== selectedConfigYaml;
 
   return (
     <div className="space-y-6">
@@ -79,7 +83,7 @@ export default function ConfigTab({
               <p className="text-xs text-blue-600" data-testid="current-config-id">ID: {currentConfig.configId}</p>
             </div>
           ) : (
-            <p className="text-blue-800" data-testid="no-config-applied">設定が未適用</p>
+            <p className="text-blue-800" data-testid="no-config-applied">現在表示できません</p>
           )}
         </div>
       )}
@@ -119,8 +123,15 @@ export default function ConfigTab({
                       }`}
                       data-testid={`config-version-${group.latestVersion.configId}`}
                     >
-                      <div className="font-medium text-gray-900">
-                        {group.name}
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-gray-900">
+                          {group.name}
+                        </span>
+                        {currentConfig?.configId === group.latestVersion.configId && (
+                          <span className="text-xs text-green-600 font-medium" data-testid="currently-applied-badge">
+                            現在適用中
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-gray-500">
                         {new Date(group.latestVersion.createdAt).toLocaleString('ja-JP')}
@@ -152,8 +163,15 @@ export default function ConfigTab({
                           }`}
                           data-testid={`config-version-${version.configId}`}
                         >
-                          <div className="text-xs text-gray-500">
-                            {new Date(version.createdAt).toLocaleString('ja-JP')}
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500">
+                              {new Date(version.createdAt).toLocaleString('ja-JP')}
+                            </span>
+                            {currentConfig?.configId === version.configId && (
+                              <span className="text-xs text-green-600 font-medium" data-testid="currently-applied-badge">
+                                現在適用中
+                              </span>
+                            )}
                           </div>
                         </button>
                       ))}
@@ -172,76 +190,44 @@ export default function ConfigTab({
           </h3>
           {selectedConfigId ? (
             <div className="space-y-3">
-              {/* 設定名 */}
+              {/* 設定名（読み取り専用） */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   設定名
                 </label>
-                <input
-                  type="text"
-                  value={configName}
-                  onChange={(e) => onConfigNameChange(e.target.value)}
-                  disabled={!yamlChanged}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md disabled:bg-gray-100 disabled:text-gray-600"
-                  data-testid="config-name-input"
-                />
-                {yamlChanged && (
-                  <p className="text-xs text-orange-600 mt-1" data-testid="yaml-changed-notice">
-                    内容が変更されています。新しいバージョンとして保存されます。
-                  </p>
-                )}
+                <div className="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-50 text-gray-900" data-testid="config-name-display">
+                  {configName}
+                </div>
               </div>
 
-              {/* YAML表示/編集 */}
+              {/* YAML表示（読み取り専用） */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   YAML設定
                 </label>
-                {isEditingYaml ? (
-                  <textarea
-                    value={editedYaml}
-                    onChange={(e) => onEditYamlChange(e.target.value)}
-                    rows={12}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-                    spellCheck={false}
-                    data-testid="config-yaml-textarea"
-                  />
-                ) : (
-                  <pre className="text-xs bg-gray-50 p-3 rounded border border-gray-200 overflow-x-auto max-h-64 overflow-y-auto font-mono" data-testid="config-yaml-display">
-                    {selectedConfigYaml}
-                  </pre>
-                )}
+                <pre className="text-xs bg-gray-50 p-3 rounded border border-gray-200 overflow-x-auto max-h-64 overflow-y-auto font-mono" data-testid="config-yaml-display">
+                  {selectedConfigYaml}
+                </pre>
               </div>
 
-              {/* 操作ボタン */}
-              <div className="space-y-2">
+              {/* 操作ボタン（横並び） */}
+              <div className="flex space-x-2">
                 <button
-                  onClick={onToggleEditMode}
-                  className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors font-medium"
-                  data-testid="toggle-edit-button"
+                  onClick={() => onApplyConfig(false)}
+                  disabled={configLoading}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
+                  data-testid="apply-config-button"
                 >
-                  {isEditingYaml ? '編集を終了' : '内容を編集'}
+                  {configLoading ? '適用中...' : '適用'}
                 </button>
-
-                {!yamlChanged ? (
-                  <button
-                    onClick={() => onApplyConfig(false)}
-                    disabled={configLoading}
-                    className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
-                    data-testid="apply-config-button"
-                  >
-                    {configLoading ? '適用中...' : 'この設定を適用'}
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => onApplyConfig(true)}
-                    disabled={configLoading}
-                    className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
-                    data-testid="save-and-apply-button"
-                  >
-                    {configLoading ? '保存して適用中...' : '新バージョンとして保存して適用'}
-                  </button>
-                )}
+                <button
+                  onClick={onOpenEditModal}
+                  disabled={configLoading}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:bg-gray-200 disabled:cursor-not-allowed transition-colors font-medium"
+                  data-testid="edit-button"
+                >
+                  編集
+                </button>
               </div>
             </div>
           ) : (
@@ -259,10 +245,21 @@ export default function ConfigTab({
         <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
           <li>左側から保存済み設定を選択すると、最新バージョンが選択される</li>
           <li>▼ボタンで過去のバージョンを表示・選択できる</li>
-          <li>右側で内容を編集すると、新しいバージョンとして保存して適用できる</li>
-          <li>設定を適用すると、この会議のGraspが更新される</li>
+          <li>「編集」ボタンでモーダルが開き、内容を編集できる</li>
+          <li>「適用」ボタンでこの設定を会議に適用できる</li>
         </ul>
       </div>
+
+      {/* 編集用モーダル */}
+      <EditModal
+        isOpen={isEditModalOpen}
+        configName={configName}
+        editedYaml={editedYaml}
+        onYamlChange={onEditYamlChange}
+        onConfigNameChange={onConfigNameChange}
+        onSaveAndApply={onSaveAndApply}
+        onDiscard={onCloseEditModal}
+      />
     </div>
   );
 }

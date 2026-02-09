@@ -171,14 +171,14 @@ test.describe('UC01: 会議のGrasp設定を調整する', { tag: '@local' }, ()
     // ========================================
     console.log('UC01 Step 3: Grasp設定を調整');
 
-    const toggleEditButton = page.locator('[data-testid="toggle-edit-button"]');
-    await expect(toggleEditButton).toBeVisible();
-    await toggleEditButton.click();
+    const editButton = page.locator('[data-testid="edit-button"]');
+    await expect(editButton).toBeVisible();
+    await editButton.click();
 
-    console.log('  ✓ 編集モードに切り替え');
+    console.log('  ✓ 編集ボタンをクリックしてモーダルを開く');
 
-    const configYamlTextarea = page.locator('[data-testid="config-yaml-textarea"]');
-    await expect(configYamlTextarea).toBeVisible({ timeout: 2000 });
+    const modalYamlTextarea = page.locator('[data-testid="modal-yaml-textarea"]');
+    await expect(modalYamlTextarea).toBeVisible({ timeout: 2000 });
 
     // YAMLを編集（バージョン2に更新）
     const updatedYaml = `grasps:
@@ -189,25 +189,18 @@ test.describe('UC01: 会議のGrasp設定を調整する', { tag: '@local' }, ()
     intervalSec: 60
     outputHandler: chat`;
 
-    await configYamlTextarea.fill(updatedYaml);
+    await modalYamlTextarea.fill(updatedYaml);
 
     console.log('  ✓ YAML内容を編集');
-
-    // 内容変更の通知が表示されることを確認
-    const yamlChangedNotice = page.locator('[data-testid="yaml-changed-notice"]');
-    await expect(yamlChangedNotice).toBeVisible({ timeout: 2000 });
-    await expect(yamlChangedNotice).toContainText('内容が変更されています');
-
-    console.log('  ✓ 変更通知が表示されている');
 
     // ========================================
     // UC01 Step 4: 名前を確認（デフォルトは既存名、変更可能）
     // ========================================
     console.log('UC01 Step 4: 設定名を確認');
 
-    const configNameInput = page.locator('[data-testid="config-name-input"]');
-    await expect(configNameInput).toBeVisible();
-    await expect(configNameInput).toHaveValue(initialConfigName);
+    const modalConfigNameInput = page.locator('[data-testid="modal-config-name-input"]');
+    await expect(modalConfigNameInput).toBeVisible();
+    await expect(modalConfigNameInput).toHaveValue(initialConfigName);
 
     // この時点では名前を変更しない（既存名のまま新バージョンとして保存）
     console.log('  ✓ 設定名は既存名がデフォルト表示されている');
@@ -217,13 +210,19 @@ test.describe('UC01: 会議のGrasp設定を調整する', { tag: '@local' }, ()
     // ========================================
     console.log('UC01 Step 4-5: 新バージョンとして保存して適用');
 
-    const saveAndApplyButton = page.locator('[data-testid="save-and-apply-button"]');
-    await expect(saveAndApplyButton).toBeVisible();
-    await expect(saveAndApplyButton).toContainText('新バージョンとして保存して適用');
+    const modalSaveAndApplyButton = page.locator('[data-testid="modal-save-and-apply-button"]');
+    await expect(modalSaveAndApplyButton).toBeVisible();
+    await expect(modalSaveAndApplyButton).toContainText('保存して適用');
 
-    await saveAndApplyButton.click();
+    await modalSaveAndApplyButton.click();
 
     console.log('  ✓ 保存して適用ボタンをクリック');
+
+    // モーダルが閉じる
+    const modalBackdrop = page.locator('[data-testid="modal-backdrop"]');
+    await expect(modalBackdrop).not.toBeVisible({ timeout: 5000 });
+
+    console.log('  ✓ モーダルが閉じた');
 
     // ========================================
     // UC01 Step 6: 新しい設定が反映されたことを確認
