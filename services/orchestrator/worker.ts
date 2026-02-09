@@ -197,6 +197,14 @@ async function pollControlOnce() {
               error: (error as Error).message,
               ts: Date.now()
             }));
+
+            // Send error notification to meeting chat
+            const meeting = orchestratorManager.getMeeting(parsed.meetingId);
+            if (meeting) {
+              const configName = parsed.configName || 'カスタム設定';
+              const errorMessage = `Grasp設定「${configName}」の適用に失敗しました: ${(error as Error).message}`;
+              await meeting.postChat(parsed.meetingId, errorMessage);
+            }
           }
         }
       } catch {
