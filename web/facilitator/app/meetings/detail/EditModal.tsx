@@ -112,7 +112,7 @@ export default function EditModal({
               <button
                 onClick={onSaveAndApply}
                 disabled={isLoading}
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-500 disabled:cursor-not-allowed transition-colors font-medium"
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors font-medium"
                 data-testid="modal-save-and-apply-button"
               >
                 {isLoading ? '保存中...' : '保存して適用'}
@@ -120,7 +120,7 @@ export default function EditModal({
               <button
                 onClick={onDiscard}
                 disabled={isLoading}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:bg-gray-200 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors font-medium"
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:bg-gray-200 disabled:text-gray-600 disabled:cursor-not-allowed transition-colors font-medium"
                 data-testid="modal-discard-button"
               >
                 編集を破棄
