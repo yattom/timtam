@@ -323,4 +323,61 @@ test.describe('モーダルでのGrasp設定編集', { tag: '@local' }, () => {
     console.log('  ✓ ×ボタンで編集が破棄された');
     console.log('✅ テスト完了！');
   });
+
+  test('保存エラー時はモーダルが閉じずに編集を続けられる', async ({ page }) => {
+    console.log('事前準備: 会議とGrasp設定を作成');
+    const meetingId = await createMeeting(page);
+
+    const configName = 'エラーテスト設定';
+    const configYaml = createSampleYaml(1);
+    const configId = await saveGraspConfig(page, configName, configYaml);
+    await applyConfigToMeeting(page, meetingId, configId);
+
+    console.log('Step 1: Grasp設定タブを開いて設定を選択');
+    await openGraspConfigTab(page);
+    const configVersionButton = page.locator(`[data-testid="config-version-${configId}"]`);
+    await configVersionButton.click();
+
+    console.log('Step 2: 編集ボタンをクリックしてモーダルを開く');
+    const editButton = page.locator('[data-testid="edit-button"]');
+    await editButton.click();
+
+    console.log('Step 3: YAMLを変更');
+    const modalYamlTextarea = page.locator('[data-testid="modal-yaml-textarea"]');
+    await expect(modalYamlTextarea).toBeVisible();
+    const newYaml = createSampleYaml(100);
+    await modalYamlTextarea.fill(newYaml);
+
+    console.log('Step 4: API エラーをシミュレートするためにネットワークをブロック');
+    await page.route('**/meetings/*/grasp-config', route => route.abort());
+
+    console.log('Step 5: 保存して適用ボタンをクリック');
+    
+    // アラートダイアログのハンドリング
+    let alertShown = false;
+    page.once('dialog', async dialog => {
+      console.log('  ✓ エラーアラートが表示された:', dialog.message());
+      expect(dialog.type()).toBe('alert');
+      alertShown = true;
+      await dialog.accept();
+    });
+
+    const modalSaveButton = page.locator('[data-testid="modal-save-and-apply-button"]');
+    await modalSaveButton.click();
+
+    // アラートが表示されるまで少し待つ
+    await page.waitForTimeout(2000);
+    expect(alertShown).toBe(true);
+
+    console.log('Step 6: モーダルがまだ開いていることを確認');
+    const modalBackdrop = page.locator('[data-testid="modal-backdrop"]');
+    await expect(modalBackdrop).toBeVisible();
+
+    console.log('Step 7: YAMLが編集状態のまま残っていることを確認');
+    const currentYaml = await modalYamlTextarea.inputValue();
+    expect(currentYaml).toContain('test-grasp-v100');
+
+    console.log('  ✓ エラー時もモーダルが開いたままで編集を続けられる');
+    console.log('✅ テスト完了！');
+  });
 });
