@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { execSync } from 'child_process';
+import { clearLocalStackData, createMeeting, API_URL } from './helpers/grasp-config-helpers';
 
 /**
  * E2Eテスト: Grasp設定のエラーハンドリング
@@ -16,53 +16,17 @@ import { execSync } from 'child_process';
  * - web/facilitator で pnpm run dev が起動している（ポート3001）
  */
 
-const FACILITATOR_URL = process.env.FACILITATOR_URL || 'http://localhost:3001';
-const API_URL = process.env.API_URL || 'http://localhost:3000';
-
 test.describe('Grasp設定のエラーハンドリング', { tag: '@local' }, () => {
   test.setTimeout(120000); // 2分のタイムアウト
 
   // 各テストケースの前にDynamoDBテーブルとSQSキューのデータをクリア
   test.beforeEach(async () => {
-    console.log('Clearing LocalStack data...');
-    execSync('uv run invoke delete-localstack-data', {
-      stdio: 'inherit',
-    });
-    console.log('LocalStack data cleared');
+    clearLocalStackData();
   });
 
   test('無効なYAML形式のエラーがチャットに報告される', async ({ page }) => {
     // 会議を作成
-    await page.goto(FACILITATOR_URL);
-    await page.waitForLoadState('networkidle');
-
-    const joinLink = page.locator('[data-testid="join-new-meeting-link"]');
-    await expect(joinLink).toBeVisible({ timeout: 10000 });
-    await joinLink.click();
-
-    await page.waitForURL('**/meetings/join');
-
-    const meetingUrlInput = page.locator('[data-testid="meeting-url-input"]');
-    await expect(meetingUrlInput).toBeVisible({ timeout: 5000 });
-    await meetingUrlInput.fill('http://localhost');
-
-    const joinButton = page.locator('[data-testid="join-meeting-button"]');
-    await expect(joinButton).toBeEnabled({ timeout: 5000 });
-    await joinButton.click();
-
-    await page.waitForURL('**/meetings/detail?id=*', { timeout: 30000 });
-
-    const url = new URL(page.url());
-    const meetingId = url.searchParams.get('id');
-
-    if (!meetingId) {
-      throw new Error('会議IDが取得できませんでした');
-    }
-
-    console.log(`会議ID: ${meetingId}`);
-
-    // ボット参加完了を確認
-    await expect(page.locator('[data-testid="leave-meeting-button"]')).toBeVisible({ timeout: 10000 });
+    const meetingId = await createMeeting(page);
 
     // 無効なYAMLを含む設定を作成
     const invalidYaml = `
@@ -101,36 +65,7 @@ grasps:
 
   test('必須フィールド欠落のエラーがチャットに報告される', async ({ page }) => {
     // 会議を作成
-    await page.goto(FACILITATOR_URL);
-    await page.waitForLoadState('networkidle');
-
-    const joinLink = page.locator('[data-testid="join-new-meeting-link"]');
-    await expect(joinLink).toBeVisible({ timeout: 10000 });
-    await joinLink.click();
-
-    await page.waitForURL('**/meetings/join');
-
-    const meetingUrlInput = page.locator('[data-testid="meeting-url-input"]');
-    await expect(meetingUrlInput).toBeVisible({ timeout: 5000 });
-    await meetingUrlInput.fill('http://localhost');
-
-    const joinButton = page.locator('[data-testid="join-meeting-button"]');
-    await expect(joinButton).toBeEnabled({ timeout: 5000 });
-    await joinButton.click();
-
-    await page.waitForURL('**/meetings/detail?id=*', { timeout: 30000 });
-
-    const url = new URL(page.url());
-    const meetingId = url.searchParams.get('id');
-
-    if (!meetingId) {
-      throw new Error('会議IDが取得できませんでした');
-    }
-
-    console.log(`会議ID: ${meetingId}`);
-
-    // ボット参加完了を確認
-    await expect(page.locator('[data-testid="leave-meeting-button"]')).toBeVisible({ timeout: 10000 });
+    const meetingId = await createMeeting(page);
 
     // nodeIdが欠落した設定
     const invalidYaml = `
@@ -168,36 +103,7 @@ grasps:
 
   test('参照されないnoteTagのエラーがチャットに報告される', async ({ page }) => {
     // 会議を作成
-    await page.goto(FACILITATOR_URL);
-    await page.waitForLoadState('networkidle');
-
-    const joinLink = page.locator('[data-testid="join-new-meeting-link"]');
-    await expect(joinLink).toBeVisible({ timeout: 10000 });
-    await joinLink.click();
-
-    await page.waitForURL('**/meetings/join');
-
-    const meetingUrlInput = page.locator('[data-testid="meeting-url-input"]');
-    await expect(meetingUrlInput).toBeVisible({ timeout: 5000 });
-    await meetingUrlInput.fill('http://localhost');
-
-    const joinButton = page.locator('[data-testid="join-meeting-button"]');
-    await expect(joinButton).toBeEnabled({ timeout: 5000 });
-    await joinButton.click();
-
-    await page.waitForURL('**/meetings/detail?id=*', { timeout: 30000 });
-
-    const url = new URL(page.url());
-    const meetingId = url.searchParams.get('id');
-
-    if (!meetingId) {
-      throw new Error('会議IDが取得できませんでした');
-    }
-
-    console.log(`会議ID: ${meetingId}`);
-
-    // ボット参加完了を確認
-    await expect(page.locator('[data-testid="leave-meeting-button"]')).toBeVisible({ timeout: 10000 });
+    const meetingId = await createMeeting(page);
 
     // noteTagが参照されていない設定（orchestratorでエラーになる）
     const invalidYaml = `
