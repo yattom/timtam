@@ -15,7 +15,6 @@ import { clearLocalStackData, createMeeting, API_URL } from './helpers/grasp-con
  */
 
 const FACILITATOR_URL = process.env.FACILITATOR_URL || 'http://localhost:3001';
-const API_URL = process.env.API_URL || 'http://localhost:3000';
 
 // メッセージAPIポーリング設定
 const MESSAGE_POLL_MAX_ATTEMPTS = 10;
