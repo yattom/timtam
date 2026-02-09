@@ -62,6 +62,7 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editedYaml, setEditedYaml] = useState<string>("");
   const [configName, setConfigName] = useState<string>("");
+  const [originalConfigName, setOriginalConfigName] = useState<string>("");
   const [configLoading, setConfigLoading] = useState(false);
   const [applySuccess, setApplySuccess] = useState(false);
   const [originalYaml, setOriginalYaml] = useState<string>("");
@@ -243,6 +244,7 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
       setEditedYaml(data.config.yaml);
       setOriginalYaml(data.config.yaml);
       setConfigName(name);
+      setOriginalConfigName(name);
     } catch (err) {
       alert(err instanceof Error ? err.message : '設定の取得に失敗しました');
     }
@@ -261,14 +263,16 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
   const openEditModal = () => {
     setOriginalYaml(selectedConfigYaml);
     setEditedYaml(selectedConfigYaml);
+    setOriginalConfigName(configName);
     setIsEditModalOpen(true);
   };
 
   // Close edit modal with confirmation if there are changes
   const closeEditModal = () => {
-    if (editedYaml !== originalYaml) {
+    if (editedYaml !== originalYaml || configName !== originalConfigName) {
       if (confirm('編集内容を破棄しますか？')) {
         setEditedYaml(originalYaml);
+        setConfigName(originalConfigName);
         setIsEditModalOpen(false);
       }
     } else {
@@ -292,12 +296,12 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
 
       let configIdToApply = selectedConfigId;
 
-      // If YAML was edited, save as new version first.
+      // If YAML or name was edited, save as new version first.
       // Note: The UI (ConfigTab.tsx) only passes `saveAsNew = true` when the YAML
       // has actually changed (`yamlChanged === true`). The additional
-      // `editedYaml !== selectedConfigYaml` check here is a safeguard and prevents
+      // `editedYaml !== selectedConfigYaml || configName !== originalConfigName` check here is a safeguard and prevents
       // creating redundant configs if this function is ever called differently.
-      if (saveAsNew && editedYaml !== selectedConfigYaml) {
+      if (saveAsNew && (editedYaml !== selectedConfigYaml || configName !== originalConfigName)) {
         const saveName = configName || `設定_${Date.now()}`;
         const saveResponse = await fetch(`${apiUrl}/grasp/configs`, {
           method: 'POST',
