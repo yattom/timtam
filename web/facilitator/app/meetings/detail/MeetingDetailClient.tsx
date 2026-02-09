@@ -298,9 +298,10 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
 
       // If YAML or name was edited, save as new version first.
       // Note: The UI (ConfigTab.tsx) only passes `saveAsNew = true` when the YAML
-      // has actually changed (`yamlChanged === true`). The additional
-      // `editedYaml !== selectedConfigYaml || configName !== originalConfigName` check here is a safeguard and prevents
-      // creating redundant configs if this function is ever called differently.
+      // has actually changed (`yamlChanged === true`). The additional checks here
+      // (`editedYaml !== selectedConfigYaml || configName !== originalConfigName`) are a safeguard
+      // that also covers name-only changes and prevents creating redundant configs
+      // if this function is ever called differently.
       if (saveAsNew && (editedYaml !== selectedConfigYaml || configName !== originalConfigName)) {
         const saveName = configName || `設定_${Date.now()}`;
         const saveResponse = await fetch(`${apiUrl}/grasp/configs`, {
