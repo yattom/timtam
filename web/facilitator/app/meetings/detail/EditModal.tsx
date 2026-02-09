@@ -6,6 +6,7 @@ interface EditModalProps {
   isOpen: boolean;
   configName: string;
   editedYaml: string;
+  isLoading?: boolean;
   onYamlChange: (yaml: string) => void;
   onConfigNameChange: (name: string) => void;
   onSaveAndApply: () => void;
@@ -16,6 +17,7 @@ export default function EditModal({
   isOpen,
   configName,
   editedYaml,
+  isLoading = false,
   onYamlChange,
   onConfigNameChange,
   onSaveAndApply,
@@ -26,7 +28,7 @@ export default function EditModal({
 
   // 初期フォーカスを設定
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || isLoading) return;
 
     // モーダルが開いたら最初の入力フィールドにフォーカス
     firstInputRef.current?.focus();
@@ -38,7 +40,10 @@ export default function EditModal({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        onDiscard();
+        // isLoading中はESCキーを無効化
+        if (!isLoading) {
+          onDiscard();
+        }
         return;
       }
 
@@ -47,9 +52,9 @@ export default function EditModal({
         const focusableElements = modalRef.current.querySelectorAll(
           'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"]), [contenteditable="true"]'
         );
-        
+
         if (focusableElements.length === 0) return;
-        
+
         const firstElement = focusableElements[0] as HTMLElement;
         const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
 
@@ -67,7 +72,7 @@ export default function EditModal({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onDiscard]);
+  }, [isOpen, isLoading, onDiscard]);
 
   if (!isOpen) return null;
 
@@ -76,7 +81,7 @@ export default function EditModal({
       {/* 背景オーバーレイ */}
       <div
         className="fixed inset-0 bg-black bg-opacity-50 z-40"
-        onClick={onDiscard}
+        onClick={isLoading ? undefined : onDiscard}
         data-testid="modal-backdrop"
       />
 
@@ -96,7 +101,8 @@ export default function EditModal({
             </h3>
             <button
               onClick={onDiscard}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              disabled={isLoading}
+              className="text-gray-400 hover:text-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed transition-colors"
               aria-label="閉じる"
               data-testid="modal-close-button"
             >
@@ -149,14 +155,16 @@ export default function EditModal({
             <div className="flex space-x-3">
               <button
                 onClick={onSaveAndApply}
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors font-medium"
+                disabled={isLoading}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-700 disabled:cursor-not-allowed transition-colors font-medium"
                 data-testid="modal-save-and-apply-button"
               >
-                保存して適用
+                {isLoading ? '保存中...' : '保存して適用'}
               </button>
               <button
                 onClick={onDiscard}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors font-medium"
+                disabled={isLoading}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:bg-gray-200 disabled:text-gray-700 disabled:cursor-not-allowed transition-colors font-medium"
                 data-testid="modal-discard-button"
               >
                 編集を破棄

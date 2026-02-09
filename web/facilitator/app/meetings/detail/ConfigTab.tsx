@@ -255,6 +255,7 @@ export default function ConfigTab({
         isOpen={isEditModalOpen}
         configName={configName}
         editedYaml={editedYaml}
+        isLoading={configLoading}
         onYamlChange={onEditYamlChange}
         onConfigNameChange={onConfigNameChange}
         onSaveAndApply={onSaveAndApply}
