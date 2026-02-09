@@ -180,9 +180,18 @@ async function pollControlOnce() {
               }));
 
               // Send chat notification to meeting
-              const configName = parsed.configName || 'カスタム設定';
-              const notificationMessage = `Grasp設定「${configName}」を適用しました（${grasps.length}個のGrasp）`;
-              await meeting.postChat(parsed.meetingId, notificationMessage);
+              try {
+                const configName = parsed.configName || 'カスタム設定';
+                const notificationMessage = `Grasp設定「${configName}」を適用しました（${grasps.length}個のGrasp）`;
+                await meeting.postChat(parsed.meetingId, notificationMessage);
+              } catch (chatError) {
+                console.error(JSON.stringify({
+                  type: 'orchestrator.control.meeting.grasp_config.chat_notification_failed',
+                  meetingId: parsed.meetingId,
+                  error: (chatError as Error).message,
+                  ts: Date.now()
+                }));
+              }
             } else {
               console.warn(JSON.stringify({
                 type: 'orchestrator.control.meeting.grasp_config.meeting_not_found',
@@ -201,9 +210,18 @@ async function pollControlOnce() {
             // Send error notification to meeting chat
             const meeting = orchestratorManager.getMeeting(parsed.meetingId);
             if (meeting) {
-              const configName = parsed.configName || 'カスタム設定';
-              const errorMessage = `Grasp設定「${configName}」の適用に失敗しました: ${(error as Error).message}`;
-              await meeting.postChat(parsed.meetingId, errorMessage);
+              try {
+                const configName = parsed.configName || 'カスタム設定';
+                const errorMessage = `Grasp設定「${configName}」の適用に失敗しました: ${(error as Error).message}`;
+                await meeting.postChat(parsed.meetingId, errorMessage);
+              } catch (chatError) {
+                console.error(JSON.stringify({
+                  type: 'orchestrator.control.meeting.grasp_config.chat_notification_failed',
+                  meetingId: parsed.meetingId,
+                  error: (chatError as Error).message,
+                  ts: Date.now()
+                }));
+              }
             }
           }
         }
