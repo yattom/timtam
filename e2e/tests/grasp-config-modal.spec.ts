@@ -380,4 +380,58 @@ test.describe('モーダルでのGrasp設定編集', { tag: '@local' }, () => {
     console.log('  ✓ エラー時もモーダルが開いたままで編集を続けられる');
     console.log('✅ テスト完了！');
   });
+
+  test('設定名だけを変更してキャンセルすると元の設定名に戻る', async ({ page }) => {
+    console.log('事前準備: 会議とGrasp設定を作成');
+    const meetingId = await createMeeting(page);
+
+    const originalConfigName = '元の設定名';
+    const configYaml = createSampleYaml(1);
+    const configId = await saveGraspConfig(page, originalConfigName, configYaml);
+    await applyConfigToMeeting(page, meetingId, configId);
+
+    console.log('Step 1: Grasp設定タブを開いて設定を選択');
+    await openGraspConfigTab(page);
+    const configVersionButton = page.locator(`[data-testid="config-version-${configId}"]`);
+    await configVersionButton.click();
+
+    console.log('Step 2: 編集ボタンをクリックしてモーダルを開く');
+    const editButton = page.locator('[data-testid="edit-button"]');
+    await editButton.click();
+
+    console.log('Step 3: 設定名だけを変更（YAMLは変更しない）');
+    const modalConfigNameInput = page.locator('[data-testid="modal-config-name-input"]');
+    await expect(modalConfigNameInput).toBeVisible();
+    await expect(modalConfigNameInput).toHaveValue(originalConfigName);
+    
+    const newConfigName = '変更後の設定名';
+    await modalConfigNameInput.fill(newConfigName);
+    await expect(modalConfigNameInput).toHaveValue(newConfigName);
+
+    console.log('Step 4: 編集を破棄ボタンをクリック');
+    
+    // 確認ダイアログのハンドリング
+    page.once('dialog', async dialog => {
+      console.log('  ✓ 確認ダイアログが表示された（設定名変更を検知）');
+      expect(dialog.type()).toBe('confirm');
+      expect(dialog.message()).toContain('破棄');
+      await dialog.accept();
+    });
+
+    const modalDiscardButton = page.locator('[data-testid="modal-discard-button"]');
+    await modalDiscardButton.click();
+
+    console.log('Step 5: モーダルが閉じる');
+    const modalBackdrop = page.locator('[data-testid="modal-backdrop"]');
+    await expect(modalBackdrop).not.toBeVisible({ timeout: 5000 });
+
+    console.log('Step 6: 再度モーダルを開いて設定名が元に戻っていることを確認');
+    await editButton.click();
+    await expect(modalBackdrop).toBeVisible({ timeout: 5000 });
+    await expect(modalConfigNameInput).toBeVisible();
+    await expect(modalConfigNameInput).toHaveValue(originalConfigName);
+
+    console.log('  ✓ 設定名が元の値に正しく戻っている');
+    console.log('✅ テスト完了！');
+  });
 });
