@@ -26,10 +26,9 @@ body {
   }
 }
 
-input {
-  color: rgb(17, 24, 39);
-}
-
-textarea {
-  color: rgb(17, 24, 39);
+@layer base {
+  input,
+  textarea {
+    color: rgb(17, 24, 39);
+  }
 }
