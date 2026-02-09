@@ -213,8 +213,8 @@ async function pollControlOnce() {
             if (meeting) {
               try {
                 const configName = parsed.configName || 'カスタム設定';
-                const notificationMessage = `Grasp設定「${configName}」の適用に失敗しました: ${errorMessage}`;
-                await meeting.postChat(parsed.meetingId, notificationMessage);
+                const errorNotificationMessage = `Grasp設定「${configName}」の適用に失敗しました: ${errorMessage}`;
+                await meeting.postChat(parsed.meetingId, errorNotificationMessage);
               } catch (chatError) {
                 console.error(JSON.stringify({
                   type: 'orchestrator.control.meeting.grasp_config.chat_error_notification_failed',
