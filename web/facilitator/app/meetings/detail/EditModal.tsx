@@ -59,7 +59,7 @@ export default function EditModal({
             <button
               onClick={onDiscard}
               disabled={isLoading}
-              className="text-gray-400 hover:text-gray-600 disabled:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="text-gray-400 hover:text-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed transition-colors"
               aria-label="閉じる"
               data-testid="modal-close-button"
             >
@@ -120,7 +120,7 @@ export default function EditModal({
               <button
                 onClick={onDiscard}
                 disabled={isLoading}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:bg-gray-200 disabled:cursor-not-allowed transition-colors font-medium"
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:bg-gray-200 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors font-medium"
                 data-testid="modal-discard-button"
               >
                 編集を破棄
