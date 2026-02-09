@@ -17,6 +17,16 @@ import { execSync } from 'child_process';
 const FACILITATOR_URL = process.env.FACILITATOR_URL || 'http://localhost:3001';
 const API_URL = process.env.API_URL || 'http://localhost:3000';
 
+// メッセージAPIポーリング設定
+const MESSAGE_POLL_MAX_ATTEMPTS = 10;
+const MESSAGE_POLL_INTERVAL_MS = 1000;
+
+interface AiMessage {
+  timestamp: number;
+  message: string;
+  type: string;
+}
+
 test.describe('Grasp設定のエラーハンドリング', { tag: '@local' }, () => {
   test.setTimeout(120000); // 2分のタイムアウト
 
@@ -239,11 +249,9 @@ grasps:
     // orchestratorがエラーメッセージをチャットに送信するまで待つ
     // messages APIをポーリングして、エラーメッセージが到達したことを確認する
     let errorMessageFound = false;
-    const maxAttempts = 10;
-    const pollInterval = 1000; // 1秒ごとにポーリング
     
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      await page.waitForTimeout(pollInterval);
+    for (let attempt = 0; attempt < MESSAGE_POLL_MAX_ATTEMPTS; attempt++) {
+      await page.waitForTimeout(MESSAGE_POLL_INTERVAL_MS);
       
       const messages = await page.evaluate(async ({ apiUrl, meetingId }) => {
         const response = await fetch(`${apiUrl}/meetings/${meetingId}/messages`);
@@ -251,10 +259,10 @@ grasps:
         return data.messages || [];
       }, { apiUrl: API_URL, meetingId });
       
-      console.log(`ポーリング試行 ${attempt + 1}/${maxAttempts}: ${messages.length}件のメッセージ`);
+      console.log(`ポーリング試行 ${attempt + 1}/${MESSAGE_POLL_MAX_ATTEMPTS}: ${messages.length}件のメッセージ`);
       
       // ai_interventionタイプのメッセージで「適用に失敗しました」を含むものを探す
-      const errorMessage = messages.find((msg: any) => 
+      const errorMessage = (messages as AiMessage[]).find((msg) => 
         msg.type === 'ai_intervention' && 
         msg.message.includes('適用に失敗しました') &&
         msg.message.includes(configName)
