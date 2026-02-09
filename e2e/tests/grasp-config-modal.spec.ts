@@ -403,7 +403,6 @@ test.describe('モーダルでのGrasp設定編集', { tag: '@local' }, () => {
     const modalConfigNameInput = page.locator('[data-testid="modal-config-name-input"]');
     await expect(modalConfigNameInput).toBeVisible();
     await expect(modalConfigNameInput).toHaveValue(originalConfigName);
-    
     const newConfigName = '変更後の設定名';
     await modalConfigNameInput.fill(newConfigName);
     await expect(modalConfigNameInput).toHaveValue(newConfigName);
