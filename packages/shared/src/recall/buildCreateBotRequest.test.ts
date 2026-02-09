@@ -90,4 +90,26 @@ describe('buildCreateBotRequest', () => {
       },
     });
   });
+
+  it('automatic_leave設定を正しく設定すること', () => {
+    const request = buildCreateBotRequest({
+      meetingUrl: 'https://zoom.us/j/123456789',
+      botName: 'Test Bot',
+      webhookUrl: 'https://example.com/webhook',
+      transcriptionProvider: 'deepgram_streaming',
+      transcriptionLanguage: 'auto',
+    });
+
+    expect(request.automatic_leave).toEqual({
+      waiting_room_timeout: 1200,
+      noone_joined_timeout: 1200,
+      everyone_left_timeout: {
+        timeout: 2,
+      },
+      silence_detection: {
+        timeout: 3600,
+        activate_after: 1200,
+      },
+    });
+  });
 });
