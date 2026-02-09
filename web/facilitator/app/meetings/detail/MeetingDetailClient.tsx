@@ -278,12 +278,14 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
 
   // Save and apply from modal
   const saveAndApply = async () => {
-    await handleApplyConfig(true);
-    setIsEditModalOpen(false);
+    const success = await handleApplyConfig(true);
+    if (success) {
+      setIsEditModalOpen(false);
+    }
   };
 
   // Handle applying Grasp config to meeting
-  const handleApplyConfig = async (saveAsNew: boolean = false) => {
+  const handleApplyConfig = async (saveAsNew: boolean = false): Promise<boolean> => {
     try {
       setConfigLoading(true);
       setApplySuccess(false);
@@ -366,8 +368,10 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
 
       setApplySuccess(true);
       setTimeout(() => setApplySuccess(false), 3000);
+      return true;
     } catch (err) {
       alert(err instanceof Error ? err.message : '設定の適用に失敗しました');
+      return false;
     } finally {
       setConfigLoading(false);
     }
