@@ -168,6 +168,7 @@ export class TimtamInfraStack extends Stack {
         TRANSCRIPT_QUEUE_URL: transcriptQueue.queueUrl,
         AI_MESSAGES_TABLE: aiMessagesTable.tableName,
         RECALL_API_KEY: process.env.RECALL_API_KEY || '', // TODO: Secrets Managerから取得
+        MEETINGS_METADATA_TABLE: meetingsMetadataTable.tableName,
       },
     });
 
@@ -256,6 +257,7 @@ export class TimtamInfraStack extends Stack {
 
     // Phase 2: Grant permissions for Recall.ai Lambda functions
     transcriptQueue.grantSendMessages(recallWebhookFn);
+    meetingsMetadataTable.grantReadWriteData(recallWebhookFn); // bot.status event handling
     meetingsMetadataTable.grantReadWriteData(recallJoinMeetingFn);
     graspConfigsTable.grantReadData(recallJoinMeetingFn);
     meetingsMetadataTable.grantReadData(recallGetMeetingFn);

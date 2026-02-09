@@ -1,5 +1,7 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, UpdateCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
 import { createHash } from 'crypto';
 import { RecallAdapter } from '@timtam/shared';
 
@@ -7,8 +9,15 @@ const REGION = process.env.AWS_REGION || 'ap-northeast-1';
 const TRANSCRIPT_QUEUE_URL = process.env.TRANSCRIPT_QUEUE_URL || '';
 const AI_MESSAGES_TABLE = process.env.AI_MESSAGES_TABLE || 'timtam-ai-messages';
 const RECALL_API_KEY = process.env.RECALL_API_KEY || '';
+const MEETINGS_METADATA_TABLE = process.env.MEETINGS_METADATA_TABLE || 'timtam-meetings-metadata';
 
 const sqs = new SQSClient({ region: REGION });
+const ddbClient = new DynamoDBClient({ region: REGION });
+const ddb = DynamoDBDocumentClient.from(ddbClient, {
+  marshallOptions: {
+    removeUndefinedValues: true,
+  },
+});
 
 // RecallAdapter for INBOUND processing (Recall.ai Webhook format → TranscriptEvent)
 const recallAdapter = new RecallAdapter({
@@ -90,17 +99,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         };
 
       case 'bot.status':
-        // Phase 2: ボット状態変化イベント（後回し）
-        console.log(JSON.stringify({
-          type: 'recall.webhook.bot_status',
-          botId: payload.bot_id,
-          status: payload.status,
-        }));
-        return {
-          statusCode: 200,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ok: true, message: 'Bot status event acknowledged (not processed)' }),
-        };
+        return await handleBotStatusEvent(payload);
 
       default:
         console.warn(`Unknown Recall.ai event type: ${eventType}`);
@@ -179,6 +178,111 @@ async function handleTranscriptEvent(payload: any): Promise<any> {
     transcriptId: transcript_id,
     deduplicationId,
   }));
+
+  return {
+    statusCode: 200,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ok: true }),
+  };
+}
+
+/**
+ * ボット状態変化イベント処理
+ *
+ * Recall.aiのボットが会議から退出したり、エラーが発生した場合に
+ * DynamoDBのミーティングステータスを更新する。
+ *
+ * ボットステータスの遷移:
+ * - ready: ボットが会議参加の準備完了
+ * - joining_call: 会議に参加中
+ * - in_meeting: 会議参加中（記録中）
+ * - done: 正常終了
+ * - error: エラー発生
+ * - fatal: 致命的エラー
+ *
+ * @see https://docs.recall.ai/reference/webhooks-overview#botstatus
+ */
+async function handleBotStatusEvent(payload: any): Promise<any> {
+  const botId = payload.bot_id;
+  const status = payload.status;
+  const statusMessage = payload.status_message;
+
+  console.log(JSON.stringify({
+    type: 'recall.webhook.bot_status',
+    botId,
+    status,
+    statusMessage,
+    timestamp: Date.now(),
+  }));
+
+  // 終了状態（done, error, fatal）の場合のみDynamoDBを更新
+  const isTerminalStatus = ['done', 'error', 'fatal'].includes(status);
+
+  if (isTerminalStatus) {
+    try {
+      // ミーティングが存在するか確認
+      const getResult = await ddb.send(
+        new GetCommand({
+          TableName: MEETINGS_METADATA_TABLE,
+          Key: { meetingId: botId },
+        })
+      );
+
+      if (!getResult.Item) {
+        console.warn(JSON.stringify({
+          type: 'recall.webhook.bot_status.meeting_not_found',
+          botId,
+          status,
+          message: 'Meeting not found in DynamoDB, skipping status update',
+          timestamp: Date.now(),
+        }));
+        return {
+          statusCode: 200,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ok: true, message: 'Bot status event acknowledged (meeting not found)' }),
+        };
+      }
+
+      // DynamoDBのミーティングステータスを更新
+      const now = Date.now();
+      const ttl = Math.floor(now / 1000) + (7 * 24 * 60 * 60); // 7日後
+
+      await ddb.send(
+        new UpdateCommand({
+          TableName: MEETINGS_METADATA_TABLE,
+          Key: { meetingId: botId },
+          UpdateExpression: 'SET #status = :status, #endedAt = :endedAt, #ttl = :ttl',
+          ExpressionAttributeNames: {
+            '#status': 'status',
+            '#endedAt': 'endedAt',
+            '#ttl': 'ttl',
+          },
+          ExpressionAttributeValues: {
+            ':status': 'ended',
+            ':endedAt': now,
+            ':ttl': ttl,
+          },
+        })
+      );
+
+      console.log(JSON.stringify({
+        type: 'recall.webhook.bot_status.meeting_ended',
+        botId,
+        recallStatus: status,
+        meetingStatus: 'ended',
+        ttl,
+        timestamp: now,
+      }));
+    } catch (err: any) {
+      console.error('Error updating meeting status from bot.status event', {
+        botId,
+        status,
+        error: err?.message || err,
+        stack: err?.stack,
+      });
+      // Webhookは常に200を返す（Recall.aiのリトライを防ぐため）
+    }
+  }
 
   return {
     statusCode: 200,
