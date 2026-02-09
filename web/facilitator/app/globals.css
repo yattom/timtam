@@ -25,3 +25,11 @@ body {
     text-wrap: balance;
   }
 }
+
+input {
+  color: rgb(17, 24, 39);
+}
+
+textarea {
+  color: rgb(17, 24, 39);
+}
