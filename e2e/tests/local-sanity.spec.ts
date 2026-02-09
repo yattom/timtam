@@ -1,5 +1,8 @@
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import { test, expect, Page } from '@playwright/test';
 import { execSync } from 'child_process';
+import { clearLocalStackData, createMeeting, loadDefaultDataOnLocalStack } from './helpers/grasp-config-helpers';
 
 /**
  * E2Eテスト: ローカル環境サニティチェック
@@ -22,16 +25,16 @@ import { execSync } from 'child_process';
 const FACILITATOR_URL = process.env.FACILITATOR_URL || 'http://localhost:3001';
 const STUB_RECALL_URL = process.env.STUB_RECALL_URL || 'http://localhost:8080';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 test.describe('ローカル環境サニティチェック', { tag: '@local' }, () => {
   test.setTimeout(120000); // 2分のタイムアウト
 
   // 各テストケースの前にDynamoDBテーブルとSQSキューのデータをクリア
   test.beforeEach(async () => {
-    console.log('Clearing LocalStack data...');
-    execSync('uv run invoke delete-localstack-data', {
-      stdio: 'inherit',
-    });
-    console.log('LocalStack data cleared');
+    clearLocalStackData();
+    loadDefaultDataOnLocalStack(__dirname);
   });
 
   test('完全なローカル開発フローの動作確認', async ({ page, context }) => {

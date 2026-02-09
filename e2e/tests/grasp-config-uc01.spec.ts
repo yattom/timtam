@@ -1,5 +1,8 @@
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 import { test, expect, Page } from '@playwright/test';
 import { execSync } from 'child_process';
+import { loadDefaultDataOnLocalStack } from './helpers/grasp-config-helpers';
 
 /**
  * E2Eテスト: UC01 会議のGrasp設定を調整する
@@ -23,6 +26,9 @@ import { execSync } from 'child_process';
 const FACILITATOR_URL = process.env.FACILITATOR_URL || 'http://localhost:3001';
 const API_URL = process.env.API_URL || 'http://localhost:3000';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 test.describe('UC01: 会議のGrasp設定を調整する', { tag: '@local' }, () => {
   test.setTimeout(120000); // 2分のタイムアウト
 
@@ -33,6 +39,7 @@ test.describe('UC01: 会議のGrasp設定を調整する', { tag: '@local' }, ()
       stdio: 'inherit',
     });
     console.log('LocalStack data cleared');
+    loadDefaultDataOnLocalStack(__dirname);
   });
 
   test('UC01: Grasp設定を調整して新バージョンとして保存・適用', async ({ page }) => {

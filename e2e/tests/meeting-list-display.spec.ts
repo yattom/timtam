@@ -1,7 +1,10 @@
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 import { test, expect } from '@playwright/test';
 import { execSync } from 'child_process';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { loadDefaultDataOnLocalStack } from './helpers/grasp-config-helpers';
 
 /**
  * E2Eテスト: 会議リスト表示のUIテスト
@@ -18,6 +21,9 @@ import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 
 const FACILITATOR_URL = process.env.FACILITATOR_URL || 'http://localhost:3001';
 const LOCALSTACK_ENDPOINT = process.env.LOCALSTACK_ENDPOINT || 'http://localhost:4566';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // LocalStack DynamoDB client
 const ddbClient = new DynamoDBClient({
@@ -44,6 +50,7 @@ test.describe('会議リスト表示', { tag: '@local' }, () => {
       stdio: 'inherit',
     });
     console.log('LocalStack data cleared');
+    loadDefaultDataOnLocalStack(__dirname);
   });
 
   test('会議が0件の場合、適切なメッセージが表示されること', async ({ page }) => {
