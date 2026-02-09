@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 interface EditModalProps {
   isOpen: boolean;
@@ -21,18 +21,52 @@ export default function EditModal({
   onSaveAndApply,
   onDiscard,
 }: EditModalProps) {
-  // ESCキーでモーダルを閉じる
+  const modalRef = useRef<HTMLDivElement>(null);
+  const firstInputRef = useRef<HTMLInputElement>(null);
+
+  // 初期フォーカスを設定
   useEffect(() => {
     if (!isOpen) return;
 
-    const handleEsc = (e: KeyboardEvent) => {
+    // モーダルが開いたら最初の入力フィールドにフォーカス
+    firstInputRef.current?.focus();
+  }, [isOpen]);
+
+  // ESCキーでモーダルを閉じる & フォーカストラップ
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         onDiscard();
+        return;
+      }
+
+      // Tabキーでフォーカストラップを実装
+      if (e.key === "Tab" && modalRef.current) {
+        const focusableElements = modalRef.current.querySelectorAll(
+          'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"]), [contenteditable="true"]'
+        );
+        
+        if (focusableElements.length === 0) return;
+        
+        const firstElement = focusableElements[0] as HTMLElement;
+        const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
+
+        if (e.shiftKey && document.activeElement === firstElement) {
+          // Shift+Tab で最初の要素にいる場合、最後の要素へ
+          e.preventDefault();
+          lastElement?.focus();
+        } else if (!e.shiftKey && document.activeElement === lastElement) {
+          // Tab で最後の要素にいる場合、最初の要素へ
+          e.preventDefault();
+          firstElement?.focus();
+        }
       }
     };
 
-    window.addEventListener("keydown", handleEsc);
-    return () => window.removeEventListener("keydown", handleEsc);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onDiscard]);
 
   if (!isOpen) return null;
@@ -48,10 +82,16 @@ export default function EditModal({
 
       {/* モーダル本体 */}
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col">
+        <div
+          ref={modalRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="modal-title"
+          className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col"
+        >
           {/* ヘッダー */}
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">
+            <h3 id="modal-title" className="text-lg font-semibold text-gray-900">
               Grasp設定を編集
             </h3>
             <button
@@ -75,6 +115,7 @@ export default function EditModal({
                   設定名
                 </label>
                 <input
+                  ref={firstInputRef}
                   type="text"
                   value={configName}
                   onChange={(e) => onConfigNameChange(e.target.value)}
