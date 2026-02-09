@@ -186,9 +186,9 @@ async function pollControlOnce() {
                 await meeting.postChat(parsed.meetingId, notificationMessage);
               } catch (chatError) {
                 console.error(JSON.stringify({
-                  type: 'orchestrator.control.meeting.grasp_config.chat_notification_failed',
+                  type: 'orchestrator.control.meeting.grasp_config.chat_success_notification_failed',
                   meetingId: parsed.meetingId,
-                  error: (chatError as Error).message,
+                  error: chatError instanceof Error ? chatError.message : String(chatError),
                   ts: Date.now()
                 }));
               }
@@ -216,9 +216,9 @@ async function pollControlOnce() {
                 await meeting.postChat(parsed.meetingId, errorMessage);
               } catch (chatError) {
                 console.error(JSON.stringify({
-                  type: 'orchestrator.control.meeting.grasp_config.chat_notification_failed',
+                  type: 'orchestrator.control.meeting.grasp_config.chat_error_notification_failed',
                   meetingId: parsed.meetingId,
-                  error: (chatError as Error).message,
+                  error: chatError instanceof Error ? chatError.message : String(chatError),
                   ts: Date.now()
                 }));
               }
