@@ -6,6 +6,7 @@ interface EditModalProps {
   isOpen: boolean;
   configName: string;
   editedYaml: string;
+  isLoading?: boolean;
   onYamlChange: (yaml: string) => void;
   onConfigNameChange: (name: string) => void;
   onSaveAndApply: () => void;
@@ -16,6 +17,7 @@ export default function EditModal({
   isOpen,
   configName,
   editedYaml,
+  isLoading = false,
   onYamlChange,
   onConfigNameChange,
   onSaveAndApply,
@@ -108,14 +110,16 @@ export default function EditModal({
             <div className="flex space-x-3">
               <button
                 onClick={onSaveAndApply}
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors font-medium"
+                disabled={isLoading}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
                 data-testid="modal-save-and-apply-button"
               >
-                保存して適用
+                {isLoading ? '保存中...' : '保存して適用'}
               </button>
               <button
                 onClick={onDiscard}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors font-medium"
+                disabled={isLoading}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:bg-gray-200 disabled:cursor-not-allowed transition-colors font-medium"
                 data-testid="modal-discard-button"
               >
                 編集を破棄
