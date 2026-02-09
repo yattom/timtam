@@ -17,6 +17,16 @@ import { execSync } from 'child_process';
 const FACILITATOR_URL = process.env.FACILITATOR_URL || 'http://localhost:3001';
 const API_URL = process.env.API_URL || 'http://localhost:3000';
 
+// メッセージAPIポーリング設定
+const MESSAGE_POLL_MAX_ATTEMPTS = 10;
+const MESSAGE_POLL_INTERVAL_MS = 1000;
+
+interface AiMessage {
+  timestamp: number;
+  message: string;
+  type: string;
+}
+
 test.describe('Grasp設定のエラーハンドリング', { tag: '@local' }, () => {
   test.setTimeout(120000); // 2分のタイムアウト
 
@@ -29,7 +39,7 @@ test.describe('Grasp設定のエラーハンドリング', { tag: '@local' }, ()
     console.log('LocalStack data cleared');
   });
 
-  test('無効なYAML形式のエラーがチャットに報告される', async ({ page }) => {
+  test('無効なYAML形式のエラーがAPI層で検出される', async ({ page }) => {
     // 会議を作成
     await page.goto(FACILITATOR_URL);
     await page.waitForLoadState('networkidle');
@@ -97,7 +107,7 @@ grasps:
     console.log('✓ 無効なYAML形式でバリデーションエラーが返された');
   });
 
-  test('必須フィールド欠落のエラーがチャットに報告される', async ({ page }) => {
+  test('必須フィールド欠落のエラーがAPI層で検出される', async ({ page }) => {
     // 会議を作成
     await page.goto(FACILITATOR_URL);
     await page.waitForLoadState('networkidle');
@@ -237,11 +247,38 @@ grasps:
     console.log('設定を会議に適用しようとした');
 
     // orchestratorがエラーメッセージをチャットに送信するまで待つ
-    // （実際のチャットメッセージを確認するには、チャットUIを実装する必要がある）
-    // ここでは、一定時間待機してログを確認する
-    await page.waitForTimeout(5000);
-
-    console.log('✓ orchestratorでのバリデーションエラーが処理された');
-    // TODO: チャットUIが実装されたら、エラーメッセージが表示されることを確認する
+    // messages APIをポーリングして、エラーメッセージが到達したことを確認する
+    let errorMessageFound = false;
+    
+    for (let attempt = 0; attempt < MESSAGE_POLL_MAX_ATTEMPTS; attempt++) {
+      await page.waitForTimeout(MESSAGE_POLL_INTERVAL_MS);
+      
+      const messages = await page.evaluate(async ({ apiUrl, meetingId }) => {
+        const response = await fetch(`${apiUrl}/meetings/${meetingId}/messages`);
+        const data = await response.json();
+        return data.messages || [];
+      }, { apiUrl: API_URL, meetingId });
+      
+      console.log(`ポーリング試行 ${attempt + 1}/${MESSAGE_POLL_MAX_ATTEMPTS}: ${messages.length}件のメッセージ`);
+      
+      // ai_interventionタイプのメッセージで「適用に失敗しました」を含むものを探す
+      const errorMessage = (messages as AiMessage[]).find((msg) => 
+        msg.type === 'ai_intervention' && 
+        msg.message.includes('適用に失敗しました') &&
+        msg.message.includes(configName)
+      );
+      
+      if (errorMessage) {
+        console.log(`✓ エラーメッセージを確認: ${errorMessage.message}`);
+        errorMessageFound = true;
+        
+        // noteTagエラーの詳細も含まれていることを確認
+        expect(errorMessage.message).toContain('unused-tag');
+        break;
+      }
+    }
+    
+    expect(errorMessageFound).toBe(true);
+    console.log('✓ orchestratorでのバリデーションエラーがチャットに報告された');
   });
 });
