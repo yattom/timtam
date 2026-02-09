@@ -189,18 +189,25 @@ pnpm run infra:open:cloudfront   # CloudFrontを有効化
 #### web:build - Webアプリケーションビルド
 
 ```bash
-pnpm run web:build
+pnpm run facilitator:build
 ```
 
-timtam-webパッケージをビルド。
+facilitatorパッケージをビルド。
 
 #### web:deploy - Webアプリケーションデプロイ
 
 ```bash
-pnpm run web:deploy
+pnpm run facilitator:deploy
 ```
 
 ビルドしたWebアプリをS3にアップロードしてCloudFrontで配信。
+
+#### deploy:web-assets - Webアプリケーションのビルドとデプロイまとめて実行する
+
+```bash
+pnpm run deploy:web-assets
+```
+
 
 ### 5. Orchestratorビルド
 
@@ -620,7 +627,7 @@ aws dynamodb list-tables --region ap-northeast-1
 - AWS Profile: `admin`
 - AWS Region: `ap-northeast-1`
 - インフラパッケージ: `timtam-infra`
-- Webパッケージ: `timtam-web`
+- Webパッケージ: `facilitator`
 - Orchestratorサービス: `services/orchestrator`
 - Sharedパッケージ: `packages/shared`
 

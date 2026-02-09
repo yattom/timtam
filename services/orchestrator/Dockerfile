@@ -40,7 +40,6 @@ COPY services/orchestrator/tsconfig.json ./services/orchestrator/
 COPY services/orchestrator/worker.ts ./services/orchestrator/
 COPY services/orchestrator/grasp.ts ./services/orchestrator/
 COPY services/orchestrator/graspConfigParser.ts ./services/orchestrator/
-COPY services/orchestrator/selfSetup.ts ./services/orchestrator/
 COPY services/orchestrator/orchestratorManager.ts ./services/orchestrator/
 COPY services/orchestrator/meetingOrchestrator.ts ./services/orchestrator/
 COPY services/orchestrator/graspConfigLoader.ts ./services/orchestrator/

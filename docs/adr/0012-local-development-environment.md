@@ -273,20 +273,13 @@ app.listen(PORT, () => {
 ### 開発フロー
 
 ```bash
-# 1. LocalStack + Orchestrator起動
-docker-compose up
+# 1. (必要に応じて)イメージ再作成
+docker compose build --no-cache
 
-# 2. 初回のみ: LocalStackにDynamoDBテーブル・SQSキューを作成
-./scripts/setup-localstack.sh
+# 2. LocalStack + Orchestrator起動、DynamoDBテーブル・SQSキュー作成、初期データ投入
+uv invoke run start-locak-dev
 
-# 3. ローカルAPIサーバー起動
-node local-api-server.js
-
-# 4. Webフロントエンド起動
-cd web/timtam-web
-pnpm dev
-
-# 5. ブラウザで http://localhost:5173 にアクセス
+# 3. ブラウザで http://localhost:3001 にアクセス
 ```
 
 ### セットアップスクリプト（scripts/setup-localstack.sh）
@@ -454,9 +447,9 @@ echo "LocalStack setup complete!"
 
 ### Phase 4: Webフロントエンドの接続（30分）
 
-1. `web/timtam-web/.env.local`作成
+1. `web/facilitator/.env.local`作成
    ```
-   VITE_API_BASE_URL=http://localhost:3000
+   NEXT_PUBLIC_API_URL=http://localhost:3000
    ```
 2. 動作確認
 3. E2Eテスト（会議作成→文字起こし→LLM応答）

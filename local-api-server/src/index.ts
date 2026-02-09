@@ -29,11 +29,9 @@ import { getMessages } from '../../services/ai-messages/handler';
 import { handler as saveConfig } from '../../services/grasp-config/saveConfig';
 import { handler as getMeetingConfig } from '../../services/grasp-config/getMeetingConfig';
 import { handler as getConfigs } from '../../services/grasp-config/getConfigs';
-import { handler as getCurrentConfig } from '../../services/grasp-config/getCurrentConfig';
 import { handler as savePreset } from '../../services/grasp-config/savePreset';
 import { handler as getConfig } from '../../services/grasp-config/getConfig';
 import { handler as applyConfigToMeeting } from '../../services/grasp-config/applyConfigToMeeting';
-import { handler as updateConfig } from '../../services/grasp-config/updateConfig';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -189,8 +187,6 @@ addRoute('post', '/grasp/configs', saveConfig, (req) => ({}) );
 addRoute('get', '/grasp/configs', getConfigs, (req) => ({}) );
 addRoute('get', '/grasp/configs/:configId', getConfig, (req) => ({ configId: req.params.configId }) );
 addRoute('post', '/grasp/presets', savePreset, (req) => ({}) );
-addRoute('get', '/grasp/config/current', getCurrentConfig, (req) => ({}) );
-addRoute('put', '/grasp/config', updateConfig, (req) => ({}) );
 addRoute('get', '/meetings/:meetingId/grasp-config', getMeetingConfig, (req) => ({ meetingId: req.params.meetingId }) );
 addRoute('post', '/meetings/:meetingId/grasp-config', applyConfigToMeeting, (req) => ({ meetingId: req.params.meetingId }) );
 

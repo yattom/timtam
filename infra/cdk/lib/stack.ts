@@ -319,33 +319,6 @@ export class TimtamInfraStack extends Stack {
     });
     graspConfigsTable.grantReadData(getGraspConfigsFn);
 
-    const getCurrentGraspConfigFn = new NodejsFunction(this, 'GetCurrentGraspConfigFn', {
-      entry: '../../services/grasp-config/getCurrentConfig.ts',
-      timeout: Duration.seconds(10),
-      runtime: lambda.Runtime.NODEJS_20_X,
-      environment: {
-        CONFIG_TABLE_NAME: orchestratorConfigTable.tableName,
-      },
-    });
-    orchestratorConfigTable.grantReadData(getCurrentGraspConfigFn);
-
-    const updateGraspConfigFn = new NodejsFunction(this, 'UpdateGraspConfigFn', {
-      entry: '../../services/grasp-config/updateConfig.ts',
-      timeout: Duration.seconds(10),
-      runtime: lambda.Runtime.NODEJS_20_X,
-      environment: {
-        CONFIG_TABLE_NAME: orchestratorConfigTable.tableName,
-        CONTROL_SQS_URL: '', // Will be set after controlQueue is created
-      },
-      bundling: {
-        nodeModules: ['@aws-sdk/client-sqs', 'js-yaml'],
-        externalModules: ['aws-sdk'],
-        target: 'node20',
-        platform: 'node',
-      },
-    });
-    orchestratorConfigTable.grantWriteData(updateGraspConfigFn);
-
     const saveGraspPresetFn = new NodejsFunction(this, 'SaveGraspPresetFn', {
       entry: '../../services/grasp-config/savePreset.ts',
       timeout: Duration.seconds(10),
@@ -505,10 +478,6 @@ export class TimtamInfraStack extends Stack {
       retentionPeriod: Duration.days(1),
     });
 
-    // Update updateGraspConfigFn with SQS URL and grant permissions
-    updateGraspConfigFn.addEnvironment('CONTROL_SQS_URL', controlQueue.queueUrl);
-    controlQueue.grantSendMessages(updateGraspConfigFn);
-
     // Update applyGraspConfigToMeetingFn with SQS URL and grant permissions
     applyGraspConfigToMeetingFn.addEnvironment('CONTROL_SQS_URL', controlQueue.queueUrl);
     controlQueue.grantSendMessages(applyGraspConfigToMeetingFn);
@@ -557,13 +526,6 @@ export class TimtamInfraStack extends Stack {
                 var request = event.request;
                 var uri = request.uri;
 
-                // Special handling for /experiment (without trailing slash)
-                // Rewrite to Chime WebUI
-                if (uri === '/experiment') {
-                  request.uri = '/timtam-web/index.html';
-                  return request;
-                }
-
                 // Facilitator UI (root path)
                 // If requesting /, serve facilitator/index.html
                 if (uri === '/' || uri === '') {
@@ -571,7 +533,7 @@ export class TimtamInfraStack extends Stack {
                 }
                 // If requesting /something without extension, try to serve facilitator/something.html
                 // If that file doesn't exist (404), error responses will fallback to facilitator/index.html for SPA routing
-                else if (!uri.includes('.') && !uri.startsWith('/experiment') && !uri.includes('/attendee')) {
+                else if (!uri.includes('.') && !uri.includes('/attendee')) {
                   request.uri = '/facilitator' + uri + '.html';
                 }
                 // If requesting /_next/... (Next.js assets), prepend /facilitator
@@ -585,37 +547,6 @@ export class TimtamInfraStack extends Stack {
           }),
           eventType: cloudfront.FunctionEventType.VIEWER_REQUEST,
         }],
-      },
-      additionalBehaviors: {
-        // Experimental Chime WebUI (/experiment/*)
-        '/experiment/*': {
-          origin: s3Origin,
-          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-          cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
-          functionAssociations: [{
-            function: new cloudfront.Function(this, 'ExperimentRewrite', {
-              code: cloudfront.FunctionCode.fromInline(`
-                function handler(event) {
-                  var request = event.request;
-                  var uri = request.uri;
-
-                  // Remove /experiment prefix and serve from timtam-web/
-                  if (uri.startsWith('/experiment')) {
-                    uri = uri.substring(11); // Remove '/experiment'
-                    if (uri === '' || uri === '/') {
-                      request.uri = '/timtam-web/index.html';
-                    } else {
-                      request.uri = '/timtam-web' + uri;
-                    }
-                  }
-
-                  return request;
-                }
-              `),
-            }),
-            eventType: cloudfront.FunctionEventType.VIEWER_REQUEST,
-          }],
-        },
       },
       errorResponses: [
         // Facilitator UI SPA fallback
@@ -1046,46 +977,6 @@ export class TimtamInfraStack extends Stack {
     });
     getGraspConfigsRoute.addDependency(getGraspConfigsInt);
     getGraspConfigsFn.addPermission('InvokeByHttpApiGetGraspConfigs', {
-      principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
-      sourceArn,
-      action: 'lambda:InvokeFunction',
-    });
-
-    // Get Current Grasp Config (GET /grasp/config/current)
-    const getCurrentGraspConfigInt = new CfnIntegration(this, 'GetCurrentGraspConfigIntegration', {
-      apiId: httpApi.ref,
-      integrationType: 'AWS_PROXY',
-      integrationUri: lambdaIntegrationUri(getCurrentGraspConfigFn),
-      payloadFormatVersion: '2.0',
-      integrationMethod: 'POST',
-    });
-    const getCurrentGraspConfigRoute = new CfnRoute(this, 'GetCurrentGraspConfigRoute', {
-      apiId: httpApi.ref,
-      routeKey: 'GET /grasp/config/current',
-      target: `integrations/${getCurrentGraspConfigInt.ref}`,
-    });
-    getCurrentGraspConfigRoute.addDependency(getCurrentGraspConfigInt);
-    getCurrentGraspConfigFn.addPermission('InvokeByHttpApiGetCurrentGraspConfig', {
-      principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
-      sourceArn,
-      action: 'lambda:InvokeFunction',
-    });
-
-    // Update Grasp Config (PUT /grasp/config)
-    const updateGraspConfigInt = new CfnIntegration(this, 'UpdateGraspConfigIntegration', {
-      apiId: httpApi.ref,
-      integrationType: 'AWS_PROXY',
-      integrationUri: lambdaIntegrationUri(updateGraspConfigFn),
-      payloadFormatVersion: '2.0',
-      integrationMethod: 'POST',
-    });
-    const updateGraspConfigRoute = new CfnRoute(this, 'UpdateGraspConfigRoute', {
-      apiId: httpApi.ref,
-      routeKey: 'PUT /grasp/config',
-      target: `integrations/${updateGraspConfigInt.ref}`,
-    });
-    updateGraspConfigRoute.addDependency(updateGraspConfigInt);
-    updateGraspConfigFn.addPermission('InvokeByHttpApiUpdateGraspConfig', {
       principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
       sourceArn,
       action: 'lambda:InvokeFunction',
