@@ -245,7 +245,7 @@ test.describe('モーダルでのGrasp設定編集', { tag: '@local' }, () => {
 
   test('背景クリックで編集を破棄できる', async ({ page }) => {
     console.log('事前準備: 会議とGrasp設定を作成');
-    const meetingId = await createMeeting(page);
+    await createMeeting(page);
 
     const configName = '背景クリックテスト';
     const configYaml = createSampleYaml(1);
