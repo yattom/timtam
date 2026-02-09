@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { mockClient } from 'aws-sdk-client-mock';
-import { DynamoDBDocumentClient, UpdateCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import { handler } from './recallWebhook';
 import { APIGatewayProxyEventV2 } from 'aws-lambda';
@@ -19,21 +19,6 @@ describe('recallWebhook - bot.status event handling', () => {
       const botId = 'bot-12345';
       const now = Date.now();
       const expectedTtl = Math.floor(now / 1000) + (7 * 24 * 60 * 60);
-
-      // Mock DynamoDB GetCommand (ミーティング存在確認)
-      ddbMock.on(GetCommand).resolves({
-        Item: {
-          meetingId: botId,
-          platform: 'recall',
-          status: 'active',
-          recallBot: {
-            botId,
-            meetingUrl: 'https://zoom.us/j/123',
-            platform: 'zoom',
-            status: 'in_meeting',
-          },
-        },
-      });
 
       // Mock DynamoDB UpdateCommand
       ddbMock.on(UpdateCommand).resolves({});
@@ -59,6 +44,7 @@ describe('recallWebhook - bot.status event handling', () => {
       expect(updateInput.UpdateExpression).toContain('status');
       expect(updateInput.UpdateExpression).toContain('endedAt');
       expect(updateInput.UpdateExpression).toContain('ttl');
+      expect(updateInput.ConditionExpression).toBe('attribute_exists(meetingId)');
       expect(updateInput.ExpressionAttributeValues?.[':status']).toBe('ended');
       expect(updateInput.ExpressionAttributeValues?.[':endedAt']).toBeGreaterThan(now - 1000);
 
@@ -72,14 +58,6 @@ describe('recallWebhook - bot.status event handling', () => {
   describe('bot.status: error', () => {
     it('エラー状態でもミーティングステータスをendedに更新すること', async () => {
       const botId = 'bot-error-123';
-
-      ddbMock.on(GetCommand).resolves({
-        Item: {
-          meetingId: botId,
-          platform: 'recall',
-          status: 'active',
-        },
-      });
 
       ddbMock.on(UpdateCommand).resolves({});
 
@@ -142,16 +120,30 @@ describe('recallWebhook - bot.status event handling', () => {
   });
 
   describe('DynamoDBエラーハンドリング', () => {
+    it('ミーティングが存在しない場合でもHTTP 200を返すこと', async () => {
+      const botId = 'bot-not-found';
+
+      // UpdateCommandでConditionalCheckFailedExceptionを発生させる
+      const conditionalCheckError = new Error('The conditional request failed');
+      conditionalCheckError.name = 'ConditionalCheckFailedException';
+      ddbMock.on(UpdateCommand).rejects(conditionalCheckError);
+
+      const event = {
+        body: JSON.stringify({
+          event: 'bot.status',
+          bot_id: botId,
+          status: 'done',
+        }),
+      } as APIGatewayProxyEventV2;
+
+      const response = await handler(event);
+
+      // Webhookは常に200を返す（Recall.aiのリトライを防ぐため）
+      expect(response.statusCode).toBe(200);
+    });
+
     it('DynamoDB更新が失敗してもHTTP 200を返すこと', async () => {
       const botId = 'bot-456';
-
-      ddbMock.on(GetCommand).resolves({
-        Item: {
-          meetingId: botId,
-          platform: 'recall',
-          status: 'active',
-        },
-      });
 
       // UpdateCommandでエラーを発生させる
       ddbMock.on(UpdateCommand).rejects(new Error('DynamoDB update failed'));

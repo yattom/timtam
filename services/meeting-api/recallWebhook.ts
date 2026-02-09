@@ -1,7 +1,7 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, UpdateCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { createHash } from 'crypto';
 import { RecallAdapter } from '@timtam/shared';
 
@@ -220,30 +220,8 @@ async function handleBotStatusEvent(payload: any): Promise<any> {
 
   if (isTerminalStatus) {
     try {
-      // ミーティングが存在するか確認
-      const getResult = await ddb.send(
-        new GetCommand({
-          TableName: MEETINGS_METADATA_TABLE,
-          Key: { meetingId: botId },
-        })
-      );
-
-      if (!getResult.Item) {
-        console.warn(JSON.stringify({
-          type: 'recall.webhook.bot_status.meeting_not_found',
-          botId,
-          status,
-          message: 'Meeting not found in DynamoDB, skipping status update',
-          timestamp: Date.now(),
-        }));
-        return {
-          statusCode: 200,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ok: true, message: 'Bot status event acknowledged (meeting not found)' }),
-        };
-      }
-
       // DynamoDBのミーティングステータスを更新
+      // ConditionExpressionでミーティングの存在を確認
       const now = Date.now();
       const ttl = Math.floor(now / 1000) + (7 * 24 * 60 * 60); // 7日後
 
@@ -252,6 +230,7 @@ async function handleBotStatusEvent(payload: any): Promise<any> {
           TableName: MEETINGS_METADATA_TABLE,
           Key: { meetingId: botId },
           UpdateExpression: 'SET #status = :status, #endedAt = :endedAt, #ttl = :ttl',
+          ConditionExpression: 'attribute_exists(meetingId)',
           ExpressionAttributeNames: {
             '#status': 'status',
             '#endedAt': 'endedAt',
@@ -274,12 +253,24 @@ async function handleBotStatusEvent(payload: any): Promise<any> {
         timestamp: now,
       }));
     } catch (err: any) {
-      console.error('Error updating meeting status from bot.status event', {
-        botId,
-        status,
-        error: err?.message || err,
-        stack: err?.stack,
-      });
+      // ConditionalCheckFailedExceptionの場合はミーティングが存在しない
+      if (err.name === 'ConditionalCheckFailedException') {
+        console.warn(JSON.stringify({
+          type: 'recall.webhook.bot_status.meeting_not_found',
+          botId,
+          status,
+          message: 'Meeting not found in DynamoDB, skipping status update',
+          timestamp: Date.now(),
+        }));
+      } else {
+        // その他のエラー
+        console.error('Error updating meeting status from bot.status event', {
+          botId,
+          status,
+          error: err?.message || err,
+          stack: err?.stack,
+        });
+      }
       // Webhookは常に200を返す（Recall.aiのリトライを防ぐため）
     }
   }
