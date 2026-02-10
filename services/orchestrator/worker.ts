@@ -158,7 +158,6 @@ let orchestratorManager: OrchestratorManager;
 // GraspGroupDefinitionからGrasp配列を生成するヘルパー関数
 
 async function pollControlOnce() {
-  if (!CONTROL_SQS_URL) return;
   try {
     const res = await sqs.send(new ReceiveMessageCommand({
       QueueUrl: CONTROL_SQS_URL,
