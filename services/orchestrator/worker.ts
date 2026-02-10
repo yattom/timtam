@@ -219,20 +219,18 @@ async function pollControlOnce() {
             }));
 
             // Send error notification to meeting chat
-            const meeting = orchestratorManager.getMeeting(parsed.meetingId);
-            if (meeting) {
-              try {
-                const configName = parsed.configName || 'カスタム設定';
-                const errorNotificationMessage = `Grasp設定「${configName}」の適用に失敗しました: ${errorDetails}`;
-                await meeting.postChat(parsed.meetingId, errorNotificationMessage);
-              } catch (chatError) {
-                console.error(JSON.stringify({
-                  type: 'orchestrator.control.meeting.grasp_config.chat_error_notification_failed',
-                  meetingId: parsed.meetingId,
-                  error: chatError instanceof Error ? chatError.message : String(chatError),
-                  ts: Date.now()
-                }));
-              }
+            try {
+              const meeting = await orchestratorManager.getOrCreateMeeting(parsed.meetingId);
+              const configName = parsed.configName || 'カスタム設定';
+              const errorNotificationMessage = `Grasp設定「${configName}」の適用に失敗しました: ${errorDetails}`;
+              await meeting.postChat(parsed.meetingId, errorNotificationMessage);
+            } catch (chatError) {
+              console.error(JSON.stringify({
+                type: 'orchestrator.control.meeting.grasp_config.chat_error_notification_failed',
+                meetingId: parsed.meetingId,
+                error: chatError instanceof Error ? chatError.message : String(chatError),
+                ts: Date.now()
+              }));
             }
           }
         }
