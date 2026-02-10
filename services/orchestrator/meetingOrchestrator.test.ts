@@ -22,18 +22,13 @@ describe('Meeting - processTranscriptEvent', () => {
     timestamp: Date.now(),
   });
 
-  it('should not execute the same grasp twice when two events arrive during one LLM call', async () => {
+  it('reproducing issue #173 - should not execute the same grasp twice when two events arrive during one LLM call', async () => {
     // Arrange
-    const llmResult: JudgeResult = {
-      result: { should_output: false, reason: '', message: '' },
-      prompt: '',
-      rawResponse: '{}',
-    };
-    const mockLlm: LLMClient = { invoke: vi.fn().mockResolvedValue(llmResult) };
+    const llmIsInvoked: LLMClient = { invoke: vi.fn().mockResolvedValue({} as any) };
 
     const grasp = new Grasp(
       { nodeId: 'test', promptTemplate: 'テスト', cooldownMs: 60000, outputHandler: 'chat' },
-      mockLlm
+      llmIsInvoked
     );
     const meeting = new Meeting(
       { meetingId: 'test-meeting' as MeetingId, adapter: nullAdapter() },
@@ -55,7 +50,7 @@ describe('Meeting - processTranscriptEvent', () => {
 
     // Assert
     // Should only have been executed once - FAILS with current code (called 2 times)
-    expect(mockLlm.invoke).toHaveBeenCalledTimes(1);
+    expect(llmIsInvoked.invoke).toHaveBeenCalledTimes(1);
   });
 });
 
