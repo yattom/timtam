@@ -1,3 +1,4 @@
+import { join } from 'path';
 import { Page, expect } from '@playwright/test';
 import { execSync } from 'child_process';
 
@@ -12,10 +13,19 @@ export function clearLocalStackData() {
   execSync('uv run invoke delete-localstack-data', {
     stdio: 'inherit',
   });
-  execSync('uv run invoke seed-default-config-local --config-path /app/tests/test-grasp-config.json -v', {
+  console.log('LocalStack data cleared');
+}
+
+/**
+ * LocalStackにデフォルトデータを登録する
+ */
+export function loadDefaultDataOnLocalStack(testDir: string) {
+  console.log('Loading DynamoDB default data...');
+  const configPath = join(testDir, 'test-grasp-config.json');
+  execSync(`uv run invoke seed-default-config-local --config-path "${configPath}" -v`, {
     stdio: 'inherit',
   });
-  console.log('LocalStack data cleared');
+  console.log('Default data is loaded');
 }
 
 /**
@@ -61,27 +71,56 @@ export async function createMeeting(page: Page): Promise<string> {
 }
 
 /**
+ * Grasp設定を複数バージョン連続で生成・保存し、IDの配列を返す
+ * 返り値は保存順（古い順）のconfigId配列
+ */
+export async function saveGraspConfigVersions(
+  page: Page,
+  name: string,
+  count: number,
+): Promise<string[]> {
+  const baseTime = Date.now();
+  const ids: string[] = [];
+
+  for (let i = 0; i < count; i++) {
+    const version = i + 1;
+    const yaml = createSampleYaml(version);
+    const response = await page.evaluate(
+      async ({ apiUrl, name, yaml, createdAt }) => {
+        const response = await fetch(`${apiUrl}/grasp/configs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, yaml, createdAt }),
+        });
+        return response.json();
+      },
+      { apiUrl: API_URL, name, yaml, createdAt: baseTime + i * 1000 }
+    );
+    console.log(`  Grasp設定を保存: ${name} v${version} (ID: ${response.configId})`);
+    ids.push(response.configId);
+  }
+
+  return ids;
+}
+
+/**
  * Grasp設定をAPI経由で保存する
  */
 export async function saveGraspConfig(
   page: Page,
   name: string,
-  yaml: string
+  yaml: string,
 ): Promise<string> {
   const response = await page.evaluate(
-    async ({ apiUrl, name, yaml }) => {
+    async ({ apiUrl, name, yaml, createdAt }) => {
       const response = await fetch(`${apiUrl}/grasp/configs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          yaml,
-          createdAt: Date.now(),
-        }),
+        body: JSON.stringify({ name, yaml, createdAt }),
       });
       return response.json();
     },
-    { apiUrl: API_URL, name, yaml }
+    { apiUrl: API_URL, name, yaml, createdAt: Date.now() }
   );
 
   const configId = response.configId;
@@ -157,9 +196,6 @@ export async function openGraspConfigTab(page: Page): Promise<void> {
   await page.waitForTimeout(2000); // タブの内容がロードされるまで待つ
 }
 
-/**
- * テスト用のサンプルYAML設定を生成する
- */
 export function createSampleYaml(version: number): string {
   return `grasps:
   - nodeId: test-grasp-v${version}

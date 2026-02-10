@@ -1,5 +1,7 @@
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 import { test, expect } from '@playwright/test';
-import { clearLocalStackData, createMeeting, API_URL } from './helpers/grasp-config-helpers';
+import { clearLocalStackData, loadDefaultDataOnLocalStack, createMeeting, API_URL } from './helpers/grasp-config-helpers';
 
 /**
  * E2Eテスト: Grasp設定のエラーハンドリング
@@ -13,6 +15,9 @@ import { clearLocalStackData, createMeeting, API_URL } from './helpers/grasp-con
  * - pnpm run local:setup でLocalStackリソースが作成されている
  * - web/facilitator で pnpm run dev が起動している（ポート3001）
  */
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const FACILITATOR_URL = process.env.FACILITATOR_URL || 'http://localhost:3001';
 
@@ -32,6 +37,7 @@ test.describe('Grasp設定のエラーハンドリング', { tag: '@local' }, ()
   // 各テストケースの前にDynamoDBテーブルとSQSキューのデータをクリア
   test.beforeEach(async () => {
     clearLocalStackData();
+    loadDefaultDataOnLocalStack(__dirname);
   });
 
   test('無効なYAML形式のエラーがAPI層で検出される', async ({ page }) => {

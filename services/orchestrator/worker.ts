@@ -29,6 +29,16 @@ const CONTROL_SQS_URL = process.env.CONTROL_SQS_URL || '';
 const MAX_MEETINGS = Number(process.env.MAX_MEETINGS || '100');
 const MEETING_TIMEOUT_MS = Number(process.env.MEETING_TIMEOUT_MS || '43200000'); // 12時間
 const RECALL_API_KEY = process.env.RECALL_API_KEY || '';
+
+// Fail fast on missing critical environment variables
+if (!TRANSCRIPT_QUEUE_URL) {
+  console.error('TRANSCRIPT_QUEUE_URL is not set');
+  process.exit(1);
+}
+if (!CONTROL_SQS_URL) {
+  console.error('CONTROL_SQS_URL is not set');
+  process.exit(1);
+}
 if (!RECALL_API_KEY) {
   console.error('RECALL_API_KEY is not set');
 }
@@ -148,7 +158,6 @@ let orchestratorManager: OrchestratorManager;
 // GraspGroupDefinitionからGrasp配列を生成するヘルパー関数
 
 async function pollControlOnce() {
-  if (!CONTROL_SQS_URL) return;
   try {
     const res = await sqs.send(new ReceiveMessageCommand({
       QueueUrl: CONTROL_SQS_URL,
@@ -209,20 +218,18 @@ async function pollControlOnce() {
             }));
 
             // Send error notification to meeting chat
-            const meeting = orchestratorManager.getMeeting(parsed.meetingId);
-            if (meeting) {
-              try {
-                const configName = parsed.configName || 'カスタム設定';
-                const errorNotificationMessage = `Grasp設定「${configName}」の適用に失敗しました: ${errorDetails}`;
-                await meeting.postChat(parsed.meetingId, errorNotificationMessage);
-              } catch (chatError) {
-                console.error(JSON.stringify({
-                  type: 'orchestrator.control.meeting.grasp_config.chat_error_notification_failed',
-                  meetingId: parsed.meetingId,
-                  error: chatError instanceof Error ? chatError.message : String(chatError),
-                  ts: Date.now()
-                }));
-              }
+            try {
+              const meeting = await orchestratorManager.getOrCreateMeeting(parsed.meetingId);
+              const configName = parsed.configName || 'カスタム設定';
+              const errorNotificationMessage = `Grasp設定「${configName}」の適用に失敗しました: ${errorDetails}`;
+              await meeting.postChat(parsed.meetingId, errorNotificationMessage);
+            } catch (chatError) {
+              console.error(JSON.stringify({
+                type: 'orchestrator.control.meeting.grasp_config.chat_error_notification_failed',
+                meetingId: parsed.meetingId,
+                error: chatError instanceof Error ? chatError.message : String(chatError),
+                ts: Date.now()
+              }));
             }
           }
         }

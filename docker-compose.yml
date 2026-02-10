@@ -78,6 +78,7 @@ services:
       - AWS_SECRET_ACCESS_KEY=test
       - RECALL_API_BASE_URL=http://recall-stub:8080
       - TRANSCRIPT_QUEUE_URL=http://localstack:4566/000000000000/transcript-asr.fifo
+      - CONTROL_SQS_URL=http://localstack:4566/000000000000/OrchestratorControlQueue
       - AI_MESSAGES_TABLE=timtam-ai-messages
       - CONFIG_TABLE_NAME=timtam-orchestrator-config
       - MEETINGS_METADATA_TABLE=timtam-meetings-metadata

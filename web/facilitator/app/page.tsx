@@ -147,7 +147,7 @@ export default function DashboardPage() {
           </div>
         ) : meetings.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm p-8 text-center">
-            <p className="text-gray-600 mb-4">会議がありません</p>
+            <p className="text-gray-600 mb-4" data-testid="no-meetings-message">会議がありません</p>
             <Link
               href="/meetings/join"
               className="inline-block px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
@@ -167,6 +167,7 @@ export default function DashboardPage() {
                 return (
                   <div
                     key={meeting.meetingId}
+                    data-testid="meeting-item"
                     className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow"
                   >
                     <div className="flex items-center justify-between mb-4">

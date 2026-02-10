@@ -59,11 +59,13 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
   const [currentConfig, setCurrentConfig] = useState<CurrentConfig | null>(null);
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null);
   const [selectedConfigYaml, setSelectedConfigYaml] = useState<string>("");
-  const [isEditingYaml, setIsEditingYaml] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editedYaml, setEditedYaml] = useState<string>("");
   const [configName, setConfigName] = useState<string>("");
+  const [originalConfigName, setOriginalConfigName] = useState<string>("");
   const [configLoading, setConfigLoading] = useState(false);
   const [applySuccess, setApplySuccess] = useState(false);
+  const [originalYaml, setOriginalYaml] = useState<string>("");
 
   useEffect(() => {
     const fetchMeeting = async () => {
@@ -177,14 +179,12 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
         const configs = configsData.configs || [];
         setGraspConfigs(configs);
 
-        // Group configs by name
-        const grouped = groupConfigsByName(configs);
-        setGroupedConfigs(grouped);
-
-        // Fetch current meeting config
+        // Fetch current meeting config first to know which version is applied
+        let appliedConfigId: string | null = null;
         const currentResponse = await fetch(`${apiUrl}/meetings/${meetingId}/grasp-config`);
         if (currentResponse.ok) {
           const currentData = await currentResponse.json();
+          appliedConfigId = currentData.configId || null;
           setCurrentConfig({
             configId: currentData.configId || null,
             name: currentData.name || null,
@@ -198,6 +198,20 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
             yaml: null,
           });
         }
+
+        // Group configs by name and auto-expand if a past version is currently applied
+        const grouped = groupConfigsByName(configs).map((group) => {
+          // Check if the applied config is a past version (not the latest) in this group
+          const isPastVersionApplied = appliedConfigId &&
+            group.versions.some((v) => v.configId === appliedConfigId) &&
+            group.latestVersion.configId !== appliedConfigId;
+
+          return {
+            ...group,
+            expanded: isPastVersionApplied || false,
+          };
+        });
+        setGroupedConfigs(grouped);
       } catch (err) {
         console.error('Failed to load Grasp configs', err);
         // Ensure state reflects that no config is applied on error
@@ -228,8 +242,9 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
       setSelectedConfigId(configId);
       setSelectedConfigYaml(data.config.yaml);
       setEditedYaml(data.config.yaml);
+      setOriginalYaml(data.config.yaml);
       setConfigName(name);
-      setIsEditingYaml(false);
+      setOriginalConfigName(name);
     } catch (err) {
       alert(err instanceof Error ? err.message : '設定の取得に失敗しました');
     }
@@ -244,17 +259,37 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
     );
   };
 
-  // Toggle edit mode
-  const toggleEditMode = () => {
-    if (isEditingYaml) {
-      // Cancel editing - restore original
-      setEditedYaml(selectedConfigYaml);
+  // Open edit modal
+  const openEditModal = () => {
+    setOriginalYaml(selectedConfigYaml);
+    setEditedYaml(selectedConfigYaml);
+    setOriginalConfigName(configName);
+    setIsEditModalOpen(true);
+  };
+
+  // Close edit modal with confirmation if there are changes
+  const closeEditModal = () => {
+    if (editedYaml !== originalYaml || configName !== originalConfigName) {
+      if (confirm('編集内容を破棄しますか？')) {
+        setEditedYaml(originalYaml);
+        setConfigName(originalConfigName);
+        setIsEditModalOpen(false);
+      }
+    } else {
+      setIsEditModalOpen(false);
     }
-    setIsEditingYaml(!isEditingYaml);
+  };
+
+  // Save and apply from modal
+  const saveAndApply = async () => {
+    const success = await handleApplyConfig(true);
+    if (success) {
+      setIsEditModalOpen(false);
+    }
   };
 
   // Handle applying Grasp config to meeting
-  const handleApplyConfig = async (saveAsNew: boolean = false) => {
+  const handleApplyConfig = async (saveAsNew: boolean = false): Promise<boolean> => {
     try {
       setConfigLoading(true);
       setApplySuccess(false);
@@ -263,12 +298,13 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
 
       let configIdToApply = selectedConfigId;
 
-      // If YAML was edited, save as new version first.
+      // If YAML or name was edited, save as new version first.
       // Note: The UI (ConfigTab.tsx) only passes `saveAsNew = true` when the YAML
-      // has actually changed (`yamlChanged === true`). The additional
-      // `editedYaml !== selectedConfigYaml` check here is a safeguard and prevents
-      // creating redundant configs if this function is ever called differently.
-      if (saveAsNew && editedYaml !== selectedConfigYaml) {
+      // has actually changed (`yamlChanged === true`). The additional checks here
+      // (`editedYaml !== selectedConfigYaml || configName !== originalConfigName`) are a safeguard
+      // that also covers name-only changes and prevents creating redundant configs
+      // if this function is ever called differently.
+      if (saveAsNew && (editedYaml !== selectedConfigYaml || configName !== originalConfigName)) {
         const saveName = configName || `設定_${Date.now()}`;
         const saveResponse = await fetch(`${apiUrl}/grasp/configs`, {
           method: 'POST',
@@ -337,8 +373,10 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
 
       setApplySuccess(true);
       setTimeout(() => setApplySuccess(false), 3000);
+      return true;
     } catch (err) {
       alert(err instanceof Error ? err.message : '設定の適用に失敗しました');
+      return false;
     } finally {
       setConfigLoading(false);
     }
@@ -606,7 +644,7 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
                 selectedConfigId={selectedConfigId}
                 selectedConfigYaml={selectedConfigYaml}
                 editedYaml={editedYaml}
-                isEditingYaml={isEditingYaml}
+                isEditModalOpen={isEditModalOpen}
                 configName={configName}
                 configLoading={configLoading}
                 applySuccess={applySuccess}
@@ -615,7 +653,9 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
                 onEditYamlChange={setEditedYaml}
                 onConfigNameChange={setConfigName}
                 onApplyConfig={handleApplyConfig}
-                onToggleEditMode={toggleEditMode}
+                onOpenEditModal={openEditModal}
+                onCloseEditModal={closeEditModal}
+                onSaveAndApply={saveAndApply}
               />
             )}
           </div>

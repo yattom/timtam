@@ -1,7 +1,10 @@
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 import { test, expect } from '@playwright/test';
 import {
   API_URL,
   clearLocalStackData,
+  loadDefaultDataOnLocalStack,
   createMeeting,
   saveGraspConfig,
   applyConfigToMeeting,
@@ -29,12 +32,16 @@ import {
  * - web/facilitator で pnpm run dev が起動している（ポート3001）
  */
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 test.describe('UC03: 会議のGrasp設定を置き換える', { tag: '@local' }, () => {
   test.setTimeout(120000); // 2分のタイムアウト
 
   // 各テストケースの前にDynamoDBテーブルとSQSキューのデータをクリア
   test.beforeEach(async () => {
     clearLocalStackData();
+    loadDefaultDataOnLocalStack(__dirname);
   });
 
   test('UC03: 内容を変更せず既存設定を適用', async ({ page }) => {
