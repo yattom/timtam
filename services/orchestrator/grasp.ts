@@ -409,10 +409,11 @@ export class Grasp {
     asrTimestamp?: number  // ASR イベントのタイムスタンプ（E2E レイテンシ測定用）
   ): Promise<void> {
     const startTime = Date.now();
+    this.interval.markExecuted(startTime); // 実行開始時に記録し、LLM呼び出し中の再エンキューを防ぐ
 
     try {
       const prompt = this.buildPrompt(windowBuffer, notebook);
-      
+
       // outputHandler に応じてプロンプトを変える
       let promptWithFormat: string;
       if (this.config.outputHandler === 'note') {
@@ -426,12 +427,10 @@ export class Grasp {
           '{"should_output": true, "reason": "判断の理由", "message": "チャットに投稿するメッセージ"}\n' +
           '----------\n\n' + prompt;
       }
-      
+
       const response = await this.invokeLLM(promptWithFormat, meetingId, notifier);
       await this.reflectResponse(response, meetingId, notifier, notebook);
       await this.recordMetrics(metrics, startTime, asrTimestamp);
-
-      this.interval.markExecuted(Date.now());
     } catch (e) {
       const now = Date.now();
       console.error(JSON.stringify({
@@ -442,7 +441,6 @@ export class Grasp {
         ts: now
       }));
       await metrics.putCountMetric(`Grasp.${this.config.nodeId}.Errors`, 1);
-      this.interval.markExecuted(now); // エラーでも時刻を更新してリトライループを防ぐ
     }
   }
 }
