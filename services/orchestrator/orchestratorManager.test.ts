@@ -58,7 +58,7 @@ describe('OrchestratorManager', () => {
         {
           maxMeetings: 100,
           meetingTimeoutMs: 43200000,
-          llmClient: {},
+          llmClient: {}, // Mock LLM client (minimal for this test)
         }
     );
     // Act
@@ -73,7 +73,9 @@ describe('OrchestratorManager', () => {
       'ap-northeast-1',
       'timtam-grasp-configs',
       'timtam-meetings-metadata',
-      {}
+      {} // Mock LLM client (minimal for this test)
     );
+    // Verify that LLM client is not invoked during getOrCreateMeeting
+    expect(mockLLMClient.invoke).not.toHaveBeenCalled();
   });
 });
