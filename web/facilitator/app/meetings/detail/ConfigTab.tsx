@@ -205,7 +205,7 @@ export default function ConfigTab({
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   YAML設定
                 </label>
-                <pre className="text-xs bg-gray-50 p-3 rounded border border-gray-200 overflow-x-auto max-h-64 overflow-y-auto font-mono" data-testid="config-yaml-display">
+                <pre className="text-xs text-gray-700 bg-gray-50 p-3 rounded border border-gray-200 overflow-x-auto max-h-64 overflow-y-auto font-mono" data-testid="config-yaml-display">
                   {selectedConfigYaml}
                 </pre>
               </div>
