@@ -71,33 +71,36 @@ export async function createMeeting(page: Page): Promise<string> {
 }
 
 /**
- * Grasp設定をAPI経由で保存する
+ * Grasp設定を複数バージョン連続で生成・保存し、IDの配列を返す
+ * 返り値は保存順（古い順）のconfigId配列
  */
-export async function saveGraspConfig(
+export async function saveGraspConfigVersions(
   page: Page,
   name: string,
-  yaml: string,
-  version: number,
-): Promise<string> {
-  const response = await page.evaluate(
-    async ({ apiUrl, name, yaml, version }) => {
-      const response = await fetch(`${apiUrl}/grasp/configs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          yaml,
-          createdAt: Date.now() + version * 1000,  // 時刻が同じだと上書きされてしまう
-        }),
-      });
-      return response.json();
-    },
-    { apiUrl: API_URL, name, yaml, version }
-  );
+  count: number,
+): Promise<string[]> {
+  const baseTime = Date.now();
+  const ids: string[] = [];
 
-  const configId = response.configId;
-  console.log(`  Grasp設定を保存: ${name} (ID: ${configId})`);
-  return configId;
+  for (let i = 0; i < count; i++) {
+    const version = i + 1;
+    const yaml = createSampleYaml(version);
+    const response = await page.evaluate(
+      async ({ apiUrl, name, yaml, createdAt }) => {
+        const response = await fetch(`${apiUrl}/grasp/configs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, yaml, createdAt }),
+        });
+        return response.json();
+      },
+      { apiUrl: API_URL, name, yaml, createdAt: baseTime + i * 1000 }
+    );
+    console.log(`  Grasp設定を保存: ${name} v${version} (ID: ${response.configId})`);
+    ids.push(response.configId);
+  }
+
+  return ids;
 }
 
 /**
@@ -168,10 +171,7 @@ export async function openGraspConfigTab(page: Page): Promise<void> {
   await page.waitForTimeout(2000); // タブの内容がロードされるまで待つ
 }
 
-/**
- * テスト用のサンプルYAML設定を生成する
- */
-export function createSampleYaml(version: number): string {
+function createSampleYaml(version: number): string {
   return `grasps:
   - nodeId: test-grasp-v${version}
     promptTemplate: |
