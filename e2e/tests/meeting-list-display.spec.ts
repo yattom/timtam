@@ -59,23 +59,9 @@ test.describe('会議リスト表示', { tag: '@local' }, () => {
     await page.waitForLoadState('networkidle');
 
     // 会議リストが空の場合のメッセージを確認
-    // 実装に応じて適切なセレクタに変更
     const emptyMessage = page.locator('[data-testid="no-meetings-message"]');
-
-    // メッセージが表示されるか、または会議リストが空であることを確認
-    const isEmptyMessageVisible = await emptyMessage.isVisible({ timeout: 5000 }).catch(() => false);
-
-    if (isEmptyMessageVisible) {
-      // 空メッセージが表示される場合
-      await expect(emptyMessage).toBeVisible();
-      console.log('✓ 会議が0件の場合のメッセージが表示されている');
-    } else {
-      // または会議リストが空であることを確認
-      const meetingItems = page.locator('[data-testid="meeting-item"]');
-      const count = await meetingItems.count();
-      expect(count).toBe(0);
-      console.log('✓ 会議リストが空である');
-    }
+    await expect(emptyMessage).toBeVisible();
+    console.log('✓ 会議が0件の場合のメッセージが表示されている');
 
     // 「新しい会議に参加」リンクが表示されていることを確認
     const joinLink = page.locator('[data-testid="join-new-meeting-link"]');
@@ -121,8 +107,7 @@ test.describe('会議リスト表示', { tag: '@local' }, () => {
     await expect(meetingItems).toHaveCount(1, { timeout: 10000 });
 
     // 会議コードが表示されていることを確認
-    const codeElement = page.locator(`text="${meetingCode}"`);
-    await expect(codeElement).toBeVisible({ timeout: 5000 });
+    await expect(meetingItems.first()).toContainText(meetingCode, { timeout: 5000 });
 
     console.log('✓ 会議が1件表示されている');
   });
