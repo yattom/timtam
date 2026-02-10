@@ -5,7 +5,6 @@ import {
   FACILITATOR_URL,
   API_URL,
   clearLocalStackData,
-  loadDefaultDataOnLocalStack,
   createMeeting,
   saveGraspConfig,
   getMeetingConfig,

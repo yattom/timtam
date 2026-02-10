@@ -1,6 +1,9 @@
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 import { test, expect } from '@playwright/test';
 import {
   clearLocalStackData,
+  loadDefaultDataOnLocalStack,
   createMeeting,
   saveGraspConfig,
   applyConfigToMeeting,
@@ -26,11 +29,15 @@ import {
  * - web/facilitator で pnpm run dev が起動している（ポート3001）
  */
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 test.describe('モーダルでのGrasp設定編集', { tag: '@local' }, () => {
   test.setTimeout(120000); // 2分のタイムアウト
 
   test.beforeEach(async () => {
     clearLocalStackData();
+    loadDefaultDataOnLocalStack(__dirname);
   });
 
   test('編集ボタンをクリックするとモーダルが開く', async ({ page }) => {
