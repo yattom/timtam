@@ -151,6 +151,7 @@ services:
       - AWS_ENDPOINT_URL=http://localstack:4566
 
       # SQS (ADR 0011対応)
+      # TRANSCRIPT_QUEUE_URLとCONTROL_SQS_URLは必須
       - TRANSCRIPT_QUEUE_URL=http://localstack:4566/000000000000/transcript-asr.fifo
       - CONTROL_SQS_URL=http://localstack:4566/000000000000/orchestrator-control
 
