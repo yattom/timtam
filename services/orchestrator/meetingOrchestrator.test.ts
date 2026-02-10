@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { Meeting, MeetingConfig } from './meetingOrchestrator';
 import { MeetingServiceAdapter, MeetingId, TranscriptEvent } from '@timtam/shared';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import { Grasp, LLMClient, Metrics, JudgeResult } from './grasp';
+import { Grasp, LLMClient, Metrics } from './grasp';
 
 describe('Meeting - processTranscriptEvent', () => {
   const nullAdapter = (): MeetingServiceAdapter => ({
