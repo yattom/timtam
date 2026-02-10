@@ -82,10 +82,45 @@ export interface CreateBotRequest {
       events: Array<'transcript.data' | 'transcript.partial_data'>;
     }>;
     /** 録音保存期間（時間単位） */
-    retention?: {
-      /** 保存時間（hours） */
-      hours: number;
+    retention?:
+      | {
+          /** 保存オプション: 一定時間のみ保存 */
+          type: 'timed';
+          /** 保存時間（hours） */
+          hours: number;
+        }
+      | {
+          /** 保存オプション: 永久保存 */
+          type: 'forever';
+        };
+  };
+
+  /** 自動退出設定
+   * @see https://docs.recall.ai/docs/automatic-leaving-behavior
+   */
+  automatic_leave?: {
+    /** 待機室でのタイムアウト（秒）デフォルト: 1200秒 */
+    waiting_room_timeout?: number;
+    /** 誰も参加しない場合のタイムアウト（秒）デフォルト: 1200秒 */
+    noone_joined_timeout?: number;
+    /** 全員退出時の設定 */
+    everyone_left_timeout?: {
+      /** タイムアウト（秒）デフォルト: 2秒 */
+      timeout: number;
+      /** アクティベーション遅延（秒、オプション） */
+      activate_after?: number | null;
     };
+    /** 沈黙検出設定 */
+    silence_detection?: {
+      /** タイムアウト（秒）デフォルト: 3600秒 */
+      timeout: number;
+      /** アクティベーション遅延（秒）デフォルト: 1200秒 */
+      activate_after: number;
+    };
+    /** 録音なし状態でのタイムアウト（秒）デフォルト: 3600秒 */
+    in_call_not_recording_timeout?: number;
+    /** 録音許可拒否時のタイムアウト（秒）デフォルト: 30秒 */
+    recording_permission_denied_timeout?: number;
   };
 }
 

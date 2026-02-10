@@ -1,8 +1,11 @@
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 import { test, expect } from '@playwright/test';
 import {
   FACILITATOR_URL,
   API_URL,
   clearLocalStackData,
+  loadDefaultDataOnLocalStack,
   createMeeting,
   saveGraspConfig,
   getMeetingConfig,
@@ -24,12 +27,16 @@ import {
  * - web/facilitator で pnpm run dev が起動している（ポート3001）
  */
 
-test.describe('DEFAULT Grasp設定の動作確認', { tag: '@local' }, () => {
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+test.describe('DEFAULT Grasp設定の動作確認（DEFAULT設定あり）', { tag: '@local' }, () => {
   test.setTimeout(120000); // 2分のタイムアウト
 
   // 各テストケースの前にDynamoDBテーブルとSQSキューのデータをクリア
   test.beforeEach(async () => {
     clearLocalStackData();
+    // このテストはDEFAULT設定を自分で作成してテストするため、loadDefaultDataOnLocalStackは呼ばない
   });
 
   test('DEFAULT設定が会議に自動適用される', async ({ page }) => {
@@ -229,10 +236,22 @@ test.describe('DEFAULT Grasp設定の動作確認', { tag: '@local' }, () => {
     console.log('='.repeat(60));
 
     // ========================================
-    // Step 1: 小文字の"default"設定を作成
+    // Step 1: DEFAULT設定と小文字の"default"設定を作成
     // ========================================
-    console.log('\nStep 1: 小文字の"default"設定を作成');
+    console.log('\nStep 1: DEFAULT設定と小文字の"default"設定を作成');
 
+    // まずDEFAULT設定を作成（会議作成に必要）
+    const defaultYaml = `grasps:
+  - nodeId: uppercase-default-grasp
+    promptTemplate: |
+      これは大文字DEFAULTのテストです
+    intervalSec: 60
+    outputHandler: chat`;
+
+    const defaultConfigId = await saveGraspConfig(page, 'DEFAULT', defaultYaml);
+    console.log(`  ✓ "DEFAULT" 設定を保存 (ID: ${defaultConfigId})`);
+
+    // 次に小文字の"default"設定を作成
     const lowercaseYaml = `grasps:
   - nodeId: lowercase-test-grasp
     promptTemplate: |
@@ -285,78 +304,18 @@ test.describe('DEFAULT Grasp設定の動作確認', { tag: '@local' }, () => {
     if (meetingConfig.yaml) {
       expect(meetingConfig.yaml).not.toContain('lowercase-test-grasp');
       console.log('  ✓ "default"（小文字）の設定は使用されていない');
-    }
 
-    // ハードコードされたデフォルトが使われているはず
-    console.log('  ✓ ハードコードされたデフォルトYAMLが使用されている');
+      // DEFAULT設定が使われていることを確認
+      expect(meetingConfig.yaml).toContain('uppercase-default-grasp');
+      console.log('  ✓ DEFAULT（大文字）の設定が使用されている');
+    }
 
     console.log('\n✅ テスト完了！');
     console.log('');
     console.log('確認した項目:');
     console.log('  ✓ "default"（小文字）は特別扱いされない');
     console.log('  ✓ "(デフォルト)" ラベルが付かない');
-    console.log('  ✓ 新規会議で自動適用されない');
-  });
-
-  test('DEFAULT設定がない場合はハードコードされたデフォルトが使われる', async ({ page }) => {
-    console.log('='.repeat(60));
-    console.log('テスト: DEFAULT設定がない場合はハードコードされたデフォルトが使われる');
-    console.log('='.repeat(60));
-
-    // ========================================
-    // Step 1: DEFAULT以外の設定を作成
-    // ========================================
-    console.log('\nStep 1: DEFAULT以外の設定を作成');
-
-    const customYaml = `grasps:
-  - nodeId: custom-grasp-only
-    promptTemplate: |
-      これはカスタム設定のみのテストです
-    intervalSec: 45
-    outputHandler: chat`;
-
-    await saveGraspConfig(page, 'カスタム設定のみ', customYaml);
-    console.log('  ✓ カスタム設定のみを保存');
-
-    // ========================================
-    // Step 2: 新しい会議を作成
-    // ========================================
-    console.log('\nStep 2: 新しい会議を作成');
-
-    const meetingId = await createMeeting(page);
-    console.log(`  ✓ 会議を作成 (ID: ${meetingId})`);
-
-    // ========================================
-    // Step 3: ハードコードされたデフォルトが使われることを確認
-    // ========================================
-    console.log('\nStep 3: ハードコードされたデフォルトが使われることを確認');
-
-    const meetingConfig = await getMeetingConfig(page, meetingId);
-
-    console.log(`  会議の設定ID: ${meetingConfig.configId || 'なし'}`);
-
-    // カスタム設定が使われていないことを確認
-    if (meetingConfig.yaml) {
-      expect(meetingConfig.yaml).not.toContain('custom-grasp-only');
-      console.log('  ✓ カスタム設定は使用されていない');
-
-      // ハードコードされたデフォルトの特徴的なnodeIdを確認
-      // graspConfigLoader.tsのDEFAULT_GRASP_YAMLに含まれるnodeId
-      const hasDefaultGrasps =
-        meetingConfig.yaml.includes('friendly-nodder') ||
-        meetingConfig.yaml.includes('argument-observer') ||
-        meetingConfig.yaml.includes('summary-provider');
-
-      expect(hasDefaultGrasps).toBe(true);
-      console.log('  ✓ ハードコードされたデフォルトYAMLが使用されている');
-    }
-
-    console.log('\n✅ テスト完了！');
-    console.log('');
-    console.log('確認した項目:');
-    console.log('  ✓ DEFAULT設定がない場合でも会議を作成できる');
-    console.log('  ✓ ハードコードされたデフォルトYAMLが使用される');
-    console.log('  ✓ カスタム設定は自動適用されない');
+    console.log('  ✓ 新規会議で"default"は自動適用されず、DEFAULTが使われる');
   });
 
   test('DEFAULT設定IDがミーティングメタデータに保存される', async ({ page }) => {
@@ -427,5 +386,95 @@ test.describe('DEFAULT Grasp設定の動作確認', { tag: '@local' }, () => {
     console.log('  ✓ ミーティング作成時にDEFAULT設定IDがメタデータに保存される');
     console.log('  ✓ オーケストレータが同じ設定を使用する');
     console.log('  ✓ 設定の一貫性が保たれる');
+  });
+});
+
+test.describe('DEFAULT Grasp設定の動作確認（DEFAULT設定なし）', { tag: '@local' }, () => {
+  test.setTimeout(120000); // 2分のタイムアウト
+
+  // 各テストケースの前にDynamoDBテーブルとSQSキューのデータをクリア
+  test.beforeEach(async () => {
+    clearLocalStackData();
+    // Don't load DEFAULT - this test expects no DEFAULT config
+  });
+
+  test('DEFAULT設定がない場合は会議を開始できない', async ({ page }) => {
+    console.log('='.repeat(60));
+    console.log('テスト: DEFAULT設定がない場合は会議を開始できない');
+    console.log('='.repeat(60));
+
+    // ========================================
+    // Step 1: DEFAULT以外の設定を作成
+    // ========================================
+    console.log('\nStep 1: DEFAULT以外の設定を作成');
+
+    const customYaml = `grasps:
+  - nodeId: custom-grasp-only
+    promptTemplate: |
+      これはカスタム設定のみのテストです
+    intervalSec: 45
+    outputHandler: chat`;
+
+    await saveGraspConfig(page, 'カスタム設定のみ', customYaml);
+    console.log('  ✓ カスタム設定のみを保存');
+
+    // ========================================
+    // Step 2: 会議作成を試みる
+    // ========================================
+    console.log('\nStep 2: 会議作成を試みる');
+
+    await page.goto(FACILITATOR_URL);
+    await page.waitForLoadState('networkidle');
+
+    // 新しい会議に参加リンクをクリック
+    const joinLink = page.locator('[data-testid="join-new-meeting-link"]');
+    await expect(joinLink).toBeVisible({ timeout: 10000 });
+    await joinLink.click();
+
+    await page.waitForURL('**/meetings/join');
+
+    // 会議URLを入力
+    const meetingUrlInput = page.locator('[data-testid="meeting-url-input"]');
+    await expect(meetingUrlInput).toBeVisible({ timeout: 5000 });
+    await meetingUrlInput.fill('http://localhost');
+
+    // 参加ボタンをクリック
+    const joinButton = page.locator('[data-testid="join-meeting-button"]');
+    await expect(joinButton).toBeEnabled({ timeout: 5000 });
+    await joinButton.click();
+
+    console.log('  ✓ 会議参加ボタンをクリック');
+
+    // ========================================
+    // Step 3: エラーが表示されることを確認
+    // ========================================
+    console.log('\nStep 3: エラーが表示されることを確認');
+
+    // エラーメッセージが表示されることを確認
+    // ページにエラーメッセージまたはアラートが表示されるのを待つ
+    await page.waitForTimeout(2000);
+
+    // ページのテキストコンテンツを取得してエラーメッセージを確認
+    const pageContent = await page.content();
+    const hasError =
+      pageContent.includes('DEFAULT') ||
+      pageContent.includes('not found') ||
+      pageContent.includes('見つかりません') ||
+      pageContent.includes('エラー');
+
+    expect(hasError).toBe(true);
+    console.log('  ✓ エラーメッセージが表示されている');
+
+    // 会議詳細ページに遷移していないことを確認
+    const currentUrl = page.url();
+    expect(currentUrl).not.toContain('/meetings/detail');
+    console.log('  ✓ 会議詳細ページに遷移していない');
+
+    console.log('\n✅ テスト完了！');
+    console.log('');
+    console.log('確認した項目:');
+    console.log('  ✓ DEFAULT設定がない場合、会議作成が失敗する');
+    console.log('  ✓ エラーメッセージが表示される');
+    console.log('  ✓ 会議詳細ページに遷移しない');
   });
 });

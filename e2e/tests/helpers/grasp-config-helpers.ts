@@ -1,3 +1,4 @@
+import { join } from 'path';
 import { Page, expect } from '@playwright/test';
 import { execSync } from 'child_process';
 
@@ -12,10 +13,19 @@ export function clearLocalStackData() {
   execSync('uv run invoke delete-localstack-data', {
     stdio: 'inherit',
   });
-  execSync('uv run invoke seed-default-config-local --config-path /app/tests/test-grasp-config.json -v', {
+  console.log('LocalStack data cleared');
+}
+
+/**
+ * LocalStackにデフォルトデータを登録する
+ */
+export function loadDefaultDataOnLocalStack(testDir: string) {
+  console.log('Loading DynamoDB default data...');
+  const configPath = join(testDir, 'test-grasp-config.json');
+  execSync(`uv run invoke seed-default-config-local --config-path ${configPath} -v`, {
     stdio: 'inherit',
   });
-  console.log('LocalStack data cleared');
+  console.log('Default data is loaded');
 }
 
 /**
