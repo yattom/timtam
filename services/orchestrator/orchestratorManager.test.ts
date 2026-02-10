@@ -5,10 +5,12 @@ import {
 import { Grasp } from './grasp';
 
 // Mock graspConfigLoader to avoid DynamoDB dependency
+// Note: vi.mock must be called before importing the mocked module
 vi.mock('./graspConfigLoader', () => ({
   loadGraspsForMeeting: vi.fn(),
 }));
 
+// Import after mocking to ensure the mock is applied
 import { loadGraspsForMeeting } from './graspConfigLoader';
 
 describe('OrchestratorManager', () => {
