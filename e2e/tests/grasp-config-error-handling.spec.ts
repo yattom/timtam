@@ -23,7 +23,7 @@ const FACILITATOR_URL = process.env.FACILITATOR_URL || 'http://localhost:3001';
 
 // メッセージAPIポーリング設定
 const MESSAGE_POLL_MAX_ATTEMPTS = 10;
-const MESSAGE_POLL_INTERVAL_MS = 1000;
+const MESSAGE_POLL_INTERVAL_MS = 2000;
 
 interface AiMessage {
   timestamp: number;

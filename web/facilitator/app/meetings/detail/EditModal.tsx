@@ -78,21 +78,19 @@ export default function EditModal({
 
   return (
     <>
-      {/* 背景オーバーレイ */}
+      {/* 背景オーバーレイ + モーダル本体 */}
       <div
-        className="fixed inset-0 bg-black bg-opacity-50 z-40"
+        className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
         onClick={isLoading ? undefined : onDiscard}
         data-testid="modal-backdrop"
-      />
-
-      {/* モーダル本体 */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      >
         <div
           ref={modalRef}
           role="dialog"
           aria-modal="true"
           aria-labelledby="modal-title"
           className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col"
+          onClick={(e) => e.stopPropagation()}
         >
           {/* ヘッダー */}
           <div className="flex items-center justify-between p-6 border-b border-gray-200">

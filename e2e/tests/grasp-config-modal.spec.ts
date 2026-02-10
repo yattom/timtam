@@ -281,7 +281,8 @@ test.describe('モーダルでのGrasp設定編集', { tag: '@local' }, () => {
     });
 
     const modalBackdrop = page.locator('[data-testid="modal-backdrop"]');
-    await modalBackdrop.click();
+    // 中央はモーダルダイアログが占有しているため、端（ダイアログ外）をクリック
+    await modalBackdrop.click({ position: { x: 10, y: 10 } });
 
     console.log('Step 5: モーダルが閉じる');
     await expect(modalBackdrop).not.toBeVisible({ timeout: 5000 });

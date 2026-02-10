@@ -336,21 +336,21 @@ test.describe('UC01: 会議のGrasp設定を調整する', { tag: '@local' }, ()
     await page.waitForTimeout(1000);
 
     // 編集モードに切り替え
-    await toggleEditButton.click();
-    await expect(configYamlTextarea).toBeVisible({ timeout: 2000 });
+    await editButton.click();
+    await expect(modalYamlTextarea).toBeVisible({ timeout: 2000 });
 
     // 内容を少し変更
     const modifiedYaml = updatedYaml.replace('バージョン2', 'バージョン3');
-    await configYamlTextarea.fill(modifiedYaml);
+    await modalYamlTextarea.fill(modifiedYaml);
 
     // 設定名を変更
     const newConfigName = 'テスト設定UC01-改名版';
-    await configNameInput.fill(newConfigName);
+    await modalConfigNameInput.fill(newConfigName);
 
     console.log('  ✓ 設定名を変更');
 
     // 保存して適用
-    await saveAndApplyButton.click();
+    await modalSaveAndApplyButton.click();
 
     await expect(applySuccessMessage).toBeVisible({ timeout: 10000 });
 
