@@ -1,7 +1,58 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Meeting, MeetingConfig } from './meetingOrchestrator';
-import { MeetingServiceAdapter, MeetingId } from '@timtam/shared';
+import { MeetingServiceAdapter, MeetingId, TranscriptEvent } from '@timtam/shared';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import { Grasp, LLMClient, Metrics } from './grasp';
+
+describe('Meeting - processTranscriptEvent', () => {
+  const nullAdapter = (): MeetingServiceAdapter => ({
+    processInboundTranscript: vi.fn(),
+    postChat: vi.fn(async () => {}),
+    postLlmCallLog: vi.fn(async () => {}),
+  });
+  const nullMetrics = (): Metrics => ({
+    putLatencyMetric: vi.fn(async () => {}),
+    putCountMetric: vi.fn(async () => {}),
+  });
+  const makeEvent = (text: string): TranscriptEvent => ({
+    meetingId: 'test-meeting' as MeetingId,
+    speakerId: 'speaker1',
+    text,
+    isFinal: true,
+    timestamp: Date.now(),
+  });
+
+  it('reproducing issue #173 - should not execute the same grasp twice when two events arrive during one LLM call', async () => {
+    // Arrange
+    const llmIsInvoked: LLMClient = { invoke: vi.fn().mockResolvedValue({} as any) };
+
+    const grasp = new Grasp(
+      { nodeId: 'test', promptTemplate: 'テスト', cooldownMs: 60000, outputHandler: 'chat' },
+      llmIsInvoked
+    );
+    const meeting = new Meeting(
+      { meetingId: 'test-meeting' as MeetingId, adapter: nullAdapter() },
+      [grasp]
+    );
+
+    // Act
+    // First event - grasp is enqueued and execute() starts (yields at LLM call)
+    const firstProcessing = meeting.processTranscriptEvent(makeEvent('発言1'), nullMetrics());
+
+    // Second event arrives while first LLM call is in flight:
+    // - shouldExecute() is still true (markExecuted not called yet)
+    // - grasp is re-enqueued (not in queue - was shifted out by first processNext)
+    // - processNext() global cooldown also not updated yet
+    const secondProcessing = meeting.processTranscriptEvent(makeEvent('発言2'), nullMetrics());
+
+    await firstProcessing;
+    await secondProcessing;
+
+    // Assert
+    // Should only have been executed once - FAILS with current code (called 2 times)
+    expect(llmIsInvoked.invoke).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('Meeting - DynamoDB保存共通処理', () => {
   /**
