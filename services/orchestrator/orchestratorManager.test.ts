@@ -17,25 +17,36 @@ describe('OrchestratorManager', () => {
   });
 
   it('getOrCreateMeeting', async () => {
-    // Mock loadGraspsForMeeting to return test grasps
+    // Create mock LLM client
+    const mockLLMClient = {
+      invoke: vi.fn().mockResolvedValue({
+        result: null,
+        prompt: '',
+        rawResponse: '',
+      }),
+    };
+
+    // Create real Grasp instances for testing
     const mockGrasps: Grasp[] = [
-      {
-        config: {
+      new Grasp(
+        {
           nodeId: 'test-grasp-1',
           promptTemplate: 'test prompt',
           cooldownMs: 1000,
           outputHandler: 'chat',
         },
-      } as Grasp,
-      {
-        config: {
+        mockLLMClient
+      ),
+      new Grasp(
+        {
           nodeId: 'test-grasp-2',
           promptTemplate: 'test prompt 2',
           cooldownMs: 2000,
           outputHandler: 'note',
           noteTag: 'test-tag',
         },
-      } as Grasp,
+        mockLLMClient
+      ),
     ];
     vi.mocked(loadGraspsForMeeting).mockResolvedValue(mockGrasps);
 
