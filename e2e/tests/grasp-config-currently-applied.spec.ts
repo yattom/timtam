@@ -1,6 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 import {
   clearLocalStackData,
+  loadDefaultDataOnLocalStack,
   createMeeting,
   saveGraspConfig,
   applyConfigToMeeting,
@@ -22,11 +25,15 @@ import {
  * - web/facilitator で pnpm run dev が起動している（ポート3001）
  */
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 test.describe('「現在適用中」表示と自動展開', { tag: '@local' }, () => {
   test.setTimeout(120000); // 2分のタイムアウト
 
   test.beforeEach(async () => {
     clearLocalStackData();
+    loadDefaultDataOnLocalStack(__dirname);
   });
 
   test('最新バージョンが適用されている場合、「現在適用中」が表示される', async ({ page }) => {
@@ -35,7 +42,7 @@ test.describe('「現在適用中」表示と自動展開', { tag: '@local' }, (
 
     const configName = '現在適用中テスト';
     const configYaml = createSampleYaml(1);
-    const configId = await saveGraspConfig(page, configName, configYaml);
+    const configId = await saveGraspConfig(page, configName, configYaml, 0);
     await applyConfigToMeeting(page, meetingId, configId);
 
     console.log('Step 1: Grasp設定タブを開く');
@@ -63,11 +70,11 @@ test.describe('「現在適用中」表示と自動展開', { tag: '@local' }, (
 
     // バージョン1を保存
     const v1Yaml = createSampleYaml(1);
-    const v1Id = await saveGraspConfig(page, configName, v1Yaml);
+    const v1Id = await saveGraspConfig(page, configName, v1Yaml, 1);
 
     // バージョン2を保存（最新）
     const v2Yaml = createSampleYaml(2);
-    const v2Id = await saveGraspConfig(page, configName, v2Yaml);
+    const v2Id = await saveGraspConfig(page, configName, v2Yaml, 2);
 
     // バージョン1（過去バージョン）を会議に適用
     await applyConfigToMeeting(page, meetingId, v1Id);
@@ -111,11 +118,11 @@ test.describe('「現在適用中」表示と自動展開', { tag: '@local' }, (
 
     // バージョン1を保存
     const v1Yaml = createSampleYaml(1);
-    const v1Id = await saveGraspConfig(page, configName, v1Yaml);
+    const v1Id = await saveGraspConfig(page, configName, v1Yaml, 1);
 
     // バージョン2を保存（最新）
     const v2Yaml = createSampleYaml(2);
-    const v2Id = await saveGraspConfig(page, configName, v2Yaml);
+    const v2Id = await saveGraspConfig(page, configName, v2Yaml, 2);
 
     // バージョン2（最新）を会議に適用
     await applyConfigToMeeting(page, meetingId, v2Id);
@@ -151,11 +158,11 @@ test.describe('「現在適用中」表示と自動展開', { tag: '@local' }, (
 
     const config1Name = '設定A';
     const config1Yaml = createSampleYaml(1);
-    const config1Id = await saveGraspConfig(page, config1Name, config1Yaml);
+    const config1Id = await saveGraspConfig(page, config1Name, config1Yaml, 1);
 
     const config2Name = '設定B';
     const config2Yaml = createSampleYaml(2);
-    const config2Id = await saveGraspConfig(page, config2Name, config2Yaml);
+    const config2Id = await saveGraspConfig(page, config2Name, config2Yaml, 2);
 
     // 最初は設定Aを適用
     await applyConfigToMeeting(page, meetingId, config1Id);

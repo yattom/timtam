@@ -76,22 +76,23 @@ export async function createMeeting(page: Page): Promise<string> {
 export async function saveGraspConfig(
   page: Page,
   name: string,
-  yaml: string
+  yaml: string,
+  version: number,
 ): Promise<string> {
   const response = await page.evaluate(
-    async ({ apiUrl, name, yaml }) => {
+    async ({ apiUrl, name, yaml, version }) => {
       const response = await fetch(`${apiUrl}/grasp/configs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
           yaml,
-          createdAt: Date.now(),
+          createdAt: Date.now() + version * 1000,  // 時刻が同じだと上書きされてしまう
         }),
       });
       return response.json();
     },
-    { apiUrl: API_URL, name, yaml }
+    { apiUrl: API_URL, name, yaml, version }
   );
 
   const configId = response.configId;

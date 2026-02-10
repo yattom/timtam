@@ -2,7 +2,7 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { test, expect, Page } from '@playwright/test';
 import { execSync } from 'child_process';
-import { loadDefaultDataOnLocalStack } from './helpers/grasp-config-helpers';
+import { clearLocalStackData, loadDefaultDataOnLocalStack } from './helpers/grasp-config-helpers';
 
 /**
  * E2Eテスト: UC01 会議のGrasp設定を調整する
@@ -34,11 +34,7 @@ test.describe('UC01: 会議のGrasp設定を調整する', { tag: '@local' }, ()
 
   // 各テストケースの前にDynamoDBテーブルとSQSキューのデータをクリア
   test.beforeEach(async () => {
-    console.log('Clearing LocalStack data...');
-    execSync('uv run invoke delete-localstack-data', {
-      stdio: 'inherit',
-    });
-    console.log('LocalStack data cleared');
+    clearLocalStackData();
     loadDefaultDataOnLocalStack(__dirname);
   });
 
