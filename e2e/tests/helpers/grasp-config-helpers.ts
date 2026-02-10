@@ -22,7 +22,7 @@ export function clearLocalStackData() {
 export function loadDefaultDataOnLocalStack(testDir: string) {
   console.log('Loading DynamoDB default data...');
   const configPath = join(testDir, 'test-grasp-config.json');
-  execSync(`uv run invoke seed-default-config-local --config-path ${configPath} -v`, {
+  execSync(`uv run invoke seed-default-config-local --config-path "${configPath}" -v`, {
     stdio: 'inherit',
   });
   console.log('Default data is loaded');

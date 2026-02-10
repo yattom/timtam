@@ -34,6 +34,7 @@ Orchestratorサービスは、Amazon Chimeミーティングのリアルタイ�
 ### 必須
 
 - `TRANSCRIPT_QUEUE_URL`: 文字起こしイベントを受信するSQS URL
+- `CONTROL_SQS_URL`: 制御メッセージを受信するSQS URL（Grasp設定更新用）
 - `BEDROCK_REGION`: AWS Bedrockのリージョン（デフォルト: us-east-1）
 - `BEDROCK_MODEL_ID`: 使用するBedrockモデルID（デフォルト: anthropic.claude-haiku-4.5）
 - `AI_MESSAGES_TABLE`: AI介入メッセージを保存するDynamoDBテーブル名
@@ -43,7 +44,6 @@ Orchestratorサービスは、Amazon Chimeミーティングのリアルタイ�
 
 - `MAX_MEETINGS`: 最大同時ミーティング数（デフォルト: 100）
 - `MEETING_TIMEOUT_MS`: 非アクティブミーティングのタイムアウト（デフォルト: 3600000 = 1時間）
-- `CONTROL_SQS_URL`: 制御メッセージを受信するSQS URL（Grasp設定更新用）
 
 ## セットアップ
 

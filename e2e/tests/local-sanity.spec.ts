@@ -1,8 +1,7 @@
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname } from 'path';
 import { test, expect, Page } from '@playwright/test';
-import { execSync } from 'child_process';
-import { clearLocalStackData, createMeeting, loadDefaultDataOnLocalStack } from './helpers/grasp-config-helpers';
+import { clearLocalStackData, loadDefaultDataOnLocalStack } from './helpers/grasp-config-helpers';
 
 /**
  * E2Eテスト: ローカル環境サニティチェック
