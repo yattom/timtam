@@ -104,6 +104,31 @@ export async function saveGraspConfigVersions(
 }
 
 /**
+ * Grasp設定をAPI経由で保存する
+ */
+export async function saveGraspConfig(
+  page: Page,
+  name: string,
+  yaml: string,
+): Promise<string> {
+  const response = await page.evaluate(
+    async ({ apiUrl, name, yaml, createdAt }) => {
+      const response = await fetch(`${apiUrl}/grasp/configs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, yaml, createdAt }),
+      });
+      return response.json();
+    },
+    { apiUrl: API_URL, name, yaml, createdAt: Date.now() }
+  );
+
+  const configId = response.configId;
+  console.log(`  Grasp設定を保存: ${name} (ID: ${configId})`);
+  return configId;
+}
+
+/**
  * Grasp設定を会議に適用する
  */
 export async function applyConfigToMeeting(
@@ -171,7 +196,7 @@ export async function openGraspConfigTab(page: Page): Promise<void> {
   await page.waitForTimeout(2000); // タブの内容がロードされるまで待つ
 }
 
-function createSampleYaml(version: number): string {
+export function createSampleYaml(version: number): string {
   return `grasps:
   - nodeId: test-grasp-v${version}
     promptTemplate: |
