@@ -23,34 +23,39 @@ describe('Meeting - processTranscriptEvent', () => {
   });
 
   it('reproducing issue #173 - should not execute the same grasp twice when two events arrive during one LLM call', async () => {
-    // Arrange
-    const llmIsInvoked: LLMClient = { invoke: vi.fn().mockResolvedValue({} as any) };
+    vi.useFakeTimers();
+    try {
+      // Arrange
+      const llmIsInvoked: LLMClient = { invoke: vi.fn().mockResolvedValue({} as any) };
 
-    const grasp = new Grasp(
-      { nodeId: 'test', promptTemplate: 'テスト', cooldownMs: 60000, outputHandler: 'chat' },
-      llmIsInvoked
-    );
-    const meeting = new Meeting(
-      { meetingId: 'test-meeting' as MeetingId, adapter: nullAdapter() },
-      [grasp]
-    );
+      const grasp = new Grasp(
+        { nodeId: 'test', promptTemplate: 'テスト', cooldownMs: 60000, outputHandler: 'chat' },
+        llmIsInvoked
+      );
+      const meeting = new Meeting(
+        { meetingId: 'test-meeting' as MeetingId, adapter: nullAdapter() },
+        [grasp]
+      );
 
-    // Act
-    // First event - grasp is enqueued and execute() starts (yields at LLM call)
-    const firstProcessing = meeting.processTranscriptEvent(makeEvent('発言1'), nullMetrics());
+      // クールダウンが経過した状態にする（Graspの60000msとGraspQueueの2000msを超える）
+      vi.advanceTimersByTime(60001);
 
-    // Second event arrives while first LLM call is in flight:
-    // - shouldExecute() is still true (markExecuted not called yet)
-    // - grasp is re-enqueued (not in queue - was shifted out by first processNext)
-    // - processNext() global cooldown also not updated yet
-    const secondProcessing = meeting.processTranscriptEvent(makeEvent('発言2'), nullMetrics());
+      // Act
+      // First event - grasp is enqueued and execute() starts (yields at LLM call)
+      const firstProcessing = meeting.processTranscriptEvent(makeEvent('発言1'), nullMetrics());
 
-    await firstProcessing;
-    await secondProcessing;
+      // Second event arrives while first LLM call is in flight:
+      // execute()の冒頭でmarkExecuted()が呼ばれているため、shouldExecute()はfalseを返す
+      const secondProcessing = meeting.processTranscriptEvent(makeEvent('発言2'), nullMetrics());
 
-    // Assert
-    // Should only have been executed once - FAILS with current code (called 2 times)
-    expect(llmIsInvoked.invoke).toHaveBeenCalledTimes(1);
+      await firstProcessing;
+      await secondProcessing;
+
+      // Assert
+      expect(llmIsInvoked.invoke).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

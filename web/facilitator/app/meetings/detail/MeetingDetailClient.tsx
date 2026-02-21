@@ -583,42 +583,71 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
                     まだLLMログがありません
                   </p>
                 ) : (
-                  <div className="space-y-4">
-                    {llmLogs.map((log, index) => (
-                      <div
-                        key={index}
-                        className="border border-gray-200 rounded-lg p-4"
-                      >
-                        <div className="flex items-center justify-between mb-3">
-                          <span className="text-sm text-gray-500">
-                            {new Date(log.timestamp).toLocaleTimeString()}
-                          </span>
-                          {log.nodeId && (
-                            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                              Grasp: {log.nodeId}
+                  <div className="space-y-4 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 300px)' }}>
+                    {llmLogs.map((log, index) => {
+                      let contentText: string | null = null;
+                      let prettifiedResponse = log.rawResponse;
+                      try {
+                        const parsed = JSON.parse(log.rawResponse);
+                        prettifiedResponse = JSON.stringify(parsed, null, 2);
+                        if (parsed.content && Array.isArray(parsed.content)) {
+                          const textContent = parsed.content.find(
+                            (c: { type: string; text?: string }) => c.type === 'text'
+                          );
+                          if (textContent?.text) {
+                            try {
+                              const parsedText = JSON.parse(textContent.text);
+                              contentText = JSON.stringify(parsedText, null, 2);
+                            } catch {
+                              contentText = textContent.text;
+                            }
+                          }
+                        }
+                      } catch {
+                        prettifiedResponse = log.rawResponse;
+                      }
+
+                      return (
+                        <div
+                          key={index}
+                          className="border border-gray-200 rounded-lg p-4"
+                        >
+                          <div className="flex items-center justify-between mb-3">
+                            <span className="text-sm text-gray-500">
+                              {new Date(log.timestamp).toLocaleTimeString()}
                             </span>
-                          )}
-                        </div>
-                        <div className="space-y-3">
-                          <div>
-                            <h4 className="text-sm font-medium text-gray-700 mb-1">
-                              Prompt ({log.prompt.length} chars):
-                            </h4>
-                            <pre className="text-xs bg-gray-50 p-3 rounded overflow-x-auto text-gray-800">
-                              {log.prompt}
-                            </pre>
+                            {log.nodeId && (
+                              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                Grasp: {log.nodeId}
+                              </span>
+                            )}
                           </div>
-                          <div>
-                            <h4 className="text-sm font-medium text-gray-700 mb-1">
-                              Response ({log.rawResponse.length} chars):
-                            </h4>
-                            <pre className="text-xs bg-gray-50 p-3 rounded overflow-x-auto text-gray-800">
-                              {log.rawResponse}
-                            </pre>
+                          <div className="flex gap-4">
+                            <div className="w-1/2">
+                              <h4 className="text-sm font-medium text-gray-700 mb-1">
+                                Prompt ({log.prompt.length} chars):
+                              </h4>
+                              <pre className="text-xs bg-gray-50 p-3 rounded whitespace-pre-wrap break-words text-gray-800">
+                                {log.prompt}
+                              </pre>
+                            </div>
+                            <div className="w-1/2">
+                              <h4 className="text-sm font-medium text-gray-700 mb-1">
+                                Response ({log.rawResponse.length} chars):
+                              </h4>
+                              {contentText !== null && (
+                                <pre className="text-xs bg-blue-50 p-3 rounded whitespace-pre-wrap break-words text-gray-800 mb-2">
+                                  {contentText}
+                                </pre>
+                              )}
+                              <pre className="bg-gray-50 p-3 rounded whitespace-pre-wrap break-words text-gray-800" style={{ fontSize: '0.5em' }}>
+                                {prettifiedResponse}
+                              </pre>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

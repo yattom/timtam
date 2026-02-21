@@ -52,9 +52,11 @@ export interface Metrics {
 }
 
 export class Interval {
-  private lastExecutionTime: number = 0;
+  private lastExecutionTime: number;
 
-  constructor(private cooldownMs: number) {}
+  constructor(private cooldownMs: number) {
+    this.lastExecutionTime = Date.now();
+  }
 
   shouldExecute(now: number): boolean {
     return now - this.lastExecutionTime >= this.cooldownMs;
