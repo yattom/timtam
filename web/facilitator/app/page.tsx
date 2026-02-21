@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/apiFetch";
+import { signOut, isLocalDev } from "@/lib/auth";
 
 interface Meeting {
   meetingId: string;
@@ -19,6 +21,7 @@ interface Meeting {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -118,6 +121,14 @@ export default function DashboardPage() {
               >
                 Grasp設定
               </Link>
+              {!isLocalDev() && (
+                <button
+                  onClick={() => { signOut(); router.push("/auth/signin"); }}
+                  className="px-4 py-2 text-gray-700 hover:text-gray-900 transition-colors"
+                >
+                  サインアウト
+                </button>
+              )}
             </div>
           </div>
         </div>
