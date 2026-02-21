@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { GraspConfig, GroupedConfig, groupConfigsByName } from "@/lib/graspConfig";
+import { apiFetch } from "@/lib/apiFetch";
 
 export default function ConfigPage() {
   const [configs, setConfigs] = useState<GraspConfig[]>([]);
@@ -25,8 +26,7 @@ export default function ConfigPage() {
   const loadConfigs = async () => {
     try {
       setLoading(true);
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://your-api-gateway.amazonaws.com";
-      const response = await fetch(`${apiUrl}/grasp/configs`);
+      const response = await apiFetch(`/grasp/configs`);
 
       if (!response.ok) {
         throw new Error("設定の取得に失敗しました");
@@ -45,8 +45,7 @@ export default function ConfigPage() {
 
   const handleSelectConfig = async (configId: string, name: string) => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://your-api-gateway.amazonaws.com";
-      const response = await fetch(`${apiUrl}/grasp/configs/${configId}`);
+      const response = await apiFetch(`/grasp/configs/${configId}`);
 
       if (!response.ok) {
         throw new Error('設定の取得に失敗しました');
@@ -82,13 +81,9 @@ export default function ConfigPage() {
     setSuccess(false);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://your-api-gateway.amazonaws.com";
       const createdAt = Date.now();
-      const response = await fetch(`${apiUrl}/grasp/configs`, {
+      const response = await apiFetch(`/grasp/configs`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({ name: configName, yaml: editedYaml, createdAt }),
       });
 

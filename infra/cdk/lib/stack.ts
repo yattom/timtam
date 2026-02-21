@@ -1,6 +1,7 @@
 import { Stack, StackProps, CfnOutput, RemovalPolicy } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
-import { CfnApi, CfnIntegration, CfnRoute, CfnStage } from 'aws-cdk-lib/aws-apigatewayv2';
+import { CfnApi, CfnAuthorizer, CfnIntegration, CfnRoute, CfnStage } from 'aws-cdk-lib/aws-apigatewayv2';
+import * as cognito from 'aws-cdk-lib/aws-cognito';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import { Duration } from 'aws-cdk-lib';
 import * as s3 from 'aws-cdk-lib/aws-s3';
@@ -20,6 +21,25 @@ export class TimtamInfraStack extends Stack {
     super(scope, id, props);
 
     // HTTP API は Web Distribution 作成後に定義して、CORS に CF ドメインを含める
+
+    // === Cognito User Pool (ADR 0019: Facilitator Authentication) ===
+    const userPool = new cognito.UserPool(this, 'FacilitatorUserPool', {
+      userPoolName: 'timtam-facilitator-pool',
+      selfSignUpEnabled: true,
+      signInAliases: { email: true },
+      autoVerify: { email: true },
+      passwordPolicy: { minLength: 8, requireSymbols: false },
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
+
+    const userPoolClient = new cognito.UserPoolClient(this, 'FacilitatorUserPoolClient', {
+      userPool,
+      authFlows: { userPassword: true, userSrp: true },
+      generateSecret: false, // SPA はクライアントシークレット不要
+    });
+
+    new CfnOutput(this, 'UserPoolId', { value: userPool.userPoolId });
+    new CfnOutput(this, 'UserPoolClientId', { value: userPoolClient.userPoolClientId });
 
     // === DynamoDB table for AI Messages (for web UI polling) ===
     const aiMessagesTable = new dynamodb.Table(this, 'AiMessagesTable', {
@@ -53,6 +73,14 @@ export class TimtamInfraStack extends Stack {
     meetingsMetadataTable.addGlobalSecondaryIndex({
       indexName: 'createdAt-index',
       partitionKey: { name: 'type', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'createdAt', type: dynamodb.AttributeType.NUMBER },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    // GSI for listing meetings by user (ADR 0019)
+    meetingsMetadataTable.addGlobalSecondaryIndex({
+      indexName: 'hostUserId-createdAt-index',
+      partitionKey: { name: 'hostUserId', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'createdAt', type: dynamodb.AttributeType.NUMBER },
       projectionType: dynamodb.ProjectionType.ALL,
     });
@@ -579,6 +607,18 @@ export class TimtamInfraStack extends Stack {
       autoDeploy: true,
     });
 
+    // JWT Authorizer (ADR 0019)
+    const jwtAuthorizer = new CfnAuthorizer(this, 'CognitoJwtAuthorizer', {
+      apiId: httpApi.ref,
+      authorizerType: 'JWT',
+      identitySource: ['$request.header.Authorization'],
+      jwtConfiguration: {
+        audience: [userPoolClient.userPoolClientId],
+        issuer: `https://cognito-idp.${this.region}.amazonaws.com/${userPool.userPoolId}`,
+      },
+      name: 'CognitoJwtAuthorizer',
+    });
+
     // (CORS は上で CF ドメインを含めて定義済み)
 
     // Helper to build Lambda proxy integration URI
@@ -597,6 +637,8 @@ export class TimtamInfraStack extends Stack {
       apiId: httpApi.ref,
       routeKey: 'POST /meetings',
       target: `integrations/${createMeetingInt.ref}`,
+      authorizationType: 'JWT',
+      authorizerId: jwtAuthorizer.ref,
     });
     createMeetingRoute.addDependency(createMeetingInt);
 
@@ -612,6 +654,8 @@ export class TimtamInfraStack extends Stack {
       apiId: httpApi.ref,
       routeKey: 'POST /attendees',
       target: `integrations/${addAttendeeInt.ref}`,
+      authorizationType: 'JWT',
+      authorizerId: jwtAuthorizer.ref,
     });
     addAttendeeRoute.addDependency(addAttendeeInt);
 
@@ -627,6 +671,8 @@ export class TimtamInfraStack extends Stack {
       apiId: httpApi.ref,
       routeKey: 'POST /meetings/{meetingId}/transcription/start',
       target: `integrations/${transcriptionStartInt.ref}`,
+      authorizationType: 'JWT',
+      authorizerId: jwtAuthorizer.ref,
     });
     transcriptionStartRoute.addDependency(transcriptionStartInt);
 
@@ -642,6 +688,8 @@ export class TimtamInfraStack extends Stack {
       apiId: httpApi.ref,
       routeKey: 'POST /meetings/{meetingId}/transcription/stop',
       target: `integrations/${transcriptionStopInt.ref}`,
+      authorizationType: 'JWT',
+      authorizerId: jwtAuthorizer.ref,
     });
     transcriptionStopRoute.addDependency(transcriptionStopInt);
 
@@ -658,6 +706,8 @@ export class TimtamInfraStack extends Stack {
       apiId: httpApi.ref,
       routeKey: 'POST /meetings/{meetingId}/participants',
       target: `integrations/${meetingMetadataInt.ref}`,
+      authorizationType: 'JWT',
+      authorizerId: jwtAuthorizer.ref,
     });
     upsertParticipantRoute.addDependency(meetingMetadataInt);
 
@@ -673,6 +723,8 @@ export class TimtamInfraStack extends Stack {
       apiId: httpApi.ref,
       routeKey: 'GET /meetings/{meetingId}/participants',
       target: `integrations/${getParticipantsInt.ref}`,
+      authorizationType: 'JWT',
+      authorizerId: jwtAuthorizer.ref,
     });
     getParticipantsRoute.addDependency(getParticipantsInt);
 
@@ -688,6 +740,8 @@ export class TimtamInfraStack extends Stack {
       apiId: httpApi.ref,
       routeKey: 'POST /meetings/{meetingId}/transcription/events',
       target: `integrations/${transcriptionEventsInt.ref}`,
+      authorizationType: 'JWT',
+      authorizerId: jwtAuthorizer.ref,
     });
     transcriptionEventsRoute.addDependency(transcriptionEventsInt);
 
@@ -719,6 +773,8 @@ export class TimtamInfraStack extends Stack {
       apiId: httpApi.ref,
       routeKey: 'POST /recall/meetings/join',
       target: `integrations/${recallJoinMeetingInt.ref}`,
+      authorizationType: 'JWT',
+      authorizerId: jwtAuthorizer.ref,
     });
     recallJoinMeetingRoute.addDependency(recallJoinMeetingInt);
 
@@ -734,6 +790,8 @@ export class TimtamInfraStack extends Stack {
       apiId: httpApi.ref,
       routeKey: 'GET /recall/meetings',
       target: `integrations/${recallListMeetingsInt.ref}`,
+      authorizationType: 'JWT',
+      authorizerId: jwtAuthorizer.ref,
     });
     recallListMeetingsRoute.addDependency(recallListMeetingsInt);
 
@@ -749,6 +807,8 @@ export class TimtamInfraStack extends Stack {
       apiId: httpApi.ref,
       routeKey: 'GET /recall/meetings/{meetingId}',
       target: `integrations/${recallGetMeetingInt.ref}`,
+      authorizationType: 'JWT',
+      authorizerId: jwtAuthorizer.ref,
     });
     recallGetMeetingRoute.addDependency(recallGetMeetingInt);
 
@@ -764,6 +824,8 @@ export class TimtamInfraStack extends Stack {
       apiId: httpApi.ref,
       routeKey: 'DELETE /recall/meetings/{meetingId}',
       target: `integrations/${recallLeaveMeetingInt.ref}`,
+      authorizationType: 'JWT',
+      authorizerId: jwtAuthorizer.ref,
     });
     recallLeaveMeetingRoute.addDependency(recallLeaveMeetingInt);
 
@@ -839,6 +901,8 @@ export class TimtamInfraStack extends Stack {
       apiId: httpApi.ref,
       routeKey: 'POST /meetings/{meetingId}/orchestrator/start',
       target: `integrations/${startMeetingInt.ref}`,
+      authorizationType: 'JWT',
+      authorizerId: jwtAuthorizer.ref,
     });
     startMeetingRoute.addDependency(startMeetingInt);
     startMeetingFn.addPermission('InvokeByHttpApiStartMeeting', {
@@ -859,6 +923,8 @@ export class TimtamInfraStack extends Stack {
       apiId: httpApi.ref,
       routeKey: 'POST /tts',
       target: `integrations/${ttsInt.ref}`,
+      authorizationType: 'JWT',
+      authorizerId: jwtAuthorizer.ref,
     });
     ttsRoute.addDependency(ttsInt);
     ttsFn.addPermission('InvokeByHttpApiTts', {
@@ -954,6 +1020,8 @@ export class TimtamInfraStack extends Stack {
       apiId: httpApi.ref,
       routeKey: 'GET /meetings/{meetingId}/messages',
       target: `integrations/${aiMessagesInt.ref}`,
+      authorizationType: 'JWT',
+      authorizerId: jwtAuthorizer.ref,
     });
     aiMessagesRoute.addDependency(aiMessagesInt);
     aiMessagesFn.addPermission('InvokeByHttpApiAiMessages', {
@@ -976,6 +1044,8 @@ export class TimtamInfraStack extends Stack {
       apiId: httpApi.ref,
       routeKey: 'GET /grasp/configs',
       target: `integrations/${getGraspConfigsInt.ref}`,
+      authorizationType: 'JWT',
+      authorizerId: jwtAuthorizer.ref,
     });
     getGraspConfigsRoute.addDependency(getGraspConfigsInt);
     getGraspConfigsFn.addPermission('InvokeByHttpApiGetGraspConfigs', {
@@ -996,6 +1066,8 @@ export class TimtamInfraStack extends Stack {
       apiId: httpApi.ref,
       routeKey: 'POST /grasp/presets',
       target: `integrations/${saveGraspPresetInt.ref}`,
+      authorizationType: 'JWT',
+      authorizerId: jwtAuthorizer.ref,
     });
     saveGraspPresetRoute.addDependency(saveGraspPresetInt);
     saveGraspPresetFn.addPermission('InvokeByHttpApiSaveGraspPreset', {
@@ -1016,6 +1088,8 @@ export class TimtamInfraStack extends Stack {
       apiId: httpApi.ref,
       routeKey: 'POST /grasp/configs',
       target: `integrations/${saveGraspConfigInt.ref}`,
+      authorizationType: 'JWT',
+      authorizerId: jwtAuthorizer.ref,
     });
     saveGraspConfigRoute.addDependency(saveGraspConfigInt);
     saveGraspConfigFn.addPermission('InvokeByHttpApiSaveGraspConfig', {
@@ -1036,6 +1110,8 @@ export class TimtamInfraStack extends Stack {
       apiId: httpApi.ref,
       routeKey: 'GET /grasp/configs/{configId}',
       target: `integrations/${getGraspConfigByIdInt.ref}`,
+      authorizationType: 'JWT',
+      authorizerId: jwtAuthorizer.ref,
     });
     getGraspConfigByIdRoute.addDependency(getGraspConfigByIdInt);
     getGraspConfigByIdFn.addPermission('InvokeByHttpApiGetGraspConfigById', {
@@ -1056,6 +1132,8 @@ export class TimtamInfraStack extends Stack {
       apiId: httpApi.ref,
       routeKey: 'POST /meetings/{meetingId}/grasp-config',
       target: `integrations/${applyGraspConfigToMeetingInt.ref}`,
+      authorizationType: 'JWT',
+      authorizerId: jwtAuthorizer.ref,
     });
     applyGraspConfigToMeetingRoute.addDependency(applyGraspConfigToMeetingInt);
     applyGraspConfigToMeetingFn.addPermission('InvokeByHttpApiApplyGraspConfigToMeeting', {
@@ -1076,6 +1154,8 @@ export class TimtamInfraStack extends Stack {
       apiId: httpApi.ref,
       routeKey: 'GET /meetings/{meetingId}/grasp-config',
       target: `integrations/${getMeetingGraspConfigInt.ref}`,
+      authorizationType: 'JWT',
+      authorizerId: jwtAuthorizer.ref,
     });
     getMeetingGraspConfigRoute.addDependency(getMeetingGraspConfigInt);
     getMeetingGraspConfigFn.addPermission('InvokeByHttpApiGetMeetingGraspConfig', {

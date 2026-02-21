@@ -14,6 +14,15 @@ const RECALL_WEBHOOK_URL = process.env.RECALL_WEBHOOK_URL || ''; // e.g., https:
 const RECALL_TRANSCRIPTION_PROVIDER = process.env.RECALL_TRANSCRIPTION_PROVIDER || 'deepgram_streaming';
 const RECALL_TRANSCRIPTION_LANGUAGE = process.env.RECALL_TRANSCRIPTION_LANGUAGE || 'auto';
 
+export function getUserId(event: any): string | undefined {
+  return event.requestContext?.authorizer?.jwt?.claims?.sub;
+}
+
+export function canAccessMeeting(userId: string | undefined, itemUserId: string | undefined): boolean {
+  if (!itemUserId) return true; // 旧データ（hostUserId未設定）は誰でもアクセス可
+  return itemUserId === userId;
+}
+
 const ddbClient = new DynamoDBClient({ region: REGION });
 const ddb = DynamoDBDocumentClient.from(ddbClient, {
   marshallOptions: {
@@ -163,12 +172,14 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
 
     // Save to DynamoDB
     const now = Date.now();
+    const hostUserId = getUserId(event);
     await ddb.send(
       new PutCommand({
         TableName: MEETINGS_METADATA_TABLE,
         Item: {
           meetingId: bot.id, // PK
           type: 'MEETING', // Fixed partition key for createdAt-index GSI (Issue #107)
+          hostUserId, // User who created this meeting
           platform: 'recall',
           status: 'active',
           createdAt: now,
@@ -259,6 +270,14 @@ export const getHandler: APIGatewayProxyHandlerV2 = async (event) => {
       };
     }
 
+    if (!canAccessMeeting(getUserId(event), result.Item.hostUserId)) {
+      return {
+        statusCode: 403,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'Access denied' }),
+      };
+    }
+
     // Optionally sync with Recall.ai bot status
     if (result.Item.platform === 'recall' && result.Item.recallBot?.botId) {
       try {
@@ -327,6 +346,14 @@ export const leaveHandler: APIGatewayProxyHandlerV2 = async (event) => {
         statusCode: 404,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ error: 'Meeting not found' }),
+      };
+    }
+
+    if (!canAccessMeeting(getUserId(event), result.Item.hostUserId)) {
+      return {
+        statusCode: 403,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'Access denied' }),
       };
     }
 
@@ -432,6 +459,15 @@ export const leaveHandler: APIGatewayProxyHandlerV2 = async (event) => {
  */
 export const listHandler: APIGatewayProxyHandlerV2 = async (event) => {
   try {
+    const hostUserId = getUserId(event);
+    if (!hostUserId) {
+      return {
+        statusCode: 401,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'Unauthorized' }),
+      };
+    }
+
     // Parse query parameters
     const limitParam = event.queryStringParameters?.limit;
     let limit = 50; // default
@@ -464,18 +500,17 @@ export const listHandler: APIGatewayProxyHandlerV2 = async (event) => {
       }
     }
 
-    // Query meetings using GSI (createdAt-index) for sorted results
-    // Fixed partition key "MEETING" with createdAt sort key (Issue #107)
+    // Query meetings using GSI (hostUserId-createdAt-index) for user-specific sorted results
     const result = await ddb.send(
       new QueryCommand({
         TableName: MEETINGS_METADATA_TABLE,
-        IndexName: 'createdAt-index',
-        KeyConditionExpression: '#type = :type',
+        IndexName: 'hostUserId-createdAt-index',
+        KeyConditionExpression: '#hostUserId = :hostUserId',
         ExpressionAttributeNames: {
-          '#type': 'type',
+          '#hostUserId': 'hostUserId',
         },
         ExpressionAttributeValues: {
-          ':type': 'MEETING',
+          ':hostUserId': hostUserId,
         },
         ScanIndexForward: false, // Descending order (newest first)
         Limit: limit,
