@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState, useEffect, useCallback } from "react";
+import { apiFetch } from "@/lib/apiFetch";
 
 interface Meeting {
   meetingId: string;
@@ -33,14 +34,10 @@ export default function DashboardPage() {
         setLoading(true);
       }
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const url = new URL(`${apiUrl}/recall/meetings`);
-      url.searchParams.set('limit', '50');
-      if (token) {
-        url.searchParams.set('nextToken', token);
-      }
+      const params = new URLSearchParams({ limit: '50' });
+      if (token) params.set('nextToken', token);
 
-      const response = await fetch(url.toString());
+      const response = await apiFetch(`/recall/meetings?${params.toString()}`);
 
       if (!response.ok) {
         let errorMessage = `API error: ${response.status}`;

@@ -58,6 +58,9 @@ function createApiGatewayEvent(
   req: express.Request,
   pathParameters?: Record<string, string>
 ): APIGatewayProxyEventV2 {
+  // ローカル開発: フロントエンドが X-User-Id ヘッダーを送る
+  const userId = (req.headers['x-user-id'] as string) || 'local-dev-user';
+
   return {
     version: '2.0',
     routeKey: `${req.method} ${req.path}`,
@@ -85,6 +88,12 @@ function createApiGatewayEvent(
       stage: 'local',
       time: new Date().toISOString(),
       timeEpoch: Date.now(),
+      authorizer: {
+        jwt: {
+          claims: { sub: userId },
+          scopes: null,
+        },
+      } as any,
     },
   };
 }

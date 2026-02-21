@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { apiFetch } from "@/lib/apiFetch";
 
 interface GraspConfig {
   configId: string;
@@ -50,8 +51,7 @@ export default function JoinMeetingPage() {
     // Load Grasp configs
     const fetchConfigs = async () => {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://your-api-gateway.amazonaws.com";
-        const response = await fetch(`${apiUrl}/grasp/configs`);
+        const response = await apiFetch(`/grasp/configs`);
 
         if (!response.ok) {
           console.error('Failed to load Grasp configs');
@@ -82,14 +82,8 @@ export default function JoinMeetingPage() {
     setError(null);
 
     try {
-      // TODO: 環境変数から取得
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://your-api-gateway.amazonaws.com";
-
-      const response = await fetch(`${apiUrl}/recall/meetings/join`, {
+      const response = await apiFetch(`/recall/meetings/join`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({
           meetingUrl,
           platform,

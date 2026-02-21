@@ -20,6 +20,23 @@
 
 NOTICE: TODOリストはフラットな箇条書きで、着手順に上から並べること。新しい項目もフラットに、実施順になるよう途中に挿入する。セクションを分けたり階層化するのは禁止。
 
+- [x] [auth] Lambda: getUserId()ヘルパーのテストと実装 (ADR 0019)
+- [x] [auth] Lambda: listHandlerがhostUserIdでフィルタリングする (ADR 0019)
+- [x] [auth] Lambda: joinHandlerがhostUserIdをDynamoDBに保存する (ADR 0019)
+- [x] [auth] Lambda: getHandlerが他ユーザーのミーティングを403で拒否する (ADR 0019)
+- [x] [auth] Lambda: leaveHandlerが他ユーザーのミーティングを403で拒否する (ADR 0019)
+- [x] [auth] LocalServer: X-User-Idヘッダーを認証コンテキストに注入する (ADR 0019)
+- [x] [auth] CDK: Cognito User Pool + User Pool Client 追加 (ADR 0019)
+- [x] [auth] CDK: hostUserId-createdAt-index GSI 追加 (ADR 0019)
+- [x] [auth] CDK: JWT Authorizer 追加 (ADR 0019)
+- [x] [auth] CDK: 保護対象ルートに authorizationType + authorizerId 追加 (ADR 0019)
+- [x] [auth] Frontend: lib/auth.ts 新規作成 (ADR 0019)
+- [x] [auth] Frontend: lib/apiFetch.ts 新規作成 (ADR 0019)
+- [x] [auth] Frontend: サインインページ作成 (ADR 0019)
+- [x] [auth] Frontend: サインアップページ作成 (ADR 0019)
+- [x] [auth] Frontend: layout.tsx 未認証時リダイレクト (ADR 0019)
+- [x] [auth] Frontend: 各ページのfetch → apiFetch置き換え (ADR 0019)
+- [x] [auth] Frontend: .env.example に Cognito 環境変数追記 (ADR 0019)
 - [ ] E2Eテストでゴールデンパスを動くようにする #43
 - [ ] ローカル実行環境を動くようにする #21
 - [ ] プロンプトの出力形式を直す #42

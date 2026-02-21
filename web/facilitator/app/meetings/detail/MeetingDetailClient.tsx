@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import ConfigTab from "./ConfigTab";
 import { GraspConfig, GroupedConfig, groupConfigsByName } from "@/lib/graspConfig";
+import { apiFetch } from "@/lib/apiFetch";
 
 interface TranscriptEntry {
   timestamp: number;
@@ -70,8 +71,7 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
   useEffect(() => {
     const fetchMeeting = async () => {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://your-api-gateway.amazonaws.com";
-        const response = await fetch(`${apiUrl}/recall/meetings/${meetingId}`);
+        const response = await apiFetch(`/recall/meetings/${meetingId}`);
 
         if (!response.ok) {
           throw new Error("会議情報の取得に失敗しました");
@@ -97,9 +97,8 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
 
     const pollMessages = async () => {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://your-api-gateway.amazonaws.com";
-        const response = await fetch(
-          `${apiUrl}/meetings/${meetingId}/messages?since=${lastTimestamp}&limit=100`
+        const response = await apiFetch(
+          `/meetings/${meetingId}/messages?since=${lastTimestamp}&limit=100`
         );
 
         if (!response.ok) {
@@ -168,10 +167,9 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
     const fetchData = async () => {
       try {
         setConfigLoading(true);
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://your-api-gateway.amazonaws.com";
 
         // Fetch all configs
-        const configsResponse = await fetch(`${apiUrl}/grasp/configs`);
+        const configsResponse = await apiFetch(`/grasp/configs`);
         if (!configsResponse.ok) {
           throw new Error('設定の取得に失敗しました');
         }
@@ -181,7 +179,7 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
 
         // Fetch current meeting config first to know which version is applied
         let appliedConfigId: string | null = null;
-        const currentResponse = await fetch(`${apiUrl}/meetings/${meetingId}/grasp-config`);
+        const currentResponse = await apiFetch(`/meetings/${meetingId}/grasp-config`);
         if (currentResponse.ok) {
           const currentData = await currentResponse.json();
           appliedConfigId = currentData.configId || null;
@@ -231,8 +229,7 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
   // Handle config selection
   const handleSelectConfig = async (configId: string, name: string) => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://your-api-gateway.amazonaws.com";
-      const response = await fetch(`${apiUrl}/grasp/configs/${configId}`);
+      const response = await apiFetch(`/grasp/configs/${configId}`);
 
       if (!response.ok) {
         throw new Error('設定の取得に失敗しました');
@@ -294,8 +291,6 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
       setConfigLoading(true);
       setApplySuccess(false);
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://your-api-gateway.amazonaws.com";
-
       let configIdToApply = selectedConfigId;
 
       // If YAML or name was edited, save as new version first.
@@ -306,11 +301,8 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
       // if this function is ever called differently.
       if (saveAsNew && (editedYaml !== selectedConfigYaml || configName !== originalConfigName)) {
         const saveName = configName || `設定_${Date.now()}`;
-        const saveResponse = await fetch(`${apiUrl}/grasp/configs`, {
+        const saveResponse = await apiFetch(`/grasp/configs`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
           body: JSON.stringify({
             name: saveName,
             yaml: editedYaml,
@@ -326,7 +318,7 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
         configIdToApply = saveData.configId;
 
         // Reload configs to show new version
-        const configsResponse = await fetch(`${apiUrl}/grasp/configs`);
+        const configsResponse = await apiFetch(`/grasp/configs`);
         if (configsResponse.ok) {
           const configsData = await configsResponse.json();
           const configs = configsData.configs || [];
@@ -345,11 +337,8 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
         throw new Error('設定が選択されていません');
       }
 
-      const response = await fetch(`${apiUrl}/meetings/${meetingId}/grasp-config`, {
+      const response = await apiFetch(`/meetings/${meetingId}/grasp-config`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ configId: configIdToApply }),
       });
 
@@ -361,7 +350,7 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
       const result = await response.json();
 
       // Update current config
-      const configResponse = await fetch(`${apiUrl}/grasp/configs/${result.configId}`);
+      const configResponse = await apiFetch(`/grasp/configs/${result.configId}`);
       if (configResponse.ok) {
         const configData = await configResponse.json();
         setCurrentConfig({
@@ -386,8 +375,7 @@ export default function MeetingDetailClient({ meetingId }: { meetingId: string }
     if (!confirm("ボットを会議から退出させますか？")) return;
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://your-api-gateway.amazonaws.com";
-      const response = await fetch(`${apiUrl}/recall/meetings/${meetingId}`, {
+      const response = await apiFetch(`/recall/meetings/${meetingId}`, {
         method: "DELETE",
       });
 
