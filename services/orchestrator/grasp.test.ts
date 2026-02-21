@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   Grasp,
   GraspConfig,
+  Interval,
   WindowBuffer,
   Notebook,
   LLMClient,
@@ -513,5 +514,28 @@ describe('Grasp', () => {
       const result = replaceTemplateVariables(template, windowBuffer, notebook);
       expect(result).toBe('プロンプトのみ');
     });
+  });
+});
+
+describe('Interval', () => {
+  it('should not execute immediately after creation (wait one interval first)', () => {
+    const now = Date.now();
+    const interval = new Interval(60000);
+    expect(interval.shouldExecute(now)).toBe(false);
+  });
+
+  it('should execute after cooldown has passed', () => {
+    const start = Date.now();
+    const interval = new Interval(60000);
+    const afterCooldown = start + 60000;
+    expect(interval.shouldExecute(afterCooldown)).toBe(true);
+  });
+
+  it('should not execute again immediately after markExecuted', () => {
+    const start = Date.now();
+    const interval = new Interval(60000);
+    const afterCooldown = start + 60000;
+    interval.markExecuted(afterCooldown);
+    expect(interval.shouldExecute(afterCooldown + 1)).toBe(false);
   });
 });
