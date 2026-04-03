@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # LocalStack (DynamoDB、SQS、S3、CloudWatch)
   localstack:
-    image: localstack/localstack:latest
+    image: localstack/localstack:3.8
     ports:
       - "4566:4566"
     environment:

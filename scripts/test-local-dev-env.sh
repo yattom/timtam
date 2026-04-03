@@ -20,6 +20,12 @@ TESTS_FAILED=0
 # Configuration
 LOCALSTACK_ENDPOINT="http://localhost:4566"
 RECALL_STUB_ENDPOINT="http://localhost:8080"
+if [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then
+  export AWS_ACCESS_KEY_ID="test"
+fi
+if [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+  export AWS_SECRET_ACCESS_KEY="test"
+fi
 AWS_REGION="ap-northeast-1"
 
 # Expected resources
