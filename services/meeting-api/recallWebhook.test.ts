@@ -8,34 +8,42 @@ import { APIGatewayProxyEventV2 } from 'aws-lambda';
 const ddbMock = mockClient(DynamoDBDocumentClient);
 const sqsMock = mockClient(SQSClient);
 
-describe('recallWebhook - bot.status event handling', () => {
+function makeBotStatusEvent(eventType: string, botId: string, code: string, subCode: string | null = null) {
+  return {
+    body: JSON.stringify({
+      event: eventType,
+      data: {
+        bot: { id: botId, metadata: {} },
+        data: {
+          code,
+          sub_code: subCode,
+          updated_at: '2026-02-22T01:44:45.000Z',
+        },
+      },
+    }),
+  } as APIGatewayProxyEventV2;
+}
+
+describe('recallWebhook - bot status event handling', () => {
   beforeEach(() => {
     ddbMock.reset();
     sqsMock.reset();
   });
 
-  describe('bot.status: done', () => {
+  describe('bot.call_ended', () => {
     it('ミーティングステータスをendedに更新し、TTLを設定すること', async () => {
       const botId = 'bot-12345';
       const now = Date.now();
       const expectedTtl = Math.floor(now / 1000) + (7 * 24 * 60 * 60);
 
-      // Mock DynamoDB UpdateCommand
       ddbMock.on(UpdateCommand).resolves({});
 
-      const event = {
-        body: JSON.stringify({
-          event: 'bot.status',
-          bot_id: botId,
-          status: 'done',
-        }),
-      } as APIGatewayProxyEventV2;
+      const event = makeBotStatusEvent('bot.call_ended', botId, 'call_ended', 'call_ended_by_host');
 
       const response = await handler(event);
 
       expect(response.statusCode).toBe(200);
 
-      // UpdateCommand が呼ばれたことを確認
       const updateCalls = ddbMock.commandCalls(UpdateCommand);
       expect(updateCalls.length).toBe(1);
 
@@ -48,27 +56,17 @@ describe('recallWebhook - bot.status event handling', () => {
       expect(updateInput.ExpressionAttributeValues?.[':status']).toBe('ended');
       expect(updateInput.ExpressionAttributeValues?.[':endedAt']).toBeGreaterThan(now - 1000);
 
-      // TTLが7日後に設定されていることを確認（±10秒の誤差を許容）
       const actualTtl = updateInput.ExpressionAttributeValues?.[':ttl'] as number;
       expect(actualTtl).toBeGreaterThanOrEqual(expectedTtl - 10);
       expect(actualTtl).toBeLessThanOrEqual(expectedTtl + 10);
     });
   });
 
-  describe('bot.status: error', () => {
-    it('エラー状態でもミーティングステータスをendedに更新すること', async () => {
-      const botId = 'bot-error-123';
-
+  describe('bot.done', () => {
+    it('ミーティングステータスをendedに更新すること', async () => {
       ddbMock.on(UpdateCommand).resolves({});
 
-      const event = {
-        body: JSON.stringify({
-          event: 'bot.status',
-          bot_id: botId,
-          status: 'error',
-          status_message: 'Failed to join meeting',
-        }),
-      } as APIGatewayProxyEventV2;
+      const event = makeBotStatusEvent('bot.done', 'bot-done-123', 'done');
 
       const response = await handler(event);
 
@@ -80,35 +78,25 @@ describe('recallWebhook - bot.status event handling', () => {
     });
   });
 
-  describe('bot.status: in_meeting', () => {
-    it('in_meeting状態ではDynamoDBを更新しないこと', async () => {
-      const event = {
-        body: JSON.stringify({
-          event: 'bot.status',
-          bot_id: 'bot-123',
-          status: 'in_meeting',
-        }),
-      } as APIGatewayProxyEventV2;
+  describe('bot.fatal', () => {
+    it('エラー状態でもミーティングステータスをendedに更新すること', async () => {
+      ddbMock.on(UpdateCommand).resolves({});
+
+      const event = makeBotStatusEvent('bot.fatal', 'bot-fatal-123', 'fatal', 'bot_errored');
 
       const response = await handler(event);
 
       expect(response.statusCode).toBe(200);
 
-      // UpdateCommand が呼ばれていないことを確認
       const updateCalls = ddbMock.commandCalls(UpdateCommand);
-      expect(updateCalls.length).toBe(0);
+      expect(updateCalls.length).toBe(1);
+      expect(updateCalls[0].args[0].input.ExpressionAttributeValues?.[':status']).toBe('ended');
     });
   });
 
-  describe('bot.status: ready', () => {
-    it('ready状態ではDynamoDBを更新しないこと', async () => {
-      const event = {
-        body: JSON.stringify({
-          event: 'bot.status',
-          bot_id: 'bot-123',
-          status: 'ready',
-        }),
-      } as APIGatewayProxyEventV2;
+  describe('bot.joining_call', () => {
+    it('非終了状態ではDynamoDBを更新しないこと', async () => {
+      const event = makeBotStatusEvent('bot.joining_call', 'bot-123', 'joining_call');
 
       const response = await handler(event);
 
@@ -121,44 +109,24 @@ describe('recallWebhook - bot.status event handling', () => {
 
   describe('DynamoDBエラーハンドリング', () => {
     it('ミーティングが存在しない場合でもHTTP 200を返すこと', async () => {
-      const botId = 'bot-not-found';
-
-      // UpdateCommandでConditionalCheckFailedExceptionを発生させる
       const conditionalCheckError = new Error('The conditional request failed');
       conditionalCheckError.name = 'ConditionalCheckFailedException';
       ddbMock.on(UpdateCommand).rejects(conditionalCheckError);
 
-      const event = {
-        body: JSON.stringify({
-          event: 'bot.status',
-          bot_id: botId,
-          status: 'done',
-        }),
-      } as APIGatewayProxyEventV2;
+      const event = makeBotStatusEvent('bot.call_ended', 'bot-not-found', 'call_ended');
 
       const response = await handler(event);
 
-      // Webhookは常に200を返す（Recall.aiのリトライを防ぐため）
       expect(response.statusCode).toBe(200);
     });
 
     it('DynamoDB更新が失敗してもHTTP 200を返すこと', async () => {
-      const botId = 'bot-456';
-
-      // UpdateCommandでエラーを発生させる
       ddbMock.on(UpdateCommand).rejects(new Error('DynamoDB update failed'));
 
-      const event = {
-        body: JSON.stringify({
-          event: 'bot.status',
-          bot_id: botId,
-          status: 'done',
-        }),
-      } as APIGatewayProxyEventV2;
+      const event = makeBotStatusEvent('bot.call_ended', 'bot-456', 'call_ended');
 
       const response = await handler(event);
 
-      // Webhookは常に200を返す（Recall.aiのリトライを防ぐため）
       expect(response.statusCode).toBe(200);
     });
   });
@@ -187,7 +155,6 @@ describe('recallWebhook - bot.status event handling', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // SQS SendMessageCommand が呼ばれたことを確認
       const sqsCalls = sqsMock.commandCalls(SendMessageCommand);
       expect(sqsCalls.length).toBe(1);
     });

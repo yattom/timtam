@@ -98,7 +98,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
           body: JSON.stringify({ ok: true, message: 'Participant event acknowledged (not processed)' }),
         };
 
-      case 'bot.status':
+      case 'bot.call_ended':
+      case 'bot.done':
+      case 'bot.fatal':
         return await handleBotStatusEvent(payload);
 
       default:
@@ -203,23 +205,19 @@ async function handleTranscriptEvent(payload: any): Promise<any> {
  * @see https://docs.recall.ai/reference/webhooks-overview#botstatus
  */
 async function handleBotStatusEvent(payload: any): Promise<any> {
-  const botId = payload.bot_id;
-  const status = payload.status;
-  const statusMessage = payload.status_message;
+  const botId = payload.data?.bot?.id;
+  const code = payload.data?.data?.code;
+  const subCode = payload.data?.data?.sub_code;
 
   console.log(JSON.stringify({
     type: 'recall.webhook.bot_status',
     botId,
-    status,
-    statusMessage,
+    code,
+    subCode,
     timestamp: Date.now(),
   }));
 
-  // 終了状態（done, error, fatal）の場合のみDynamoDBを更新
-  const isTerminalStatus = ['done', 'error', 'fatal'].includes(status);
-
-  if (isTerminalStatus) {
-    try {
+  try {
       // DynamoDBのミーティングステータスを更新
       // ConditionExpressionでミーティングの存在を確認
       const now = Date.now();
@@ -247,7 +245,7 @@ async function handleBotStatusEvent(payload: any): Promise<any> {
       console.log(JSON.stringify({
         type: 'recall.webhook.bot_status.meeting_ended',
         botId,
-        recallStatus: status,
+        code,
         meetingStatus: 'ended',
         ttl,
         timestamp: now,
@@ -258,22 +256,21 @@ async function handleBotStatusEvent(payload: any): Promise<any> {
         console.warn(JSON.stringify({
           type: 'recall.webhook.bot_status.meeting_not_found',
           botId,
-          status,
+          code,
           message: 'Meeting not found in DynamoDB, skipping status update',
           timestamp: Date.now(),
         }));
       } else {
         // その他のエラー
-        console.error('Error updating meeting status from bot.status event', {
+        console.error('Error updating meeting status from bot status event', {
           botId,
-          status,
+          code,
           error: err?.message || err,
           stack: err?.stack,
         });
       }
       // Webhookは常に200を返す（Recall.aiのリトライを防ぐため）
     }
-  }
 
   return {
     statusCode: 200,
