@@ -10,10 +10,11 @@
 export type MeetingId = string & { readonly __brand: 'MeetingId' };
 
 /**
- * TranscriptEvent - 統一文字起こしイベント
+ * MeetingInputEvent - 統一会議入力イベント
+ * 音声文字起こしおよびチャットメッセージを表す。
  * すべての会議サービスからこの形式に変換される
  */
-export interface TranscriptEvent {
+export interface MeetingInputEvent {
   /** 会議ID（Chime: meetingId, Recall: botId） */
   meetingId: MeetingId;
 

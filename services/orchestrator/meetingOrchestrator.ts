@@ -11,7 +11,7 @@ import {
   Metrics,
 } from './grasp';
 import { Message } from '@aws-sdk/client-sqs';
-import { TranscriptEvent, MeetingServiceAdapter } from '@timtam/shared';
+import { MeetingInputEvent, MeetingServiceAdapter } from '@timtam/shared';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 
@@ -133,8 +133,8 @@ export class Meeting implements Notifier {
   /**
    * Transcriptイベントを処理し、waiting Graspsに追加
    */
-  async processTranscriptEvent(
-    ev: TranscriptEvent,
+  async processMeetingInputEvent(
+    ev: MeetingInputEvent,
     metrics: Metrics
   ): Promise<void> {
     this.lastActivityTime = Date.now();

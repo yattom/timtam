@@ -1,7 +1,7 @@
 // OrchestratorManager: 複数ミーティングのオーケストレーターを管理
 import { Meeting } from './meetingOrchestrator';
 import { Grasp, MeetingId, Metrics, LLMClient } from './grasp';
-import { TranscriptEvent, MeetingServiceAdapter } from '@timtam/shared';
+import { MeetingInputEvent, MeetingServiceAdapter } from '@timtam/shared';
 import { loadGraspsForMeeting } from './graspConfigLoader';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 
@@ -124,12 +124,12 @@ export class OrchestratorManager {
   /**
    * Transcriptイベントを適切なオーケストレーターに振り分けて処理
    */
-  async processTranscriptEvent(
-    ev: TranscriptEvent,
+  async processMeetingInputEvent(
+    ev: MeetingInputEvent,
     metrics: Metrics
   ): Promise<void> {
     const meeting = await this.getOrCreateMeeting(ev.meetingId);
-    await meeting.processTranscriptEvent(ev, metrics);
+    await meeting.processMeetingInputEvent(ev, metrics);
   }
 
   /**

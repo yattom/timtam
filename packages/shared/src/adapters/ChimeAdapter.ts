@@ -6,7 +6,7 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { MeetingServiceAdapter } from './MeetingServiceAdapter';
-import { MeetingId, TranscriptEvent } from '../types/events';
+import { MeetingId, MeetingInputEvent } from '../types/events';
 
 export interface ChimeAdapterConfig {
   /** DynamoDB テーブル名（AI応答メッセージ保存用） */
@@ -20,7 +20,7 @@ export interface ChimeAdapterConfig {
  * ChimeAdapter
  *
  * INBOUND（Lambda用）:
- * - processInboundTranscript: Chime SDK形式 → TranscriptEvent
+ * - processInboundTranscript: Chime SDK形式 → MeetingInputEvent
  *
  * OUTBOUND（Orchestrator用）:
  * - postChat: DynamoDBにメッセージ書き込み（ブラウザがポーリング）
@@ -41,7 +41,7 @@ export class ChimeAdapter implements MeetingServiceAdapter {
   // ========================================
 
   /**
-   * Chime SDK文字起こし → TranscriptEvent
+   * Chime SDK文字起こし → MeetingInputEvent
    *
    * Chime形式:
    * {
@@ -54,9 +54,9 @@ export class ChimeAdapter implements MeetingServiceAdapter {
    * }
    *
    * @param payload - Chime SDKペイロード（Lambda event.body）
-   * @returns TranscriptEvent
+   * @returns MeetingInputEvent
    */
-  processInboundTranscript(payload: any): TranscriptEvent {
+  processInboundTranscript(payload: any): MeetingInputEvent {
     const {
       meetingId,
       attendeeId,
