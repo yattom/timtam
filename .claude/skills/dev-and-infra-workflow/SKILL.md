@@ -439,6 +439,27 @@ curl http://localhost:3000/recall/meetings
 - 会議ファシリテーター向けWeb UI
 - URL: `http://localhost:3001`
 
+### 🆕 新しい開発環境のセットアップ（初回のみ）
+
+新しいマシンや開発環境でAWSへのデプロイを初めて行う場合は、`cdk:bootstrap`が必須。
+
+```bash
+# 1. AWS認証
+pnpm run sso:admin
+
+# 2. CDK bootstrap（新しい環境での初回のみ）
+pnpm run cdk:bootstrap
+
+# 3. 通常通りデプロイ
+pnpm run deploy:all
+```
+
+**bootstrap が必要なサイン**:
+- `cdk:diff` を実行したとき、スタックがすでにデプロイ済みなのに全リソースが `[+]`（新規）として表示される
+- `current credentials could not be used to assume 'cdk-timtam-lookup-role-...'` というエラーが出る
+
+bootstrap は一度実行すれば以降は不要。
+
 ### 🔐 AWS認証（必須の初回ステップ）
 
 **すべてのワークフローの最初に実行**:
@@ -505,6 +526,7 @@ pnpm run infra:open
 - 🔧 デプロイエラーが出たら`cdk:synth`で構文確認
 - 🔧 CloudFront情報が必要なら`cdk:info`
 - 🔧 AWS認証エラーが出たら`sso:admin`で再認証
+- 🔧 `cdk:diff`で既存スタックが全て`[+]`と表示される → 新しい環境で`cdk:bootstrap`未実行の可能性。`cdk:bootstrap`を実行する
 
 ### ローカル開発環境（LocalStack）
 
@@ -544,6 +566,7 @@ pnpm run infra:open
 
 ### 本番環境（AWS）
 
+- 「新しい環境でデプロイしたい」 → `sso:admin` → `cdk:bootstrap` → `deploy:all` ⭐ **新環境初回**
 - 「すべてデプロイして」 → `deploy:all` ⭐ **推奨**
 - 「インフラだけデプロイして」 → `cdk:deploy`
 - 「Webアプリだけデプロイ」 → `web:build` → `web:deploy`
