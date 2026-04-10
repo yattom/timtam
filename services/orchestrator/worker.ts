@@ -291,11 +291,18 @@ async function processMessages(messages: Message[]) {
         });
         ev = null;
       } else {
+        const validSources = ['voice', 'chat'] as const;
+        const source: 'voice' | 'chat' = validSources.includes(parsed.source)
+          ? parsed.source
+          : 'voice';
+        if (parsed.source && !validSources.includes(parsed.source)) {
+          console.warn('[Worker] Unexpected source value, falling back to voice', { source: parsed.source });
+        }
         // Cast to MeetingInputEvent with MeetingId type
         ev = {
           ...parsed,
           meetingId: parsed.meetingId as MeetingId,
-          source: parsed.source ?? 'voice',
+          source,
         } as MeetingInputEvent;
       }
     } catch (err) {
