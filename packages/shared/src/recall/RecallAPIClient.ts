@@ -79,7 +79,7 @@ export interface CreateBotRequest {
       /** Webhook URL */
       url: string;
       /** イベントタイプ */
-      events: Array<'transcript.data' | 'transcript.partial_data'>;
+      events: Array<'transcript.data' | 'transcript.partial_data' | 'participant_events.chat_message'>;
     }>;
     /** 録音保存期間（時間単位） */
     retention?:

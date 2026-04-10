@@ -77,6 +77,7 @@ export class ChimeAdapter implements MeetingServiceAdapter {
       isFinal,
       timestamp: timestamp || Date.now(),
       sequenceNumber: undefined, // Chimeにはsequence numberなし
+      source: 'voice',
     };
   }
 

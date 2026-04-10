@@ -34,6 +34,7 @@ export type Note = {
 type BufferLine = {
   text: string;
   timestamp: number;
+  source: 'voice' | 'chat';
 };
 
 // Interfaces for dependencies (to be implemented by worker.ts)
@@ -70,22 +71,28 @@ export class Interval {
 export class WindowBuffer {
   private lines: BufferLine[] = [];
   constructor() {}
-  push(line: string, timestamp?: number) {
+  push(line: string, timestamp?: number, source: 'voice' | 'chat' = 'voice') {
     if (!line) return;
-    this.lines.push({ text: line, timestamp: timestamp || Date.now() });
+    this.lines.push({ text: line, timestamp: timestamp || Date.now(), source });
   }
-  content(lastN?: number): string {
-    const linesToUse = lastN !== undefined
-      ? this.lines.slice(-lastN)
-      : this.lines;
+  content(lastN?: number, source?: 'voice' | 'chat' | 'mix'): string {
+    const filtered = this.filterBySource(this.lines, source);
+    const linesToUse = lastN !== undefined ? filtered.slice(-lastN) : filtered;
     return this.format(linesToUse);
   }
-  contentSince(durationMs: number): string {
+  contentSince(durationMs: number, source?: 'voice' | 'chat' | 'mix'): string {
     if (this.lines.length === 0) return '';
     const now = Date.now();
     const since = now - durationMs;
-    const filtered = this.lines.filter(l => l.timestamp > since);
+    const filtered = this.filterBySource(
+      this.lines.filter(l => l.timestamp > since),
+      source
+    );
     return this.format(filtered);
+  }
+  private filterBySource(lines: BufferLine[], source?: 'voice' | 'chat' | 'mix'): BufferLine[] {
+    if (!source || source === 'mix') return lines;
+    return lines.filter(l => l.source === source);
   }
   format(lines: BufferLine[]): string {
     return lines.map(l => {
@@ -192,18 +199,23 @@ export function formatNotes(notes: Note[]): string {
 }
 
 // 変数解決メソッド: テンプレート内の{{INPUT:*}}を解決
+// 修飾子フォーマット: "量" または "量:種別" (種別: voice | chat | mix, デフォルト: mix)
 export function resolveInputVariable(modifier: string, windowBuffer: WindowBuffer): string {
-  if (modifier === '' || modifier === 'all') {
-    return windowBuffer.content();
+  const parts = modifier.split(':');
+  const quantityPart = parts[0];
+  const sourcePart = (parts[1] || 'mix') as 'voice' | 'chat' | 'mix';
+
+  if (quantityPart === '' || quantityPart === 'all') {
+    return windowBuffer.content(undefined, sourcePart);
   }
-  if (modifier.startsWith('latest')) {
-    const count = parseLatestCount(modifier);
-    return windowBuffer.content(count);
+  if (quantityPart.startsWith('latest')) {
+    const count = parseLatestCount(quantityPart);
+    return windowBuffer.content(count, sourcePart);
   }
-  if (modifier.startsWith('past')) {
-    const timeSpec = modifier.substring(4); // "past30m" → "30m"
+  if (quantityPart.startsWith('past')) {
+    const timeSpec = quantityPart.substring(4); // "past30m" → "30m"
     const durationMs = parseDuration(timeSpec);
-    return windowBuffer.contentSince(durationMs);
+    return windowBuffer.contentSince(durationMs, sourcePart);
   }
   throw new Error(`Invalid INPUT modifier: ${modifier}`);
 }

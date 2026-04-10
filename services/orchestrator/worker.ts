@@ -294,7 +294,8 @@ async function processMessages(messages: Message[]) {
         // Cast to MeetingInputEvent with MeetingId type
         ev = {
           ...parsed,
-          meetingId: parsed.meetingId as MeetingId
+          meetingId: parsed.meetingId as MeetingId,
+          source: parsed.source ?? 'voice',
         } as MeetingInputEvent;
       }
     } catch (err) {

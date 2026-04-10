@@ -32,6 +32,9 @@ export interface MeetingInputEvent {
 
   /** シーケンス番号（順序保証用、オプション） */
   sequenceNumber?: number;
+
+  /** 入力ソース（voice: 音声文字起こし、chat: チャットメッセージ） */
+  source: 'voice' | 'chat';
 }
 
 /**

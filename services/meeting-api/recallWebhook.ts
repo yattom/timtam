@@ -98,6 +98,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
           body: JSON.stringify({ ok: true, message: 'Participant event acknowledged (not processed)' }),
         };
 
+      case 'participant_events.chat_message':
+        return await handleChatEvent(payload);
+
       case 'bot.call_ended':
       case 'bot.done':
       case 'bot.fatal':
@@ -179,6 +182,68 @@ async function handleTranscriptEvent(payload: any): Promise<any> {
     textLength: words?.length || 0,
     transcriptId: transcript_id,
     deduplicationId,
+  }));
+
+  return {
+    statusCode: 200,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ok: true }),
+  };
+}
+
+/**
+ * チャットメッセージイベント処理
+ *
+ * participant_events.chat_message イベントを受信し、SQS に送信する。
+ */
+async function handleChatEvent(payload: any): Promise<any> {
+  const botId = payload.data?.bot?.id;
+  const participant = payload.data?.data?.participant;
+  const timestamp = payload.data?.data?.timestamp?.absolute;
+  const text = payload.data?.data?.data?.text;
+
+  if (!botId || !text || !participant) {
+    console.warn(JSON.stringify({
+      type: 'recall.webhook.chat.missing_fields',
+      hasBotId: !!botId,
+      hasText: !!text,
+      hasParticipant: !!participant,
+    }));
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ok: true }),
+    };
+  }
+
+  const meetingInputEvent = {
+    meetingId: botId,
+    speakerId: participant.name || participant.id?.toString() || 'unknown',
+    text,
+    isFinal: true,
+    timestamp: timestamp ? new Date(timestamp).getTime() : Date.now(),
+    source: 'chat',
+  };
+
+  const deduplicationId = createHash('sha256')
+    .update(`${botId}:chat:${timestamp}:${participant.id}`)
+    .digest('hex')
+    .substring(0, 128);
+
+  await sqs.send(
+    new SendMessageCommand({
+      QueueUrl: TRANSCRIPT_QUEUE_URL,
+      MessageBody: JSON.stringify(meetingInputEvent),
+      MessageDeduplicationId: deduplicationId,
+      MessageGroupId: botId,
+    })
+  );
+
+  console.log(JSON.stringify({
+    type: 'recall.webhook.chat.forwarded',
+    botId,
+    speakerId: meetingInputEvent.speakerId,
+    textLength: text.length,
   }));
 
   return {

@@ -123,6 +123,7 @@ export class RecallAdapter implements MeetingServiceAdapter {
       isFinal: true, // transcript.dataイベントは常に最終結果（partialは別イベント）
       timestamp: timestampFromWords ?? Date.now(),
       sequenceNumber: transcript_id, // transcript.idをシーケンス番号として使用
+      source: 'voice',
     };
   }
 

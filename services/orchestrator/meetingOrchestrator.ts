@@ -141,8 +141,11 @@ export class Meeting implements Notifier {
     this.messageCount++;
 
     // final文をウィンドウに追加
-    const speakerPrefix = `[${ev.speakerId}] `;
-    this.window.push(speakerPrefix + ev.text, ev.timestamp);
+    const source = ev.source ?? 'voice';
+    const speakerPrefix = source === 'chat'
+      ? `[chat] [${ev.speakerId}] `
+      : `[${ev.speakerId}] `;
+    this.window.push(speakerPrefix + ev.text, ev.timestamp, source);
 
     // Log speaker information for debugging
     console.log(JSON.stringify({
