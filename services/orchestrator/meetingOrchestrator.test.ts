@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Meeting, MeetingConfig } from './meetingOrchestrator';
-import { MeetingServiceAdapter, MeetingId, TranscriptEvent } from '@timtam/shared';
+import { MeetingServiceAdapter, MeetingId, MeetingInputEvent } from '@timtam/shared';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { Grasp, LLMClient, Metrics } from './grasp';
 
-describe('Meeting - processTranscriptEvent', () => {
+describe('Meeting - processMeetingInputEvent', () => {
   const nullAdapter = (): MeetingServiceAdapter => ({
     processInboundTranscript: vi.fn(),
     postChat: vi.fn(async () => {}),
@@ -14,7 +14,7 @@ describe('Meeting - processTranscriptEvent', () => {
     putLatencyMetric: vi.fn(async () => {}),
     putCountMetric: vi.fn(async () => {}),
   });
-  const makeEvent = (text: string): TranscriptEvent => ({
+  const makeEvent = (text: string): MeetingInputEvent => ({
     meetingId: 'test-meeting' as MeetingId,
     speakerId: 'speaker1',
     text,
@@ -42,11 +42,11 @@ describe('Meeting - processTranscriptEvent', () => {
 
       // Act
       // First event - grasp is enqueued and execute() starts (yields at LLM call)
-      const firstProcessing = meeting.processTranscriptEvent(makeEvent('発言1'), nullMetrics());
+      const firstProcessing = meeting.processMeetingInputEvent(makeEvent('発言1'), nullMetrics());
 
       // Second event arrives while first LLM call is in flight:
       // execute()の冒頭でmarkExecuted()が呼ばれているため、shouldExecute()はfalseを返す
-      const secondProcessing = meeting.processTranscriptEvent(makeEvent('発言2'), nullMetrics());
+      const secondProcessing = meeting.processMeetingInputEvent(makeEvent('発言2'), nullMetrics());
 
       await firstProcessing;
       await secondProcessing;

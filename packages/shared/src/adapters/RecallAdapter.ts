@@ -6,7 +6,7 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { MeetingServiceAdapter } from './MeetingServiceAdapter';
-import { MeetingId, TranscriptEvent } from '../types/events';
+import { MeetingId, MeetingInputEvent } from '../types/events';
 import { RecallAPIClient } from '../recall/RecallAPIClient';
 
 export interface RecallAdapterConfig {
@@ -27,7 +27,7 @@ export interface RecallAdapterConfig {
  * RecallAdapter
  *
  * INBOUND（Lambda用）:
- * - processInboundTranscript: Recall.ai Webhook形式 → TranscriptEvent
+ * - processInboundTranscript: Recall.ai Webhook形式 → MeetingInputEvent
  *
  * OUTBOUND（Orchestrator用）:
  * - postChat: Recall.ai Chat API呼び出し
@@ -56,7 +56,7 @@ export class RecallAdapter implements MeetingServiceAdapter {
   // ========================================
 
   /**
-   * Recall.ai Webhook → TranscriptEvent
+   * Recall.ai Webhook → MeetingInputEvent
    *
    * Recall形式 (実際のWebhook構造):
    * {
@@ -78,9 +78,9 @@ export class RecallAdapter implements MeetingServiceAdapter {
    * }
    *
    * @param payload - Recall.ai Webhookペイロード
-   * @returns TranscriptEvent
+   * @returns MeetingInputEvent
    */
-  processInboundTranscript(payload: any): TranscriptEvent {
+  processInboundTranscript(payload: any): MeetingInputEvent {
     const bot_id = payload.data?.bot?.id;
     const words = payload.data?.data?.words;
     const participant = payload.data?.data?.participant;
@@ -123,6 +123,7 @@ export class RecallAdapter implements MeetingServiceAdapter {
       isFinal: true, // transcript.dataイベントは常に最終結果（partialは別イベント）
       timestamp: timestampFromWords ?? Date.now(),
       sequenceNumber: transcript_id, // transcript.idをシーケンス番号として使用
+      source: 'voice',
     };
   }
 

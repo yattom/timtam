@@ -399,6 +399,64 @@ describe('Grasp', () => {
       const windowBuffer = new WindowBuffer();
       expect(() => resolveInputVariable('invalid', windowBuffer)).toThrow('Invalid INPUT modifier: invalid');
     });
+
+    it('should throw error for unknown source type', () => {
+      const windowBuffer = new WindowBuffer();
+      expect(() => resolveInputVariable('latest3:foo', windowBuffer)).toThrow('Invalid INPUT source: foo');
+    });
+
+    it('should throw error for too many segments', () => {
+      const windowBuffer = new WindowBuffer();
+      expect(() => resolveInputVariable('latest3:voice:extra', windowBuffer)).toThrow('Invalid INPUT modifier: latest3:voice:extra');
+    });
+
+    it('should return both voice and chat lines by default (mix)', () => {
+      const windowBuffer = new WindowBuffer();
+      windowBuffer.push('[Alice] こんにちは', 1000, 'voice');
+      windowBuffer.push('[chat] [Bob] やあ', 2000, 'chat');
+      windowBuffer.push('[Carol] 始めましょう', 3000, 'voice');
+
+      const result = resolveInputVariable('', windowBuffer);
+      expect(result).toContain('[Alice] こんにちは');
+      expect(result).toContain('[Bob] やあ');
+      expect(result).toContain('[Carol] 始めましょう');
+    });
+
+    it('should return only voice lines for "latestN:voice" modifier', () => {
+      const windowBuffer = new WindowBuffer();
+      windowBuffer.push('[Alice] こんにちは', 1000, 'voice');
+      windowBuffer.push('[chat] [Bob] やあ', 2000, 'chat');
+      windowBuffer.push('[Carol] 始めましょう', 3000, 'voice');
+
+      const result = resolveInputVariable('latest3:voice', windowBuffer);
+      expect(result).toContain('[Alice] こんにちは');
+      expect(result).toContain('[Carol] 始めましょう');
+      expect(result).not.toContain('[Bob] やあ');
+    });
+
+    it('should return only chat lines for "latestN:chat" modifier', () => {
+      const windowBuffer = new WindowBuffer();
+      windowBuffer.push('[Alice] こんにちは', 1000, 'voice');
+      windowBuffer.push('[chat] [Bob] やあ', 2000, 'chat');
+      windowBuffer.push('[Carol] 始めましょう', 3000, 'voice');
+
+      const result = resolveInputVariable('latest3:chat', windowBuffer);
+      expect(result).not.toContain('[Alice] こんにちは');
+      expect(result).toContain('[Bob] やあ');
+      expect(result).not.toContain('[Carol] 始めましょう');
+    });
+
+    it('should return mixed lines for "latestN:mix" modifier', () => {
+      const windowBuffer = new WindowBuffer();
+      windowBuffer.push('[Alice] こんにちは', 1000, 'voice');
+      windowBuffer.push('[chat] [Bob] やあ', 2000, 'chat');
+      windowBuffer.push('[Carol] 始めましょう', 3000, 'voice');
+
+      const result = resolveInputVariable('latest3:mix', windowBuffer);
+      expect(result).toContain('[Alice] こんにちは');
+      expect(result).toContain('[Bob] やあ');
+      expect(result).toContain('[Carol] 始めましょう');
+    });
   });
 
   describe('resolveNotesVariable', () => {

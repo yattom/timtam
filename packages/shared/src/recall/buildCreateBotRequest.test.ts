@@ -43,7 +43,7 @@ describe('buildCreateBotRequest', () => {
     });
   });
 
-  it('リアルタイムエンドポイントを正しく設定すること', () => {
+  it('リアルタイムエンドポイントにtranscript.dataとparticipant_events.chat_messageを設定すること', () => {
     const request = buildCreateBotRequest({
       meetingUrl: 'https://zoom.us/j/123456789',
       botName: 'Test Bot',
@@ -56,7 +56,7 @@ describe('buildCreateBotRequest', () => {
       {
         type: 'webhook',
         url: 'https://example.com/webhook',
-        events: ['transcript.data'],
+        events: ['transcript.data', 'participant_events.chat_message'],
       },
     ]);
   });

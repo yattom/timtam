@@ -211,6 +211,55 @@ grasps:
     intervalSec: 10
     outputHandler: "chat"
 `));
+
+      it('valid: {{INPUT:latest5:voice}}', () => {
+        const yaml = `
+grasps:
+  - nodeId: "test"
+    promptTemplate: "{{INPUT:latest5:voice}}"
+    intervalSec: 10
+    outputHandler: "chat"
+`;
+        expect(() => parseGraspGroupDefinition(yaml)).not.toThrow();
+      });
+
+      it('valid: {{INPUT:past30m:chat}}', () => {
+        const yaml = `
+grasps:
+  - nodeId: "test"
+    promptTemplate: "{{INPUT:past30m:chat}}"
+    intervalSec: 10
+    outputHandler: "chat"
+`;
+        expect(() => parseGraspGroupDefinition(yaml)).not.toThrow();
+      });
+
+      it('valid: {{INPUT:all:mix}}', () => {
+        const yaml = `
+grasps:
+  - nodeId: "test"
+    promptTemplate: "{{INPUT:all:mix}}"
+    intervalSec: 10
+    outputHandler: "chat"
+`;
+        expect(() => parseGraspGroupDefinition(yaml)).not.toThrow();
+      });
+
+      it('invalid: {{INPUT:latest5:foo}} with unknown source', () => expectInvalid(`
+grasps:
+  - nodeId: "test"
+    promptTemplate: "{{INPUT:latest5:foo}}"
+    intervalSec: 10
+    outputHandler: "chat"
+`));
+
+      it('invalid: {{INPUT:latest5:voice:extra}} with too many segments', () => expectInvalid(`
+grasps:
+  - nodeId: "test"
+    promptTemplate: "{{INPUT:latest5:voice:extra}}"
+    intervalSec: 10
+    outputHandler: "chat"
+`));
     });
 
     describe('{{NOTES}} format', () => {

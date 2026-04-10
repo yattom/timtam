@@ -16,7 +16,7 @@ import { parseGraspGroupDefinition, GraspGroupDefinition } from './graspConfigPa
 import { buildGraspsFromDefinition } from './graspConfigLoader';
 import { Message } from '@aws-sdk/client-sqs';
 import { OrchestratorManager } from './orchestratorManager';
-import { ChimeAdapter, RecallAdapter, MeetingServiceAdapter, MeetingId, TranscriptEvent } from '@timtam/shared';
+import { ChimeAdapter, RecallAdapter, MeetingServiceAdapter, MeetingId, MeetingInputEvent } from '@timtam/shared';
 
 // 環境変数
 const TRANSCRIPT_QUEUE_URL = process.env.TRANSCRIPT_QUEUE_URL || '';
@@ -246,7 +246,7 @@ async function pollControlOnce() {
 }
 
 // Final transcriptをDynamoDBに保存
-async function saveTranscriptToDynamoDB(event: TranscriptEvent): Promise<void> {
+async function saveTranscriptToDynamoDB(event: MeetingInputEvent): Promise<void> {
   const timestamp = event.timestamp;
   const ttl = Math.floor(Date.now() / 1000) + 86400; // 24時間後に削除
 
@@ -275,14 +275,14 @@ async function saveTranscriptToDynamoDB(event: TranscriptEvent): Promise<void> {
 async function processMessages(messages: Message[]) {
   // Process messages in parallel for better throughput
   await Promise.all(messages.map(async (message) => {
-    let ev: TranscriptEvent | null = null;
+    let ev: MeetingInputEvent | null = null;
     try { 
       const parsed = JSON.parse(message.Body || '');
       
-      // Validate required fields for TranscriptEvent
+      // Validate required fields for MeetingInputEvent
       if (!parsed.meetingId || !parsed.speakerId || typeof parsed.text !== 'string' || 
           typeof parsed.isFinal !== 'boolean' || typeof parsed.timestamp !== 'number') {
-        console.warn('[Worker] Invalid TranscriptEvent format', { 
+        console.warn('[Worker] Invalid MeetingInputEvent format', { 
           hasmeeting: !!parsed.meetingId,
           hasSpeaker: !!parsed.speakerId,
           hasText: typeof parsed.text === 'string',
@@ -291,11 +291,19 @@ async function processMessages(messages: Message[]) {
         });
         ev = null;
       } else {
-        // Cast to TranscriptEvent with MeetingId type
+        const validSources = ['voice', 'chat'] as const;
+        const source: 'voice' | 'chat' = validSources.includes(parsed.source)
+          ? parsed.source
+          : 'voice';
+        if (parsed.source && !validSources.includes(parsed.source)) {
+          console.warn('[Worker] Unexpected source value, falling back to voice', { source: parsed.source });
+        }
+        // Cast to MeetingInputEvent with MeetingId type
         ev = {
           ...parsed,
-          meetingId: parsed.meetingId as MeetingId
-        } as TranscriptEvent;
+          meetingId: parsed.meetingId as MeetingId,
+          source,
+        } as MeetingInputEvent;
       }
     } catch (err) {
       console.error('[Worker] Failed to parse message', err);
@@ -327,7 +335,7 @@ async function processMessages(messages: Message[]) {
     await saveTranscriptToDynamoDB(ev);
 
     // ミーティングIDに基づいて適切なオーケストレーターに処理を委譲
-    await orchestratorManager.processTranscriptEvent(ev, metrics);
+    await orchestratorManager.processMeetingInputEvent(ev, metrics);
 
     // 処理完了後にメッセージを削除
     await sqs.send(

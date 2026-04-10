@@ -46,7 +46,7 @@ export function buildCreateBotRequest(params: BuildCreateBotRequestParams): Crea
         {
           type: 'webhook',
           url: webhookUrl,
-          events: ['transcript.data'],
+          events: ['transcript.data', 'participant_events.chat_message'],
         },
       ],
       retention: {

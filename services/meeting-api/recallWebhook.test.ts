@@ -131,6 +131,39 @@ describe('recallWebhook - bot status event handling', () => {
     });
   });
 
+  describe('participant_events.chat_message', () => {
+    it('チャットメッセージをSQSに送信すること', async () => {
+      sqsMock.on(SendMessageCommand).resolves({});
+
+      const event = {
+        body: JSON.stringify({
+          event: 'participant_events.chat_message',
+          data: {
+            bot: { id: 'bot-123' },
+            data: {
+              participant: { id: 'participant-1', name: 'Alice' },
+              timestamp: { absolute: '2026-04-10T10:00:00.000Z' },
+              data: { text: 'こんにちは', to: 'everyone' },
+            },
+          },
+        }),
+      } as APIGatewayProxyEventV2;
+
+      const response = await handler(event);
+
+      expect(response.statusCode).toBe(200);
+      const sqsCalls = sqsMock.commandCalls(SendMessageCommand);
+      expect(sqsCalls.length).toBe(1);
+
+      const body = JSON.parse(sqsCalls[0].args[0].input.MessageBody!);
+      expect(body.meetingId).toBe('bot-123');
+      expect(body.speakerId).toBe('Alice');
+      expect(body.text).toBe('こんにちは');
+      expect(body.source).toBe('chat');
+      expect(body.isFinal).toBe(true);
+    });
+  });
+
   describe('既存のtranscript.data処理', () => {
     it('transcript.dataイベントは既存通りSQSに送信されること', async () => {
       sqsMock.on(SendMessageCommand).resolves({});
