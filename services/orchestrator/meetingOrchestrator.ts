@@ -131,7 +131,7 @@ export class Meeting implements Notifier {
   }
 
   /**
-   * Transcriptイベントを処理し、waiting Graspsに追加
+   * 会議入力（音声/チャット）イベントを処理し、waiting Graspsに追加
    */
   async processMeetingInputEvent(
     ev: MeetingInputEvent,
