@@ -202,8 +202,15 @@ export function formatNotes(notes: Note[]): string {
 // 修飾子フォーマット: "量" または "量:種別" (種別: voice | chat | mix, デフォルト: mix)
 export function resolveInputVariable(modifier: string, windowBuffer: WindowBuffer): string {
   const parts = modifier.split(':');
+  if (parts.length > 2) {
+    throw new Error(`Invalid INPUT modifier: ${modifier}`);
+  }
   const quantityPart = parts[0];
-  const sourcePart = (parts[1] || 'mix') as 'voice' | 'chat' | 'mix';
+  const sourceRaw = parts[1] || 'mix';
+  if (sourceRaw !== 'voice' && sourceRaw !== 'chat' && sourceRaw !== 'mix') {
+    throw new Error(`Invalid INPUT source: ${sourceRaw}`);
+  }
+  const sourcePart = sourceRaw as 'voice' | 'chat' | 'mix';
 
   if (quantityPart === '' || quantityPart === 'all') {
     return windowBuffer.content(undefined, sourcePart);

@@ -400,6 +400,16 @@ describe('Grasp', () => {
       expect(() => resolveInputVariable('invalid', windowBuffer)).toThrow('Invalid INPUT modifier: invalid');
     });
 
+    it('should throw error for unknown source type', () => {
+      const windowBuffer = new WindowBuffer();
+      expect(() => resolveInputVariable('latest3:foo', windowBuffer)).toThrow('Invalid INPUT source: foo');
+    });
+
+    it('should throw error for too many segments', () => {
+      const windowBuffer = new WindowBuffer();
+      expect(() => resolveInputVariable('latest3:voice:extra', windowBuffer)).toThrow('Invalid INPUT modifier: latest3:voice:extra');
+    });
+
     it('should return both voice and chat lines by default (mix)', () => {
       const windowBuffer = new WindowBuffer();
       windowBuffer.push('[Alice] こんにちは', 1000, 'voice');

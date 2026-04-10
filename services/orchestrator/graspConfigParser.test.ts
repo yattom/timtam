@@ -244,6 +244,22 @@ grasps:
 `;
         expect(() => parseGraspGroupDefinition(yaml)).not.toThrow();
       });
+
+      it('invalid: {{INPUT:latest5:foo}} with unknown source', () => expectInvalid(`
+grasps:
+  - nodeId: "test"
+    promptTemplate: "{{INPUT:latest5:foo}}"
+    intervalSec: 10
+    outputHandler: "chat"
+`));
+
+      it('invalid: {{INPUT:latest5:voice:extra}} with too many segments', () => expectInvalid(`
+grasps:
+  - nodeId: "test"
+    promptTemplate: "{{INPUT:latest5:voice:extra}}"
+    intervalSec: 10
+    outputHandler: "chat"
+`));
     });
 
     describe('{{NOTES}} format', () => {
