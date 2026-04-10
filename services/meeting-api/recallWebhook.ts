@@ -216,6 +216,15 @@ async function handleChatEvent(payload: any): Promise<any> {
     };
   }
 
+  if (!timestamp || !participant.id) {
+    console.warn(JSON.stringify({
+      type: 'recall.webhook.chat.missing_optional_fields',
+      botId,
+      hasTimestamp: !!timestamp,
+      hasParticipantId: !!participant.id,
+    }));
+  }
+
   const meetingInputEvent = {
     meetingId: botId,
     speakerId: participant.name || participant.id?.toString() || 'unknown',
