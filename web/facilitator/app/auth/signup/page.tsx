@@ -47,6 +47,7 @@ export default function SignUpPage() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="bg-white rounded-lg shadow-sm p-8 max-w-md w-full mx-4">
+        <p className="text-lg font-bold text-blue-600 mb-4">ミーティング支援AI</p>
         <h1 className="text-2xl font-bold text-gray-900 mb-6">
           {step === "signup" ? "アカウント作成" : "メール確認"}
         </h1>
