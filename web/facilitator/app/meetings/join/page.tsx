@@ -41,7 +41,7 @@ export default function JoinMeetingPage() {
   const router = useRouter();
   const [meetingUrl, setMeetingUrl] = useState("");
   const [platform, setPlatform] = useState<"zoom" | "google_meet" | "microsoft_teams" | "webex">("zoom");
-  const [botName, setBotName] = useState("Timtam AI");
+  const [botName, setBotName] = useState("ミーティング支援AI");
   const [graspConfigId, setGraspConfigId] = useState<string>("");
   const [graspConfigs, setGraspConfigs] = useState<GraspConfig[]>([]);
   const [loading, setLoading] = useState(false);
@@ -113,7 +113,7 @@ export default function JoinMeetingPage() {
           <div className="flex justify-between h-16">
             <div className="flex items-center">
               <Link href="/" className="text-xl font-bold text-gray-900">
-                Timtam Facilitator
+                ミーティング支援AI
               </Link>
             </div>
           </div>
@@ -213,7 +213,7 @@ export default function JoinMeetingPage() {
                 id="botName"
                 value={botName}
                 onChange={(e) => setBotName(e.target.value)}
-                placeholder="Timtam AI"
+                placeholder="ミーティング支援AI"
                 className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
               <p className="mt-1 text-sm text-gray-500">

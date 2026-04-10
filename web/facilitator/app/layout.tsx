@@ -3,7 +3,7 @@ import "./globals.css";
 import AuthGuard from "./AuthGuard";
 
 export const metadata: Metadata = {
-  title: "Timtam Facilitator",
+  title: "ミーティング支援AI",
   description: "会議ファシリテーター向け管理画面",
 };
 

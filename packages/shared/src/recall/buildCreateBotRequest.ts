@@ -35,7 +35,7 @@ export function buildCreateBotRequest(params: BuildCreateBotRequestParams): Crea
     chat: {
       on_bot_join: {
         send_to: 'everyone',
-        message: 'AI facilitator has joined the meeting.',
+        message: 'ミーティング支援AIが参加しました',
       },
     },
     recording_config: {

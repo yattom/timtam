@@ -43,7 +43,7 @@ const recallClient = new RecallAPIClient({
  * {
  *   meetingUrl: string;        // Zoom/Meet/Teams URL
  *   platform: "zoom" | "google_meet" | "microsoft_teams" | "webex";
- *   botName?: string;          // デフォルト: "Timtam AI"
+ *   botName?: string;          // デフォルト: "ミーティング支援AI"
  *   graspConfigId?: string;    // Grasp設定ID (オプション、指定しない場合はデフォルト設定を使用)
  * }
  *
@@ -137,7 +137,7 @@ export const joinHandler: APIGatewayProxyHandlerV2 = async (event) => {
     // Create Recall.ai bot request
     const createBotRequest: CreateBotRequest = buildCreateBotRequest({
       meetingUrl,
-      botName: botName || 'Timtam AI',
+      botName: botName || 'ミーティング支援AI',
       webhookUrl: isLocalDevelopment ? 'http://api-server:3000' : RECALL_WEBHOOK_URL,
       transcriptionProvider: RECALL_TRANSCRIPTION_PROVIDER === 'deepgram_streaming' ? 'deepgram_streaming' : 'recallai_streaming',
       transcriptionLanguage: RECALL_TRANSCRIPTION_LANGUAGE,
